@@ -350,14 +350,18 @@ impl Endpoint {
             "disabled"
         } else if self.detached {
             "detached"
-        } else if self.live.status.is_connected() {
-            "online"
         } else if let Some(mismatch) = &self.version_mismatch {
+            // A refused handshake is an outage too, but says what fixes it.
             match mismatch {
                 VersionMismatch::DaemonOutdated { .. } => "Herdr update needed",
                 VersionMismatch::ClientOutdated { .. } => "app update needed",
             }
-        } else if self.outage.is_some() || self.live.error.is_some() {
+        } else if self.outage.is_some() {
+            // Before `live`: a stopped handle can precede its disconnect state.
+            "reconnecting"
+        } else if self.live.status.is_connected() {
+            "online"
+        } else if self.live.error.is_some() {
             "reconnecting"
         } else {
             "connecting"
