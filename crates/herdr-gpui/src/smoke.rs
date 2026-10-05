@@ -152,7 +152,7 @@ fn create_external_workspace(
                     _client: client,
                 });
             }
-            ClientEvent::Disconnected { reason } => {
+            ClientEvent::Disconnected { reason, .. } => {
                 bail!(reason);
             }
             ClientEvent::CommandRejected { reason, .. } => {

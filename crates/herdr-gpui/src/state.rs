@@ -65,6 +65,8 @@ pub struct LiveState {
     pub(crate) surface_images: Arc<SurfaceImages>,
     pub status: ConnectionStatus,
     pub error: Option<String>,
+    /// Why `ssh` refused the bridge, when that is how the connection ended.
+    pub(crate) ssh_failure: Option<herdr_client::SshFailure>,
     pub missing_installation: bool,
     /// Why the last handshake was refused, when updating one side fixes it.
     /// Cleared by the next accepted handshake.
@@ -168,6 +170,7 @@ impl Default for LiveState {
             surface_images: Default::default(),
             status: ConnectionStatus::Connecting,
             error: None,
+            ssh_failure: None,
             missing_installation: false,
             version_mismatch: None,
             local_daemon_peer: false,
@@ -217,6 +220,7 @@ impl LiveState {
             surface_images: _,
             status,
             error,
+            ssh_failure,
             missing_installation,
             version_mismatch,
             local_daemon_peer,
@@ -266,6 +270,7 @@ impl LiveState {
             && *previous_pane == self.previous_pane
             && *status == self.status
             && *error == self.error
+            && *ssh_failure == self.ssh_failure
             && *missing_installation == self.missing_installation
             && *version_mismatch == self.version_mismatch
             && *local_daemon_peer == self.local_daemon_peer
@@ -493,7 +498,8 @@ impl LiveState {
             ClientEvent::SurfaceImages(images) => self.surface_images = images,
             // The `Disconnected` that follows carries the reason text.
             ClientEvent::VersionMismatch(mismatch) => self.version_mismatch = Some(mismatch),
-            ClientEvent::Disconnected { reason } => {
+            ClientEvent::Disconnected { reason, ssh } => {
+                self.ssh_failure = ssh;
                 self.settings_reload = false;
                 self.notifications.clear();
                 self.cancel_sounds();

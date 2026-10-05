@@ -27,6 +27,7 @@ mod mouse_gestures;
 mod mouse_targets;
 mod prompts;
 mod reconnect_backoff;
+mod remote_drop;
 mod sounds;
 mod split_drag;
 mod startup_pin;

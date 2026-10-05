@@ -810,7 +810,7 @@ fn an_inherited_socket_end_cannot_hold_a_finished_upload_open() {
             .stdin(Stdio::null())
             .stdout(Stdio::from(OwnedFd::from(child_stream)))
             .stderr(Stdio::null());
-        let mut child = ChildGuard(command.spawn().unwrap());
+        let mut child = SshChild(command.spawn().unwrap());
         let started = Instant::now();
         let result = finish(&mut stream, &mut child, &AtomicBool::new(false), started);
         assert!(started.elapsed() < IDLE / 2, "{script}: waited for EOF");
