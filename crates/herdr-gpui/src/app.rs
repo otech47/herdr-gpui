@@ -132,6 +132,22 @@ pub(crate) fn open_window(
     )
 }
 
+/// The app's one sound worker. Each window holds its own connection and the
+/// daemon sends every notification to each of them, so a worker per window
+/// played one notification once per open window.
+struct SharedSound(std::rc::Rc<crate::sound::Service>);
+
+impl Global for SharedSound {}
+
+fn shared_sound(cx: &mut App) -> std::rc::Rc<crate::sound::Service> {
+    if let Some(shared) = cx.try_global::<SharedSound>() {
+        return shared.0.clone();
+    }
+    let sound = std::rc::Rc::new(crate::sound::Service::new());
+    cx.set_global(SharedSound(sound.clone()));
+    sound
+}
+
 /// Opens another window from inside the focused window's own update.
 pub(crate) fn open_additional_window(target: ConnectTarget, cx: &mut App) {
     open_window_for(target, None, cx);
@@ -151,13 +167,14 @@ pub(crate) fn open_window_for(
             #[cfg(feature = "integration-test")]
             false,
         );
+        let sound = shared_sound(cx);
         match opened {
             Ok(handle) => {
                 let _ = handle.update(cx, |view, window, _| {
                     if let Some(startup) = startup {
                         view.open_for(startup);
                     }
-                    view.sound = crate::sound::Service::new();
+                    view.sound = sound;
                     window.activate_window();
                 });
             }
@@ -337,8 +354,9 @@ pub(crate) fn run() -> std::process::ExitCode {
             match opened {
                 Ok(_window) => {
                     if mode == LaunchMode::Normal {
+                        let sound = shared_sound(cx);
                         let _ = _window.update(cx, |view, _, _| {
-                            view.sound = crate::sound::Service::new();
+                            view.sound = sound;
                         });
                         for _ in 1..window_count {
                             open_additional_window(target.clone(), cx);
