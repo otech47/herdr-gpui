@@ -9,6 +9,9 @@ mod edits;
 mod pane_history;
 mod reading;
 mod save_safety;
+// Saving is Unix-only; Windows refuses every shared edit.
+#[cfg(unix)]
+mod symlinks;
 mod theme_palettes;
 
 fn parsed(text: &str) -> Result<Settings, Error> {
