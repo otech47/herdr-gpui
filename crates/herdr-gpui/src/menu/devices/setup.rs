@@ -312,6 +312,10 @@ fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
+/// The variables that choose where Herdr keeps its device catalog. Every CLI
+/// run for a device gets this process's values, so it edits the same catalog.
+const CATALOG_ROOTS: [&str; 3] = ["HERDR_CONFIG_PATH", "XDG_STATE_HOME", "XDG_CONFIG_HOME"];
+
 fn shell_command(executable: &str, request: &Request, environment: &[(String, String)]) -> String {
     let mut args = vec!["env".to_owned()];
     // The daemon's shell does not inherit the GUI's environment. Clear
@@ -396,7 +400,17 @@ fn run_cli(
     args: &[&str],
     timeout: Duration,
 ) -> Result<(ExitStatus, Vec<u8>, Vec<u8>)> {
-    let mut child = Command::new(executable)
+    let mut command = Command::new(executable);
+    // The user's `PATH` and agent, not launchd's: `machine add` runs `ssh`.
+    crate::login_env::apply(&mut command);
+    // The catalog `machine add` writes must be the one this window reads.
+    for key in CATALOG_ROOTS {
+        match std::env::var_os(key) {
+            Some(value) => command.env(key, value),
+            None => command.env_remove(key),
+        };
+    }
+    let mut child = command
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -468,13 +482,7 @@ pub(super) fn terminal_command(request: &Request) -> Result<String> {
         "The Herdr executable path must be UTF-8.",
     ))?;
     let mut environment = Vec::new();
-    for key in [
-        "HOME",
-        "PATH",
-        "HERDR_CONFIG_PATH",
-        "XDG_STATE_HOME",
-        "XDG_CONFIG_HOME",
-    ] {
+    for key in ["HOME", "PATH"].into_iter().chain(CATALOG_ROOTS) {
         if let Some(value) = std::env::var_os(key) {
             environment.push((
                 key.into(),
