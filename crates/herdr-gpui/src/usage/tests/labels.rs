@@ -10,31 +10,6 @@ fn labels_count_down_in_the_two_coarsest_units() {
         countdown(Duration::from_secs(4 * 86_400 + 11 * 3600 + 59)),
         "4d 11h"
     );
-    let now = at(1_000_000);
-    let session = Window::new(
-        Kind::Session,
-        2.4,
-        Some(now + Duration::from_secs(10_380)),
-        None,
-    );
-    assert_eq!(session.label(now), "2% used 2h 53m");
-    assert_eq!(
-        session.label(now + Duration::from_secs(20_000)),
-        "2% used 0m"
-    );
-    let named = Window::new(Kind::Named("Fable".into()), 0., Some(now), None);
-    assert_eq!(named.label(now), "0% used Fable");
-    for (kind, suffix) in [
-        (Kind::Session, "5h"),
-        (Kind::Daily, "day"),
-        (Kind::Weekly, "wk"),
-        (Kind::Monthly, "mo"),
-    ] {
-        assert_eq!(
-            Window::new(kind, 1., None, None).label(now),
-            format!("1% used {suffix}")
-        );
-    }
 }
 
 #[test]

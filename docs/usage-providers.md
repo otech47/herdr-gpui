@@ -165,7 +165,8 @@ Report::new(Provider(&MyService), Account { email, plan }, windows)
   `Session` (5 h), `Daily`, `Weekly`, `Monthly`, or `Named(String)` for a
   window the service names itself. `length` is `kind.length()` for the
   standard kinds, or the service's own window length, so the panel can show
-  the pace. The status bar shows every window as `N% used <time to reset>`.
+  the pace. The status bar shows the share used of the window closest to its
+  limit, as `65%`, and the panel shows every window with its time to reset.
 - `Balance` is money or credits: `Unit::Currency("USD")` or
   `Unit::Count("credits")`, with `out_of(total)` when there is a limit.
   A provider with no windows shows its first balance in the status bar.

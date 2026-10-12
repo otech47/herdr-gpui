@@ -1,7 +1,7 @@
 //! The status bar's usage segments: for the focused pane's agent, else per
-//! agent closest to a limit, a meter for the window closest to its limit and
-//! each window's share used with its time to reset. A click opens that
-//! agent's panel, so the bar stays one quiet line.
+//! agent closest to a limit, a meter and the share used of the window
+//! closest to its limit. A click opens that agent's panel, which has the
+//! rest, so the bar stays one quiet line.
 
 use super::{
     Reading,
@@ -10,11 +10,7 @@ use super::{
 };
 use crate::window::HerdrWindow;
 use gpui::{prelude::*, *};
-use std::{
-    cell::Cell,
-    rc::Rc,
-    time::{Duration, SystemTime},
-};
+use std::{cell::Cell, rc::Rc, time::Duration};
 
 const METER_WIDTH: f32 = 40.;
 
@@ -36,7 +32,6 @@ impl HerdrWindow {
             return None;
         }
         let busy = self.usage.busy();
-        let now = SystemTime::now();
         let theme = &self.theme;
         let mut row = div()
             .id("usage")
@@ -48,7 +43,7 @@ impl HerdrWindow {
             .items_center()
             .gap(px(4.));
         for reading in &shown {
-            row = row.child(self.usage_segment(reading, now, cx));
+            row = row.child(self.usage_segment(reading, cx));
         }
         if let Some(error) = host_error {
             let (foreground, surface) = (theme.foreground, theme.surface);
@@ -120,12 +115,7 @@ impl HerdrWindow {
         )
     }
 
-    fn usage_segment(
-        &self,
-        reading: &Reading,
-        now: SystemTime,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn usage_segment(&self, reading: &Reading, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = &self.theme;
         let provider = reading.provider;
         let key = provider.id();
@@ -195,36 +185,21 @@ impl HerdrWindow {
                     |segment| segment.child(mark()),
                 );
         };
-        if let Some(tightest) = report.tightest() {
-            segment = segment.child(meter(tightest, theme));
+        let tightest = report.tightest();
+        if let Some(window) = tightest {
+            segment = segment.child(meter(window, theme));
         }
-        let mut labels = div()
-            .flex()
-            .min_w_0()
-            .overflow_hidden()
-            .whitespace_nowrap()
-            .gap(px(4.));
-        for (index, window) in report.windows.iter().enumerate() {
-            if index > 0 {
-                labels = labels.child(div().text_color(rgb(theme.muted)).child("·"));
-            }
-            labels = labels.child(
+        let severity = tightest.map_or(Severity::Normal, |window| window.used.into());
+        if let Some(summary) = report.summary() {
+            segment = segment.child(
                 div()
-                    .text_color(rgb(color(window.used.into(), theme, theme.foreground)))
-                    .child(window.label(now)),
+                    .whitespace_nowrap()
+                    .text_color(rgb(color(severity, theme, theme.foreground)))
+                    .child(summary),
             );
         }
-        // A service that meters money or credits rather than a window shows
-        // what is left or spent.
-        if report.windows.is_empty()
-            && let Some(balance) = report.balances.first()
-        {
-            labels = labels.child(balance.amount_text());
-        }
-        segment
-            .child(labels)
-            // The numbers are the last good ones; the panel says why.
-            .when(reading.error.is_some(), |segment| segment.child(mark()))
+        // The numbers are the last good ones; the panel says why.
+        segment.when(reading.error.is_some(), |segment| segment.child(mark()))
     }
 }
 

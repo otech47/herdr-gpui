@@ -159,20 +159,6 @@ impl Window {
             .map(|at| at.duration_since(now).unwrap_or_default())
     }
 
-    /// `3% used 2h 53m`: the time left names a session or weekly window, and
-    /// a model window is named instead, as the service does.
-    pub fn label(&self, now: SystemTime) -> String {
-        let suffix = match (&self.kind, self.resets_in(now)) {
-            (Kind::Named(name), _) => name.clone(),
-            (_, Some(left)) => countdown(left),
-            (Kind::Session, None) => "5h".into(),
-            (Kind::Daily, None) => "day".into(),
-            (Kind::Weekly, None) => "wk".into(),
-            (Kind::Monthly, None) => "mo".into(),
-        };
-        format!("{}% used {suffix}", self.percent())
-    }
-
     /// Nothing until a hundredth of the window has passed: an early estimate
     /// swings too far to be useful.
     pub fn pace(&self, now: SystemTime) -> Option<Pace> {
@@ -415,6 +401,15 @@ impl Report {
     /// The window closest to its limit, which the meter shows.
     pub fn tightest(&self) -> Option<&Window> {
         self.windows.iter().max_by(|a, b| a.used.total_cmp(&b.used))
+    }
+
+    /// `65%`, the share used of the tightest window, else the first balance
+    /// of a service that meters money or credits.
+    pub fn summary(&self) -> Option<String> {
+        if let Some(window) = self.tightest() {
+            return Some(format!("{}%", window.percent()));
+        }
+        self.balances.first().map(Balance::amount_text)
     }
 }
 
