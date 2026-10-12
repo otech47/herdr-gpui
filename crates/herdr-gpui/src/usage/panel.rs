@@ -27,14 +27,13 @@ impl HerdrWindow {
         }
     }
 
-    /// Shows `provider` in the panel and leads the status bar with it.
+    /// Shows `provider` in the panel. The status bar keeps following the
+    /// focused pane's agent.
     fn choose_usage(&mut self, provider: Provider) {
         self.menu.page = Some(Page::Usage(provider));
-        self.usage.choose(provider);
     }
 
-    /// Left and right step through the tabs, as the pointer does, so the
-    /// status bar follows the keyboard too.
+    /// Left and right step through the tabs, as the pointer does.
     pub(crate) fn usage_key(
         &mut self,
         provider: Provider,

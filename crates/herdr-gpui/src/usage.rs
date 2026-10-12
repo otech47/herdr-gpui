@@ -7,6 +7,7 @@
 
 mod access;
 mod cookies;
+mod focus;
 mod icons;
 mod model;
 mod panel;
@@ -95,15 +96,23 @@ pub(crate) struct Entry {
     rate_limited: bool,
 }
 
-/// How many providers the status bar has room for; the panel lists all.
+/// How many providers the status bar has room for while no agent is in the
+/// focused pane; the panel lists all.
 pub(crate) const HEADLINE: usize = 2;
 
 impl Entry {
-    /// The providers the status bar shows: those with numbers to show, the
-    /// one chosen in the panel first, then the ones closest to a limit, at
-    /// most `limit` of them. A provider that has no report yet, or no windows
-    /// or balances, waits in the panel.
-    pub fn headline(&self, limit: usize, chosen: Option<Provider>) -> Vec<&Reading> {
+    /// The providers the status bar shows: `lead`, the focused pane's agent,
+    /// alone whenever this host read it, numbers or not; else the ones
+    /// closest to a limit, at most `limit`, while one without numbers waits
+    /// in the panel.
+    pub fn headline(&self, limit: usize, lead: Option<Provider>) -> Vec<&Reading> {
+        if let Some(reading) = self
+            .readings
+            .iter()
+            .find(|reading| Some(reading.provider) == lead)
+        {
+            return vec![reading];
+        }
         let mut shown: Vec<&Reading> = self
             .readings
             .iter()
@@ -111,13 +120,6 @@ impl Entry {
             .collect();
         // Stable: equally used providers keep the registry's order.
         shown.sort_by(|a, b| urgency(b).total_cmp(&urgency(a)));
-        if let Some(index) = shown
-            .iter()
-            .position(|reading| Some(reading.provider) == chosen)
-        {
-            let reading = shown.remove(index);
-            shown.insert(0, reading);
-        }
         shown.truncate(limit);
         shown
     }
@@ -177,9 +179,6 @@ pub(crate) struct Usage {
     busy: Option<Host>,
     minute: u64,
     revision: Option<u64>,
-    /// The provider last picked in the panel, which leads the status bar on
-    /// any host that has numbers for it.
-    chosen: Option<Provider>,
     /// Providers just allowed, whose remembered refusals the next read
     /// forgets so macOS asks again.
     retry: HashSet<Provider>,
@@ -192,16 +191,6 @@ impl Usage {
     /// What the status bar shows for the tracked host.
     pub fn current(&self) -> Option<&Entry> {
         self.entries.get(self.host.as_ref()?)
-    }
-
-    /// The provider picked in the panel to lead the status bar.
-    pub fn chosen(&self) -> Option<Provider> {
-        self.chosen
-    }
-
-    /// Leads the status bar with `provider`, without reading anything again.
-    pub fn choose(&mut self, provider: Provider) {
-        self.chosen = Some(provider);
     }
 
     /// Whether the tracked host is being read right now.

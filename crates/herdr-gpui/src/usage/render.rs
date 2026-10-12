@@ -1,7 +1,7 @@
-//! The status bar's usage segments: per agent, a meter for the window closest
-//! to its limit and each window's share used with its time to reset. A click
-//! opens that agent's panel, so the bar stays one quiet line; picking a tab
-//! there brings that agent to the front of the bar.
+//! The status bar's usage segments: for the focused pane's agent, else per
+//! agent closest to a limit, a meter for the window closest to its limit and
+//! each window's share used with its time to reset. A click opens that
+//! agent's panel, so the bar stays one quiet line.
 
 use super::{
     Reading,
@@ -19,13 +19,13 @@ use std::{
 const METER_WIDTH: f32 = 40.;
 
 impl HerdrWindow {
-    /// The provider chosen in the panel, then those closest to a limit, at
-    /// most [`super::HEADLINE`]; nothing when usage is hidden or no provider
-    /// on the host has numbers yet.
+    /// The focused pane's agent, else those closest to a limit, at most
+    /// [`super::HEADLINE`]; nothing when usage is hidden or no provider on
+    /// the host has numbers yet.
     pub(crate) fn render_usage(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let entry = self.usage.current();
         let shown = entry
-            .map(|entry| entry.headline(super::HEADLINE, self.usage.chosen()))
+            .map(|entry| entry.headline(super::HEADLINE, self.focused_provider()))
             .unwrap_or_default();
         // A host that could not be read at all says so, but only while
         // there is nothing older to show.
@@ -171,18 +171,29 @@ impl HerdrWindow {
                     cx,
                 );
             }));
+        let mark = || {
+            div()
+                .flex_none()
+                .text_color(rgb(theme.ink(theme.palette[3])))
+                .child("!")
+        };
         let Some(report) = &reading.report else {
-            // Waiting on Keychain access: the lock says why there are no
-            // numbers, and the click opens the panel that asks.
-            return segment.when(reading.access.is_some(), |segment| {
-                segment.child(
-                    svg()
-                        .path("icons/lock.svg")
-                        .size(px(11.))
-                        .flex_none()
-                        .text_color(rgb(theme.muted)),
-                )
-            });
+            // No numbers yet: the lock says Keychain access is pending, the
+            // mark that the panel has the reason, and the click opens it.
+            return segment
+                .when(reading.access.is_some(), |segment| {
+                    segment.child(
+                        svg()
+                            .path("icons/lock.svg")
+                            .size(px(11.))
+                            .flex_none()
+                            .text_color(rgb(theme.muted)),
+                    )
+                })
+                .when(
+                    reading.access.is_none() && reading.error.is_some(),
+                    |segment| segment.child(mark()),
+                );
         };
         if let Some(tightest) = report.tightest() {
             segment = segment.child(meter(tightest, theme));
@@ -213,14 +224,7 @@ impl HerdrWindow {
         segment
             .child(labels)
             // The numbers are the last good ones; the panel says why.
-            .when(reading.error.is_some(), |segment| {
-                segment.child(
-                    div()
-                        .flex_none()
-                        .text_color(rgb(theme.ink(theme.palette[3])))
-                        .child("!"),
-                )
-            })
+            .when(reading.error.is_some(), |segment| segment.child(mark()))
     }
 }
 

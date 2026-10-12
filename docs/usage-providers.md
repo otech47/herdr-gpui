@@ -1,7 +1,8 @@
 # Usage providers
 
-The status bar shows plan usage for every AI service signed in on the
-selected host, and clicking one opens its panel. Each service is a
+The status bar shows plan usage for the agent in the focused pane, else
+for the signed-in services closest to a limit on the selected host, and
+clicking one opens the panel, which lists every service. Each service is a
 *provider*: one module in `crates/herdr-gpui/src/usage/providers/` with a
 unit struct implementing `Service`, listed once in
 `crates/herdr-gpui/src/usage/registry.rs`. Providers are ported from

@@ -13,6 +13,7 @@ use std::time::{Duration, Instant, SystemTime};
 mod browser_cookies;
 #[cfg(unix)]
 mod claude_keychain;
+mod focused_agent;
 mod keychain_access;
 mod kimi_cli;
 mod labels;

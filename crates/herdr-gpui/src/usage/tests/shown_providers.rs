@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn the_status_bar_shows_the_two_closest_to_a_limit() {
+fn the_status_bar_shows_the_focused_agent_else_the_two_closest_to_a_limit() {
     let reading = |id: &str, used: Option<f64>| Reading {
         provider: provider(id),
         report: used.map(|used| report(provider(id), used)),
@@ -29,9 +29,9 @@ fn the_status_bar_shows_the_two_closest_to_a_limit() {
         error: None,
         access: None,
     });
-    let ids = |limit, chosen: Option<&str>| {
+    let ids = |limit, lead: Option<&str>| {
         entry
-            .headline(limit, chosen.map(provider))
+            .headline(limit, lead.map(provider))
             .iter()
             .map(|reading| reading.provider.id())
             .collect::<Vec<_>>()
@@ -39,18 +39,14 @@ fn the_status_bar_shows_the_two_closest_to_a_limit() {
     assert_eq!(ids(super::super::HEADLINE, None), ["claude", "codex"]);
     // Ties keep the registry order.
     assert_eq!(ids(10, None), ["claude", "codex", "zed", "copilot"]);
-    // A provider picked in the panel leads, then the closest to a limit.
+    // The focused pane's agent shows alone, however close others are to a limit.
+    assert_eq!(ids(super::super::HEADLINE, Some("copilot")), ["copilot"]);
+    assert_eq!(ids(super::super::HEADLINE, Some("codex")), ["codex"]);
+    // Even one with no numbers yet.
+    assert_eq!(ids(super::super::HEADLINE, Some("gemini")), ["gemini"]);
+    // One this host never read leaves the bar to the closest limits.
     assert_eq!(
-        ids(super::super::HEADLINE, Some("copilot")),
-        ["copilot", "claude"]
-    );
-    assert_eq!(
-        ids(super::super::HEADLINE, Some("codex")),
-        ["codex", "claude"]
-    );
-    // One with nothing to show on this host leaves the bar as it was.
-    assert_eq!(
-        ids(super::super::HEADLINE, Some("gemini")),
+        ids(super::super::HEADLINE, Some("cursor")),
         ["claude", "codex"]
     );
 }
