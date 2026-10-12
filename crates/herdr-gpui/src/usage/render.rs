@@ -1,7 +1,7 @@
 //! The status bar's usage segments: for the focused pane's agent, else per
-//! agent closest to a limit, a meter and the share used of the window
-//! closest to its limit. A click opens that agent's panel, which has the
-//! rest, so the bar stays one quiet line.
+//! agent closest to a limit, a labeled meter for the session window and for
+//! the tightest other one, every window in a tooltip. A click opens that
+//! agent's panel, so the bar stays one quiet line.
 
 use super::{
     Reading,
@@ -10,9 +10,13 @@ use super::{
 };
 use crate::window::HerdrWindow;
 use gpui::{prelude::*, *};
-use std::{cell::Cell, rc::Rc, time::Duration};
+use std::{
+    cell::Cell,
+    rc::Rc,
+    time::{Duration, SystemTime},
+};
 
-const METER_WIDTH: f32 = 40.;
+const METER_WIDTH: f32 = 32.;
 
 impl HerdrWindow {
     /// The focused pane's agent, else those closest to a limit, at most
@@ -32,6 +36,7 @@ impl HerdrWindow {
             return None;
         }
         let busy = self.usage.busy();
+        let now = SystemTime::now();
         let theme = &self.theme;
         let mut row = div()
             .id("usage")
@@ -43,7 +48,7 @@ impl HerdrWindow {
             .items_center()
             .gap(px(4.));
         for reading in &shown {
-            row = row.child(self.usage_segment(reading, cx));
+            row = row.child(self.usage_segment(reading, now, cx));
         }
         if let Some(error) = host_error {
             let (foreground, surface) = (theme.foreground, theme.surface);
@@ -115,7 +120,12 @@ impl HerdrWindow {
         )
     }
 
-    fn usage_segment(&self, reading: &Reading, cx: &mut Context<Self>) -> impl IntoElement {
+    fn usage_segment(
+        &self,
+        reading: &Reading,
+        now: SystemTime,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let theme = &self.theme;
         let provider = reading.provider;
         let key = provider.id();
@@ -185,22 +195,61 @@ impl HerdrWindow {
                     |segment| segment.child(mark()),
                 );
         };
-        let tightest = report.tightest();
-        if let Some(window) = tightest {
-            segment = segment.child(meter(window, theme));
+        for window in report.shown() {
+            segment = segment.child(gauge(window, theme));
         }
-        let severity = tightest.map_or(Severity::Normal, |window| window.used.into());
-        if let Some(summary) = report.summary() {
-            segment = segment.child(
-                div()
-                    .whitespace_nowrap()
-                    .text_color(rgb(color(severity, theme, theme.foreground)))
-                    .child(summary),
-            );
+        // A service that meters money or credits rather than a window shows
+        // what is left or spent.
+        if report.windows.is_empty()
+            && let Some(balance) = report.balances.first()
+        {
+            segment = segment.child(div().whitespace_nowrap().child(balance.amount_text()));
         }
-        // The numbers are the last good ones; the panel says why.
-        segment.when(reading.error.is_some(), |segment| segment.child(mark()))
+        let lines: Vec<String> = report
+            .windows
+            .iter()
+            .map(|window| window.describe(now))
+            .chain(report.balances.iter().map(|balance| balance.text()))
+            .collect();
+        let detail = SharedString::from(lines.join("\n"));
+        let has_detail = !detail.is_empty();
+        let (foreground, surface) = (theme.foreground, theme.surface);
+        segment
+            .when(has_detail, |segment| {
+                segment.tooltip(move |_, cx| {
+                    let text = detail.clone();
+                    cx.new(|_| Hint {
+                        text,
+                        foreground,
+                        surface,
+                    })
+                    .into()
+                })
+            })
+            // The numbers are the last good ones; the panel says why.
+            .when(reading.error.is_some(), |segment| segment.child(mark()))
     }
+}
+
+/// `5h ▬▬ 10%`: which window, how full, how much.
+fn gauge(window: &Limit, theme: &crate::config::Theme) -> impl IntoElement {
+    let severity: Severity = window.used.into();
+    div()
+        .flex()
+        .items_center()
+        .gap(px(3.))
+        .whitespace_nowrap()
+        .child(
+            div()
+                .text_color(rgb(theme.muted))
+                .child(window.kind.short().to_owned()),
+        )
+        .child(meter(window, theme))
+        .child(
+            div()
+                .text_color(rgb(color(severity, theme, theme.foreground)))
+                .child(format!("{}%", window.percent())),
+        )
 }
 
 fn color(severity: Severity, theme: &crate::config::Theme, normal: u32) -> u32 {
@@ -252,6 +301,6 @@ impl Render for Hint {
             .text_size(px(12.))
             .text_color(rgb(self.foreground))
             .bg(rgb(self.surface))
-            .child(self.text.clone())
+            .children(self.text.split('\n').map(str::to_owned))
     }
 }

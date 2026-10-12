@@ -84,6 +84,18 @@ pub(crate) enum Kind {
 }
 
 impl Kind {
+    /// `5h`, `wk`, or the first word of a service's own name: what fits
+    /// beside a meter in the status bar.
+    pub fn short(&self) -> &str {
+        match self {
+            Self::Session => "5h",
+            Self::Daily => "day",
+            Self::Weekly => "wk",
+            Self::Monthly => "mo",
+            Self::Named(name) => name.split_whitespace().next().unwrap_or(name),
+        }
+    }
+
     pub fn title(&self) -> &str {
         match self {
             Self::Session => "Session",
@@ -157,6 +169,15 @@ impl Window {
     pub fn resets_in(&self, now: SystemTime) -> Option<Duration> {
         self.resets_at
             .map(|at| at.duration_since(now).unwrap_or_default())
+    }
+
+    /// `Session: 10% used, resets in 2h 53m`, one line of the bar's tooltip.
+    pub fn describe(&self, now: SystemTime) -> String {
+        let (title, percent) = (self.kind.title(), self.percent());
+        match self.resets_in(now) {
+            Some(left) => format!("{title}: {percent}% used, resets in {}", countdown(left)),
+            None => format!("{title}: {percent}% used"),
+        }
     }
 
     /// Nothing until a hundredth of the window has passed: an early estimate
@@ -398,18 +419,18 @@ impl Report {
         self.detail.as_deref()?.downcast_ref()
     }
 
-    /// The window closest to its limit, which the meter shows.
+    /// The window closest to its limit, which ranks the provider.
     pub fn tightest(&self) -> Option<&Window> {
         self.windows.iter().max_by(|a, b| a.used.total_cmp(&b.used))
     }
 
-    /// `65%`, the share used of the tightest window, else the first balance
-    /// of a service that meters money or credits.
-    pub fn summary(&self) -> Option<String> {
-        if let Some(window) = self.tightest() {
-            return Some(format!("{}%", window.percent()));
-        }
-        self.balances.first().map(Balance::amount_text)
+    /// The windows the status bar shows: the first, which is the session
+    /// when there is one, and the tightest of the rest. The panel lists all.
+    pub fn shown(&self) -> Vec<&Window> {
+        let mut rest = self.windows.iter();
+        let mut shown: Vec<&Window> = rest.next().into_iter().collect();
+        shown.extend(rest.max_by(|a, b| a.used.total_cmp(&b.used)));
+        shown
     }
 }
 
