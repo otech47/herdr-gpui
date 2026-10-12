@@ -3,10 +3,13 @@
 //!
 //! 1. a Kimi Code API key from the config or `KIMI_CODE_API_KEY`, sent to
 //!    `GET {api}/coding/v1/usages`;
-//! 2. the Kimi Code CLI's own sign-in, `$KIMI_CODE_HOME/credentials/kimi-code.json`
-//!    (default `~/.kimi-code`), while its access token is fresh, with the CLI's
-//!    device headers (China region only, as the file does not say which host
-//!    issued it; it is never refreshed or rewritten);
+//! 2. the Kimi Code CLI's own sign-in under `$KIMI_CODE_HOME` (default
+//!    `~/.kimi-code`), while its access token is fresh, with the CLI's device
+//!    headers. Its `config.toml` names the store (the `kimi-code` Keychain
+//!    item or `credentials/<key>.json`, by the managed provider's oauth key)
+//!    and the API base, which sets the region; without one,
+//!    `credentials/kimi-code.json` on the China API. The CLI rotates its
+//!    refresh token when it renews, so the token is never refreshed here;
 //! 3. the web session token, the `kimi-auth` cookie's value, sent to the
 //!    console's `GetUsages` call. It comes from the `token` setting
 //!    (`KIMI_AUTH_TOKEN`), else from a Cookie header in the `cookie` setting
@@ -52,9 +55,10 @@ static META: Meta = Meta::new("kimi", "Kimi Code")
         Setting::new(
             "region",
             &[],
-            "Which Kimi service the credentials belong to: \"china\" (the default, kimi.com) \
-             or \"international\" (kimi.ai). Moonshot Open Platform keys belong to the \
-             moonshot provider instead.",
+            "Which Kimi service the credentials belong to: \"china\" (kimi.com) or \
+             \"international\" (kimi.ai). Unset, the Kimi Code CLI's configured API base \
+             decides, else china. Moonshot Open Platform keys belong to the moonshot \
+             provider instead.",
         ),
         Setting::new(
             "base_url",
@@ -87,7 +91,12 @@ impl Service for Kimi {
     }
 
     fn fetch(&self, probe: &mut Probe) -> Option<Result<Report>> {
-        let region = Region::from(probe.text_setting("region").as_deref());
+        let cli = Cli::find(probe);
+        let region = probe
+            .text_setting("region")
+            .map(|setting| Region::from(Some(setting.as_str())))
+            .or_else(|| cli.base_url.as_deref().map(region_of))
+            .unwrap_or(Region::China);
         let web = probe
             .setting("token")
             .or_else(|| probe.cookie_value(&region.cookie_domains(), "kimi-auth"));
@@ -101,44 +110,122 @@ impl Service for Kimi {
             return Some(code(probe, request, web.as_ref(), region));
         }
 
-        if region == Region::China && base_url.is_none() {
-            let home = |rest: &str| HostPath::env_or("KIMI_CODE_HOME", ".kimi-code", rest);
-            if let Some(file) = probe.file(&home("credentials/kimi-code.json")) {
-                let fresh = probe
-                    .text(&file, &["expires_at"])
-                    .and_then(|expiry| expiry.parse::<f64>().ok())
-                    .and_then(|expiry| Timestamp::Number(expiry).time())
-                    .is_some_and(|expiry| expiry > SystemTime::now() + Duration::from_secs(60));
-                match probe.field(&file, &["access_token"]).filter(|_| fresh) {
-                    Some(token) => {
-                        let device = probe
-                            .read(&home("device_id"))
-                            .map(|id| ascii(id.trim()))
-                            .filter(|id| !id.is_empty());
-                        let system = if probe.is_macos() { "macOS" } else { "Linux" };
-                        let mut request = Request::get(usages_url(region.api()))
-                            .bearer(&token)
-                            .header(
-                                "User-Agent",
-                                concat!("herdr-gpui/", env!("CARGO_PKG_VERSION")),
-                            )
-                            .header("X-Msh-Platform", "kimi_code_cli")
-                            .header("X-Msh-Version", env!("CARGO_PKG_VERSION"))
-                            .header("X-Msh-Device-Model", system);
-                        if let Some(device) = device {
-                            request = request.header("X-Msh-Device-Id", device);
-                        }
-                        return Some(code(probe, request, web.as_ref(), region));
+        if base_url.is_none()
+            && let Some(file) = cli.credentials(probe)
+        {
+            let fresh = probe
+                .text(&file, &["expires_at"])
+                .and_then(|expiry| expiry.parse::<f64>().ok())
+                .and_then(|expiry| Timestamp::Number(expiry).time())
+                .is_some_and(|expiry| expiry > SystemTime::now() + Duration::from_secs(60));
+            match probe.field(&file, &["access_token"]).filter(|_| fresh) {
+                Some(token) => {
+                    let device = probe
+                        .read(&home("device_id"))
+                        .map(|id| ascii(id.trim()))
+                        .filter(|id| !id.is_empty());
+                    let system = if probe.is_macos() { "macOS" } else { "Linux" };
+                    let base = cli.base_url.as_deref().unwrap_or_else(|| region.api());
+                    let mut request = Request::get(usages_url(base))
+                        .bearer(&token)
+                        .header(
+                            "User-Agent",
+                            concat!("herdr-gpui/", env!("CARGO_PKG_VERSION")),
+                        )
+                        .header("X-Msh-Platform", "kimi_code_cli")
+                        .header("X-Msh-Version", env!("CARGO_PKG_VERSION"))
+                        .header("X-Msh-Device-Model", system);
+                    if let Some(device) = device {
+                        request = request.header("X-Msh-Device-Id", device);
                     }
-                    // CodexBar never refreshes the CLI's token: sign in again there.
-                    None if web.is_none() => return Some(Err(Error::UsageRejected)),
-                    None => {}
+                    return Some(code(probe, request, web.as_ref(), region));
                 }
+                // Renewing here would rotate the refresh token out from under the CLI.
+                None if web.is_none() => return Some(Err(Error::UsageExpired("Kimi Code"))),
+                None => {}
             }
         }
 
         let token = web?;
         Some(web_usage(probe, &token, region))
+    }
+}
+
+fn home(rest: &str) -> HostPath {
+    HostPath::env_or("KIMI_CODE_HOME", ".kimi-code", rest)
+}
+
+const KEYRING_SERVICE: &str = "kimi-code";
+
+/// What the Kimi Code CLI's `config.toml` says about its Kimi Code sign-in.
+struct Cli {
+    base_url: Option<String>,
+    storage: Storage,
+}
+
+enum Storage {
+    /// Under [`KEYRING_SERVICE`], with the config's oauth key as the account.
+    Keychain(String),
+    File(HostPath),
+}
+
+impl Cli {
+    fn find(probe: &mut Probe) -> Self {
+        let config = probe.file(&home("config.toml"));
+        let text = |path: &[&str]| -> Option<String> {
+            let path = [&["providers", "managed:kimi-code"][..], path].concat();
+            probe.toml_text(config.as_ref()?, &path)
+        };
+        let base_url = text(&["base_url"]).filter(|url| url.starts_with("https://"));
+        let key = text(&["oauth", "key"]).unwrap_or_else(|| "oauth/kimi-code".into());
+        let storage = match text(&["oauth", "storage"]).as_deref() {
+            Some("keyring") => Storage::Keychain(key),
+            _ => Storage::File(home(&format!(
+                "credentials/{}.json",
+                credentials_name(&key)
+            ))),
+        };
+        Self { base_url, storage }
+    }
+
+    fn credentials(&self, probe: &mut Probe) -> Option<Secret> {
+        match &self.storage {
+            Storage::Keychain(key) if probe.is_macos() => {
+                probe.keychain(KEYRING_SERVICE, Some(key))
+            }
+            Storage::Keychain(_) => None,
+            Storage::File(path) => probe.file(path),
+        }
+    }
+}
+
+/// The file stem the CLI derives from an oauth key, the last segment after
+/// `oauth/`. Anything but a plain name falls back, as the stem becomes a path.
+fn credentials_name(key: &str) -> &str {
+    let name = key
+        .strip_prefix("oauth/")
+        .unwrap_or(key)
+        .rsplit('/')
+        .next()
+        .unwrap_or_default();
+    let plain = |byte: u8| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.');
+    if name.is_empty() || name.starts_with('.') || !name.bytes().all(plain) {
+        "kimi-code"
+    } else {
+        name
+    }
+}
+
+fn region_of(base_url: &str) -> Region {
+    let host = base_url
+        .trim_start_matches("https://")
+        .split('/')
+        .next()
+        .unwrap_or_default();
+    if host == "kimi.ai" || host.ends_with(".kimi.ai") {
+        Region::International
+    } else {
+        Region::China
     }
 }
 
@@ -802,6 +889,25 @@ mod tests {
             &report.sections[0],
             Section::Limit(window) if window.kind == Kind::Named("Code 7-day".into()) && window.percent() == 50
         ));
+    }
+
+    #[test]
+    fn cli_credentials_and_region_follow_its_config() {
+        assert_eq!(
+            credentials_name("oauth/kimi-code-env-0e4f99c69cc27850"),
+            "kimi-code-env-0e4f99c69cc27850"
+        );
+        assert_eq!(credentials_name("oauth/kimi-code"), "kimi-code");
+        assert_eq!(credentials_name("kimi-code"), "kimi-code");
+        assert_eq!(credentials_name("oauth/"), "kimi-code");
+        assert_eq!(credentials_name("oauth/../kimi-code"), "kimi-code");
+        assert_eq!(credentials_name("oauth/.hidden"), "kimi-code");
+        assert_eq!(
+            region_of("https://api.kimi.ai/coding/v1"),
+            Region::International
+        );
+        assert_eq!(region_of("https://api.kimi.com/coding/v1"), Region::China);
+        assert_eq!(region_of("https://proxy.example/coding"), Region::China);
     }
 
     #[test]

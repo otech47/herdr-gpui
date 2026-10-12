@@ -14,6 +14,7 @@ mod browser_cookies;
 #[cfg(unix)]
 mod claude_keychain;
 mod keychain_access;
+mod kimi_cli;
 mod labels;
 mod provider_data;
 mod provider_settings;

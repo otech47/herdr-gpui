@@ -526,6 +526,24 @@ impl<'a> Probe<'a> {
         self.text(&file, field)
     }
 
+    /// A non-secret string at `path` inside the TOML `source`, revealed.
+    /// A remote host has no TOML reader, so its files read as absent.
+    pub fn toml_text(&self, source: &Secret, path: &[&str]) -> Option<String> {
+        let Held::Here(text) = &source.0 else {
+            return None;
+        };
+        let (last, tables) = path.split_last()?;
+        let mut table: toml::Table = text.expose_secret().parse().ok()?;
+        for key in tables {
+            let toml::Value::Table(inner) = table.remove(*key)? else {
+                return None;
+            };
+            table = inner;
+        }
+        let value = table.get(*last)?.as_str()?.trim();
+        (!value.is_empty()).then(|| value.to_owned())
+    }
+
     fn reveal(&mut self, secret: &Secret) -> Option<String> {
         let text = match (&mut *self.exec, &secret.0) {
             (_, Held::Here(value)) => value.expose_secret().to_owned(),

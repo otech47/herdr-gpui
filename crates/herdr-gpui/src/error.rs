@@ -378,6 +378,8 @@ pub enum Error {
     UsageHeader(#[source] ureq::http::header::InvalidHeaderValue),
     #[error("Saved sign-in was rejected. Open the agent to sign in again.")]
     UsageRejected,
+    #[error("Saved sign-in has expired. It renews the next time {0} runs.")]
+    UsageExpired(&'static str),
     #[error("Usage is rate limited. Retrying later.")]
     UsageRateLimited,
     #[error("Usage service returned HTTP {0}.")]

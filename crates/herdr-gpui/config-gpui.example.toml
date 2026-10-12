@@ -516,9 +516,10 @@ size = 12
 #   (https://www.kimi.com/code/console, or https://www.kimi.ai/code/console for
 #   International). Not needed when the Kimi Code CLI is signed in on the host.
 # api_key = ""  # or KIMI_CODE_API_KEY
-#   Which Kimi service the credentials belong to: "china" (the default,
-#   kimi.com) or "international" (kimi.ai). Moonshot Open Platform keys belong
-#   to the moonshot provider instead.
+#   Which Kimi service the credentials belong to: "china" (kimi.com) or
+#   "international" (kimi.ai). Unset, the Kimi Code CLI's configured API base
+#   decides, else china. Moonshot Open Platform keys belong to the moonshot
+#   provider instead.
 # region = ""
 #   An https Kimi Code API base to use with the API key instead of
 #   https://api.kimi.com, for a compatible proxy. Setting it stops the CLI's
