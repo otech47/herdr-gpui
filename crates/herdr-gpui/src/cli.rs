@@ -9,6 +9,8 @@ pub enum LaunchMode {
     BuildInfo,
     /// Talk to the running app, then exit without starting GPUI.
     Browser(BrowserCommand),
+    /// Ask the running app to show a space, then exit without starting GPUI.
+    Workspace(WorkspaceCommand),
     /// Show the UI variants compiled in from `HERDR_MOCKUP_FILE`.
     #[cfg(feature = "mockup")]
     Mockup(MockupOptions),
@@ -35,6 +37,13 @@ pub enum BrowserCommand {
         wait: u64,
     },
     Skill,
+    Help,
+}
+
+/// `herdr-gpui workspace ...`, answered by the running app.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum WorkspaceCommand {
+    Focus { workspace: String },
     Help,
 }
 
@@ -85,6 +94,10 @@ pub enum CliError {
     MissingWorkspace,
     #[error("browser arguments must be UTF-8")]
     InvalidBrowserEncoding(OsString),
+    #[error("workspace requires a command: focus, or --help")]
+    MissingWorkspaceCommand,
+    #[error("Unknown workspace command: {}", .0.to_string_lossy())]
+    UnknownWorkspaceCommand(OsString),
     #[cfg(feature = "mockup")]
     #[error("{0} requires a path")]
     MissingMockupPath(&'static str),
@@ -128,6 +141,27 @@ fn utf8(value: OsString) -> Result<String, CliError> {
     value
         .into_string()
         .map_err(CliError::InvalidBrowserEncoding)
+}
+
+fn parse_workspace(mut args: impl Iterator<Item = OsString>) -> Result<WorkspaceCommand, CliError> {
+    let command = args.next().ok_or(CliError::MissingWorkspaceCommand)?;
+    match command.to_str() {
+        Some("--help" | "-h") => Ok(WorkspaceCommand::Help),
+        Some("focus") => {
+            let workspace = args
+                .next()
+                .filter(|value| !value.is_empty() && !value.as_encoded_bytes().starts_with(b"-"))
+                .ok_or(CliError::MissingWorkspace)?;
+            match args.next() {
+                None => Ok(WorkspaceCommand::Focus {
+                    workspace: utf8(workspace)?,
+                }),
+                Some(extra) if extra == "--help" || extra == "-h" => Ok(WorkspaceCommand::Help),
+                Some(extra) => Err(CliError::UnexpectedArgument(extra)),
+            }
+        }
+        _ => Err(CliError::UnknownWorkspaceCommand(command)),
+    }
 }
 
 fn parse_browser(mut args: impl Iterator<Item = OsString>) -> Result<BrowserCommand, CliError> {
@@ -223,6 +257,13 @@ impl LaunchOptions {
             return Ok(Self {
                 target: ConnectTarget::Local,
                 mode: LaunchMode::Browser(parse_browser(args)?),
+            });
+        }
+        if args.peek().is_some_and(|arg| arg == "workspace") {
+            args.next();
+            return Ok(Self {
+                target: ConnectTarget::Local,
+                mode: LaunchMode::Workspace(parse_workspace(args)?),
             });
         }
         #[cfg(feature = "mockup")]

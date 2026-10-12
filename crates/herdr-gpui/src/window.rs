@@ -27,6 +27,7 @@ mod regions;
 mod render;
 mod selection;
 mod server_keys;
+mod startup;
 pub(crate) mod system_notifications;
 mod tab_drag;
 mod tab_strip;
@@ -64,6 +65,16 @@ use std::time::Duration;
 
 pub(crate) use server_keys::ActiveServerKeymap;
 
+/// What a window was opened for, beyond its bounds.
+#[derive(Clone, Debug)]
+pub(crate) enum Startup {
+    /// Show this space: the one the window showed when last saved, or the one
+    /// a control request opened the window for.
+    Show(String),
+    /// Create a space and show it.
+    NewWorkspace,
+}
+
 pub(crate) struct HerdrWindow {
     pub(crate) sound: crate::sound::Service,
     pub(crate) bell: crate::bell::Bell,
@@ -97,6 +108,8 @@ pub(crate) struct HerdrWindow {
     pub(crate) activation_deadline: Option<std::time::Instant>,
     pub(crate) pending_navigation: Option<OwnedNavigationTarget>,
     pub(crate) pending_toast: Option<u64>,
+    /// Applied once the daemon answers, then cleared.
+    pub(crate) startup: Option<Startup>,
     pub(crate) toasts_hidden: bool,
     pub(crate) pending_releases: Vec<endpoint::Release>,
     pub(crate) selected_generation: u64,
@@ -196,6 +209,10 @@ pub(crate) struct HerdrWindow {
     pub(crate) tab_drag: Option<tab_drag::TabDrag>,
     pub(crate) sidebar_split: Option<f32>,
     pub(crate) sidebar_split_modified: bool,
+    /// Sections folded to their headers, and the spaces list's dragged height.
+    pub(crate) sidebar_collapsed: preferences::Collapsed,
+    pub(crate) sidebar_spaces_height: Option<f32>,
+    pub(crate) sidebar_sections_modified: bool,
     pub(crate) sidebar_preferences: Option<preferences::Preferences>,
     pub(crate) sidebar_modified: bool,
     pub(crate) agent_sort: preferences::AgentSort,
@@ -206,8 +223,8 @@ pub(crate) struct HerdrWindow {
     pub(crate) avatars: Option<avatars::Avatars>,
     #[cfg(feature = "integration-test")]
     pub(crate) input_probe: smoke::InputProbe,
-    /// Spaces and agents lists, in that order.
-    pub(crate) sidebar_scroll: [ScrollHandle; 2],
+    /// Spaces, agents, and tabs lists, in that order.
+    pub(crate) sidebar_scroll: [ScrollHandle; 3],
     /// The row each list has scrolled into view, so a new selection is revealed
     /// while the user's own scrolling of an unchanged one is left alone.
     pub(crate) sidebar_revealed: [std::cell::Cell<Option<usize>>; 2],
@@ -314,6 +331,10 @@ impl HerdrWindow {
         if !self.sidebar_split_modified {
             self.sidebar_split = chrome.sidebar_split;
         }
+        if !self.sidebar_sections_modified {
+            self.sidebar_collapsed = chrome.collapsed;
+            self.sidebar_spaces_height = chrome.spaces_height;
+        }
         if self.notes_width.chosen().is_none() {
             self.notes_width.restore(chrome.notes_width);
         }
@@ -359,6 +380,7 @@ impl HerdrWindow {
         };
         let old_tab = focused_tab(&self.live);
         self.poll_endpoints(cx);
+        self.settle_startup(window, cx);
         self.post_system_notifications(window, cx);
         self.ring_bell(window);
         self.poll_integrations(cx);
@@ -686,6 +708,7 @@ impl HerdrWindow {
             selection_epoch: 0,
             activation_deadline: None,
             pending_navigation: None,
+            startup: None,
             pending_toast: None,
             toasts_hidden: false,
             pending_releases: Vec::new(),
@@ -754,6 +777,9 @@ impl HerdrWindow {
             tab_drag: None,
             sidebar_split: None,
             sidebar_split_modified: false,
+            sidebar_collapsed: Default::default(),
+            sidebar_spaces_height: None,
+            sidebar_sections_modified: false,
             sidebar_preferences: None,
             sidebar_modified: false,
             agent_sort: preferences::AgentSort::default(),

@@ -15,7 +15,7 @@ use crate::{
 };
 use crate::{
     browser::{LocalFile, WebUrl},
-    cli::BrowserCommand,
+    cli::{BrowserCommand, WorkspaceCommand},
 };
 use gpui::App;
 pub use protocol::ErrorCode;
@@ -189,6 +189,62 @@ fn open_browser(request: &BrowserOpen, cx: &mut App) -> Response {
     )
 }
 
+/// Brings the window showing the named workspace to the front. Without one,
+/// the frontmost window of its daemon shows it, or a window opens for it.
+#[cfg(unix)]
+fn focus_workspace(caller: &Caller, cx: &mut App) -> Response {
+    if !valid_caller(caller) {
+        return Response::error(
+            ErrorCode::InvalidRequest,
+            "Invalid workspace, pane, or daemon",
+        );
+    }
+    let Some(workspace) = caller.workspace_id.as_deref() else {
+        return Response::error(
+            ErrorCode::InvalidRequest,
+            "workspace focus needs a workspace ID",
+        );
+    };
+    let windows = main_windows(cx);
+    if windows.is_empty() {
+        return Response::error(ErrorCode::NoWindow, "Herdr GPUI has no window open");
+    }
+    let target = Target {
+        daemon: caller.daemon_socket.as_deref().map(Path::new),
+        workspace: Some(workspace),
+        pane: None,
+    };
+    let focused = Response::Focused {
+        workspace_id: workspace.to_owned(),
+    };
+    for strict in [true, false] {
+        for handle in &windows {
+            let raised = handle.update(cx, |view, window, cx| {
+                view.raise_if_showing(&target, strict, window, cx)
+            });
+            if raised.unwrap_or(false) {
+                cx.activate(true);
+                return focused;
+            }
+        }
+    }
+    for strict in [true, false] {
+        for handle in &windows {
+            let shown = handle.update(cx, |view, window, cx| {
+                view.show_requested_workspace(&target, strict, window, cx)
+            });
+            if shown.unwrap_or(false) {
+                cx.activate(true);
+                return focused;
+            }
+        }
+    }
+    Response::error(
+        ErrorCode::WorkspaceNotFound,
+        format!("No Herdr GPUI window is connected to a daemon with workspace {workspace}"),
+    )
+}
+
 /// Reloads every page the calling pane opened, in every window.
 #[cfg(unix)]
 fn reload(caller: &Caller, cx: &mut App) -> Response {
@@ -325,6 +381,9 @@ pub(crate) fn install(cx: &mut App) {
                             incoming.respond(open_browser(&request, cx));
                         }
                         Request::Reload(caller) => incoming.respond(reload(&caller, cx)),
+                        Request::FocusWorkspace(caller) => {
+                            incoming.respond(focus_workspace(&caller, cx));
+                        }
                         Request::Feedback(request) => {
                             feedback(&request, incoming, &mut waiters, cx);
                         }
@@ -421,6 +480,13 @@ fn browser_open(target: &str, workspace: Option<String>, focus: bool) -> crate::
     }
 }
 
+fn workspace_focus(workspace: String) -> crate::Result<String> {
+    match send(&Request::FocusWorkspace(caller(Some(workspace))?))? {
+        Response::Focused { workspace_id } => Ok(format!("Showing workspace {workspace_id}")),
+        response => Err(rejected(response)),
+    }
+}
+
 fn browser_reload() -> crate::Result<String> {
     match send(&Request::Reload(caller(None)?))? {
         Response::Reloaded { tabs: 0 } => Err(crate::Error::ControlRejected {
@@ -465,6 +531,23 @@ herdr-gpui browser skill
     Print the agent skill that explains these commands.
 Exit status: 0 done, 1 refused, 2 invalid arguments, 3 Herdr GPUI not running,
 4 no notes (feedback).";
+
+const WORKSPACE_USAGE: &str = "\
+herdr-gpui workspace focus ID
+    Bring the window of the running Herdr GPUI that shows workspace ID to the
+    front. When no window shows it, the frontmost window switches to it, or a
+    window opens for it when new_space_in_window is set.
+Exit status: 0 done, 1 refused, 2 invalid arguments, 3 Herdr GPUI not running.";
+
+pub(crate) fn run_workspace(command: WorkspaceCommand) -> ExitCode {
+    match command {
+        WorkspaceCommand::Help => {
+            println!("{WORKSPACE_USAGE}");
+            ExitCode::SUCCESS
+        }
+        WorkspaceCommand::Focus { workspace } => report(workspace_focus(workspace)),
+    }
+}
 
 fn report(result: crate::Result<String>) -> ExitCode {
     match result {

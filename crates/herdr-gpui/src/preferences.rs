@@ -626,6 +626,85 @@ impl AgentSort {
     }
 }
 
+/// A sidebar section the user can fold to its header.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Section {
+    Spaces,
+    Tabs,
+    Agents,
+}
+
+impl Section {
+    pub const ALL: [Self; 3] = [Self::Spaces, Self::Tabs, Self::Agents];
+
+    /// The header label, and the stored spelling.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Spaces => "spaces",
+            Self::Tabs => "tabs",
+            Self::Agents => "agents",
+        }
+    }
+
+    fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|section| section.name() == name)
+    }
+}
+
+/// Which sidebar sections are folded to their headers.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Collapsed {
+    spaces: bool,
+    tabs: bool,
+    agents: bool,
+}
+
+impl Collapsed {
+    pub fn is(self, section: Section) -> bool {
+        match section {
+            Section::Spaces => self.spaces,
+            Section::Tabs => self.tabs,
+            Section::Agents => self.agents,
+        }
+    }
+
+    pub fn toggle(&mut self, section: Section) {
+        let flag = match section {
+            Section::Spaces => &mut self.spaces,
+            Section::Tabs => &mut self.tabs,
+            Section::Agents => &mut self.agents,
+        };
+        *flag = !*flag;
+    }
+
+    fn names(self) -> Vec<&'static str> {
+        Section::ALL
+            .into_iter()
+            .filter(|section| self.is(*section))
+            .map(Section::name)
+            .collect()
+    }
+
+    /// Unknown names are ignored, so a newer build's sections do not undo
+    /// the ones this build knows; anything but an array folds nothing.
+    fn parse(value: Option<&serde_json::Value>) -> Self {
+        let mut collapsed = Self::default();
+        for name in value
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(serde_json::Value::as_str)
+        {
+            if let Some(section) = Section::parse(name)
+                && !collapsed.is(section)
+            {
+                collapsed.toggle(section);
+            }
+        }
+        collapsed
+    }
+}
+
 /// The window chrome this endpoint remembers between runs.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Chrome {
@@ -638,6 +717,11 @@ pub struct Chrome {
     pub notes_width: Option<f32>,
     /// The review's file list's width, once dragged.
     pub review_files_width: Option<f32>,
+    /// The sidebar sections folded to their headers.
+    pub collapsed: Collapsed,
+    /// The spaces list's height once dragged, with a tabs list below it;
+    /// `None` fits the list to its rows.
+    pub spaces_height: Option<f32>,
 }
 
 pub struct Preferences {
@@ -803,12 +887,19 @@ fn read_chrome(path: &Path) -> crate::Result<Chrome> {
         .and_then(serde_json::Value::as_f64)
         .map(|width| width as f32)
         .filter(|width| width.is_finite() && *width > 0.0);
+    let spaces_height = object
+        .get("sidebar_spaces_height_px")
+        .and_then(serde_json::Value::as_f64)
+        .map(|height| height as f32)
+        .filter(|height| height.is_finite() && *height > 0.0);
     Ok(Chrome {
         sidebar_width,
         sidebar_split,
         agent_sort,
         notes_width,
         review_files_width,
+        collapsed: Collapsed::parse(object.get("sidebar_collapsed")),
+        spaces_height,
     })
 }
 
@@ -848,6 +939,10 @@ fn write_chrome(path: &Path, chrome: Chrome) -> crate::Result<()> {
                 "review_files_width_px": chrome
                     .review_files_width
                     .filter(|width| width.is_finite() && *width > 0.0),
+                "sidebar_collapsed": chrome.collapsed.names(),
+                "sidebar_spaces_height_px": chrome
+                    .spaces_height
+                    .filter(|height| height.is_finite() && *height > 0.0),
             }),
         )?;
         file.write_all(b"\n")?;

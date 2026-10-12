@@ -750,6 +750,9 @@ impl HerdrWindow {
     /// every group keeps the strip that names it and takes dropped tabs, and
     /// only while the strip would list one tab at most, browser tabs counted.
     pub(crate) fn strip_hidden(&self, group: GroupId, cx: &App) -> bool {
+        if !self.config.show_tab_strip {
+            return true;
+        }
         self.settings
             .shared
             .as_ref()

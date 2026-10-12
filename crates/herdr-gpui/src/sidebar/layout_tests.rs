@@ -39,6 +39,8 @@ mod probes;
 #[cfg(test)]
 mod row_drag;
 #[cfg(test)]
+mod sections;
+#[cfg(test)]
 mod selection_scroll;
 #[cfg(test)]
 mod sidebar_cache;
@@ -464,6 +466,7 @@ pub(crate) fn fixture_window(window: &mut Window, cx: &mut Context<HerdrWindow>)
         activation_deadline: None,
         pending_navigation: None,
         pending_toast: None,
+        startup: None,
         toasts_hidden: false,
         pending_releases: Vec::new(),
         selected_generation: 0,
@@ -511,6 +514,9 @@ pub(crate) fn fixture_window(window: &mut Window, cx: &mut Context<HerdrWindow>)
         tab_drag: None,
         sidebar_split: None,
         sidebar_split_modified: false,
+        sidebar_collapsed: Default::default(),
+        sidebar_spaces_height: None,
+        sidebar_sections_modified: false,
         sidebar_preferences: None,
         sidebar_modified: false,
         agent_sort: Default::default(),

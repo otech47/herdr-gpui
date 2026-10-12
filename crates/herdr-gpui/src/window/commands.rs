@@ -260,6 +260,15 @@ impl HerdrWindow {
                 self.open_new_worktree(window, cx);
                 return;
             }
+            // Each space in a window of its own: the new window creates it.
+            Command::Workspace if self.config.new_space_in_window => {
+                crate::app::open_window_for(
+                    self.endpoints[0].connection.target.clone(),
+                    Some(crate::window::Startup::NewWorkspace),
+                    cx,
+                );
+                return;
+            }
             // Every interactive creation path ends here, so Herdr's name prompt
             // covers buttons, menus, shortcuts, and the palette alike.
             Command::Tab | Command::Workspace if self.open_name_prompt(command, window, cx) => {

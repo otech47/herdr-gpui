@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 const MAX_WINDOWS: usize = 64;
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct Geometry {
     x: f32,
     y: f32,
@@ -21,10 +21,13 @@ struct Geometry {
     height: f32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     display: Option<Uuid>,
+    /// The space the window showed, so it reopens there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    workspace: Option<String>,
 }
 
 impl Geometry {
-    fn valid(self) -> bool {
+    fn valid(&self) -> bool {
         [self.x, self.y, self.width, self.height]
             .into_iter()
             .all(f32::is_finite)
@@ -54,6 +57,7 @@ impl Geometry {
             width: bounds.size.width.into(),
             height: bounds.size.height.into(),
             display: None,
+            workspace: None,
         }
     }
 }
@@ -166,13 +170,13 @@ impl WindowState {
     pub(crate) fn placement(
         default: Bounds<Pixels>,
         cx: &mut App,
-    ) -> (Bounds<Pixels>, Option<DisplayId>) {
+    ) -> (Bounds<Pixels>, Option<DisplayId>, Option<String>) {
         if !cx.has_global::<Self>() {
-            return (default, None);
+            return (default, None, None);
         }
         let state = cx.global_mut::<Self>();
         let geometry = state.restored.pop_front().unwrap_or_else(|| {
-            if let Some((_, mut geometry)) = state.live.last().copied() {
+            if let Some((_, mut geometry)) = state.live.last().cloned() {
                 geometry.x += 28.;
                 geometry.y += 28.;
                 geometry
@@ -187,8 +191,9 @@ impl WindowState {
         let display = saved_display(geometry.display, &uuids)
             .and_then(|index| displays.get(index).cloned())
             .or_else(|| cx.primary_display());
+        let workspace = geometry.workspace.clone();
         let bounds = fit(geometry, display.as_ref().map(|display| display.bounds())).bounds();
-        (bounds, display.map(|display| display.id()))
+        (bounds, display.map(|display| display.id()), workspace)
     }
 
     fn save(&self) {
@@ -197,7 +202,7 @@ impl WindowState {
                 self.live
                     .iter()
                     .take(MAX_WINDOWS)
-                    .map(|(_, geometry)| *geometry)
+                    .map(|(_, geometry)| geometry.clone())
                     .collect(),
             );
         }
@@ -208,6 +213,11 @@ impl WindowState {
             return;
         }
         if let Some((_, old)) = self.live.iter_mut().find(|(key, _)| *key == id) {
+            // A bounds observation names no space; the noted one stays.
+            let geometry = Geometry {
+                workspace: old.workspace.clone(),
+                ..geometry
+            };
             if *old == geometry {
                 return;
             }
@@ -227,6 +237,27 @@ impl WindowState {
         if !self.live.is_empty() {
             self.save();
         }
+    }
+
+    fn set_workspace(&mut self, id: WindowId, workspace: Option<String>) {
+        if self.quitting {
+            return;
+        }
+        if let Some((_, geometry)) = self.live.iter_mut().find(|(key, _)| *key == id)
+            && geometry.workspace != workspace
+        {
+            geometry.workspace = workspace;
+            self.save();
+        }
+    }
+
+    /// Records the space `window` shows, so it reopens there.
+    pub(crate) fn note_workspace(window: &Window, workspace: Option<String>, cx: &mut App) {
+        if !cx.has_global::<Self>() {
+            return;
+        }
+        let id = window.window_handle().window_id();
+        cx.global_mut::<Self>().set_workspace(id, workspace);
     }
 
     pub(crate) fn observe<T: 'static>(window: &mut Window, cx: &mut Context<T>) {
@@ -261,6 +292,7 @@ mod tests {
             width: 900.,
             height: 700.,
             display: None,
+            workspace: None,
         }
     }
 
@@ -341,7 +373,7 @@ mod tests {
             display: Some(Uuid::from_u128(7)),
             ..geometry(200.)
         };
-        write(&path, &[on_external, geometry(0.)]).unwrap();
+        write(&path, &[on_external.clone(), geometry(0.)]).unwrap();
         assert_eq!(read(&path).unwrap(), vec![on_external, geometry(0.)]);
         fs::write(&path, br#"[{"x":1,"y":2,"width":900,"height":700}]"#).unwrap();
         assert_eq!(read(&path).unwrap()[0].display, None);
@@ -365,7 +397,7 @@ mod tests {
             width: 1400.,
             ..geometry(1000.)
         };
-        assert_eq!(fit(saved, Some(external)), saved);
+        assert_eq!(fit(saved.clone(), Some(external)), saved);
         // The external display is gone: shrink and pull onto the laptop.
         let fitted = fit(saved, Some(laptop));
         assert_eq!((fitted.x, fitted.width), (112., 1400.));

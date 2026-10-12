@@ -97,7 +97,7 @@ pub(crate) fn open_window(
     let step = px(28. * existing.min(6) as f32);
     let mut bounds = Bounds::centered(None, size(px(1200.), px(780.)), cx);
     bounds.origin += point(step, step);
-    let (bounds, display_id) = crate::window_state::WindowState::placement(bounds, cx);
+    let (bounds, display_id, shown) = crate::window_state::WindowState::placement(bounds, cx);
     cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -118,6 +118,7 @@ pub(crate) fn open_window(
                     fixture,
                 );
                 view.updater = updater;
+                view.startup = shown.map(crate::window::Startup::Show);
                 crate::window_state::WindowState::observe(window, cx);
                 view
             })
@@ -127,6 +128,15 @@ pub(crate) fn open_window(
 
 /// Opens another window from inside the focused window's own update.
 pub(crate) fn open_additional_window(target: ConnectTarget, cx: &mut App) {
+    open_window_for(target, None, cx);
+}
+
+/// Opens another window with something to show or create once it connects.
+pub(crate) fn open_window_for(
+    target: ConnectTarget,
+    startup: Option<crate::window::Startup>,
+    cx: &mut App,
+) {
     cx.defer(move |cx| {
         let opened = open_window(
             target,
@@ -138,6 +148,9 @@ pub(crate) fn open_additional_window(target: ConnectTarget, cx: &mut App) {
         match opened {
             Ok(handle) => {
                 let _ = handle.update(cx, |view, window, _| {
+                    if startup.is_some() {
+                        view.startup = startup;
+                    }
                     view.sound = crate::sound::Service::new();
                     window.activate_window();
                 });
@@ -165,6 +178,9 @@ pub(crate) fn run() -> std::process::ExitCode {
     if let LaunchMode::Browser(command) = mode {
         return crate::control::run(command);
     }
+    if let LaunchMode::Workspace(command) = mode {
+        return crate::control::run_workspace(command);
+    }
     // A separate app of its own: no daemon, control socket, stores, or updater.
     #[cfg(feature = "mockup")]
     if let LaunchMode::Mockup(options) = mode {
@@ -183,6 +199,9 @@ pub(crate) fn run() -> std::process::ExitCode {
         );
         println!(
             "  browser open URL    Show URL in a browser tab of the running app (see browser --help)"
+        );
+        println!(
+            "  workspace focus ID  Bring the running app's window showing space ID to the front, or open one"
         );
         #[cfg(feature = "integration-test")]
         println!(

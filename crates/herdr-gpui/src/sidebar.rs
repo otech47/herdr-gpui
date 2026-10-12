@@ -13,6 +13,8 @@ mod rail;
 mod render;
 mod reorder;
 mod row;
+mod sections;
+mod tabs;
 mod tokens;
 mod view;
 mod workspaces;
@@ -51,8 +53,15 @@ use workspaces::visible_workspace_entries;
 
 pub(crate) const DEVICE_FOOTER_HEIGHT: f32 = 40.;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum SidebarDrag {
-    Width { start: f32, width: f32 },
+    Width {
+        start: f32,
+        width: f32,
+    },
+    /// The boundary between the two growing lists: spaces and agents, or
+    /// tabs and agents when a tabs list is shown.
     Split,
+    /// The spaces list's own height, above a tabs list.
+    Spaces,
 }

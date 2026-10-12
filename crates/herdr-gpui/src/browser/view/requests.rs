@@ -49,6 +49,61 @@ impl HerdrWindow {
             })
     }
 
+    /// Brings this window to the front if the workspace a control request
+    /// names is the one it shows.
+    pub(crate) fn raise_if_showing(
+        &mut self,
+        target: &Target<'_>,
+        strict: bool,
+        window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> bool {
+        let Some((index, workspace)) = self.browser_target(target, strict) else {
+            return false;
+        };
+        if index != self.selected_endpoint {
+            return false;
+        }
+        let shown = self
+            .live
+            .snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.focused_workspace_id.as_deref())
+            == Some(workspace.as_str());
+        if shown {
+            window.activate_window();
+        }
+        shown
+    }
+
+    /// Shows the workspace a control request names: in a window of its own
+    /// under `new_space_in_window`, else in this window, brought to the front.
+    pub(crate) fn show_requested_workspace(
+        &mut self,
+        target: &Target<'_>,
+        strict: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some((index, workspace)) = self.browser_target(target, strict) else {
+            return false;
+        };
+        if self.config.new_space_in_window {
+            crate::app::open_window_for(
+                self.endpoints[index].connection.target.clone(),
+                Some(crate::window::Startup::Show(workspace)),
+                cx,
+            );
+            return true;
+        }
+        let endpoint = self.endpoints[index].id.clone();
+        if !self.navigate_endpoint(&endpoint, NavigationTarget::Workspace(&workspace), cx) {
+            return false;
+        }
+        window.activate_window();
+        true
+    }
+
     /// Opens the tab a control request asks for, if this window shows its
     /// workspace. `None` leaves the request to another window.
     pub(crate) fn open_requested_browser_tab(

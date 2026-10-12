@@ -18,6 +18,9 @@ pub(crate) enum Request {
     Reload(Caller),
     #[serde(rename = "browser.feedback")]
     Feedback(FeedbackRequest),
+    /// Bring the window showing the caller's workspace to the front, or open one.
+    #[serde(rename = "workspace.focus")]
+    FocusWorkspace(Caller),
 }
 
 /// What a tab shows: a web address, or a local file by absolute path, which
@@ -96,6 +99,9 @@ pub(crate) enum Response {
     },
     Reloaded {
         tabs: usize,
+    },
+    Focused {
+        workspace_id: String,
     },
     /// Notes the user sent to the caller, or `None` when there are none.
     Feedback {

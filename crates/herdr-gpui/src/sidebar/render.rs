@@ -3,25 +3,20 @@
 //! caches only.
 
 use super::{
-    DEVICE_FOOTER_HEIGHT, HOST_ARROW_WIDTH, HOST_GAP, STATUS_WIDTH, SidebarDrag, agent_name,
+    HOST_ARROW_WIDTH, HOST_GAP, STATUS_WIDTH, SidebarDrag, agent_name,
     agents::{Indicators, agent_place, state_label, status_text},
     agents_sort,
     cell::{AgentRow, Cell, Fold, RowContext, RowData, RowState, WorkspaceRow, layout_for},
-    label_text,
-    layout::{self, SidebarLook},
-    line_height,
+    label_text, layout, line_height,
     reorder::{self, Plan},
     row::{RowIcon, RowLift, RowTree, removing_dot},
+    sections::header_height,
     sidebar_width, sorted_agents,
     tokens::{self, SpaceContext},
     visible_workspace_entries,
     workspaces::{displayed_workspace_status, workspace_badge, workspace_label},
 };
-use crate::{
-    Command, HerdrWindow, NavigationTarget,
-    config::{FontConfig, Theme},
-    fonts::StyledFont,
-};
+use crate::{HerdrWindow, NavigationTarget, fonts::StyledFont, preferences::Section};
 use gpui::{prelude::*, *};
 
 impl HerdrWindow {
@@ -50,9 +45,39 @@ impl HerdrWindow {
         let spaces_custom = self.config.usage.inline
             && self.config.sidebar_layout.spaces != crate::config::SpaceLayout::default();
         let theme = &self.theme;
+        let sidebar_tabs = self.config.show_sidebar_tabs;
+        let agents_shown = self.config.show_agents;
+        let spaces_open = self.section_open(Section::Spaces);
+        let tabs_open = self.section_open(Section::Tabs);
+        let agents_open = self.section_open(Section::Agents);
+        // Grow factors below one leave free space unclaimed, so a list whose
+        // partner is folded or hidden takes the whole share.
+        let above_open = if sidebar_tabs { tabs_open } else { spaces_open };
+        let above_grow = if agents_shown && agents_open {
+            split
+        } else {
+            1.
+        };
+        let agents_grow = if above_open { 1. - split } else { 1. };
+        let header_h = header_height(font, look);
+        // With a tabs list below them, spaces take what they need, up to a
+        // share of the window, and the tabs list grows instead.
+        let spaces_max_h = f32::from(window.viewport_size().height) * 0.4;
+        let spaces_height = self.sidebar_spaces_height;
         let mut spaces = div()
             .id("spaces-scroll")
             .debug_selector(|| "spaces-scroll".into())
+            .flex()
+            .flex_col()
+            .map(|list| match (sidebar_tabs, spaces_height) {
+                (true, Some(height)) => list.flex_none().h(px(height)),
+                (true, None) => list.flex_none().max_h(px(spaces_max_h)),
+                (false, _) => list.flex_1().min_h_0(),
+            })
+            .overflow_y_scroll();
+        let mut tabs = div()
+            .id("tabs-scroll")
+            .debug_selector(|| "tabs-scroll".into())
             .flex()
             .flex_col()
             .flex_1()
@@ -68,6 +93,7 @@ impl HerdrWindow {
             .overflow_y_scroll();
         spaces = spaces.track_scroll(&self.sidebar_scroll[0]);
         agents = agents.track_scroll(&self.sidebar_scroll[1]);
+        tabs = tabs.track_scroll(&self.sidebar_scroll[2]);
         let multi = self.endpoints.len() > 1;
         let mut agent_count = 0;
         // A plugin view hid every agent, rather than there being none.
@@ -613,6 +639,16 @@ impl HerdrWindow {
                     spaces.child(element)
                 };
             }
+            if sidebar_tabs && selected && tabs_open {
+                tabs = tabs.children(self.tab_rows(
+                    snapshot,
+                    &endpoint_id,
+                    rows,
+                    &row_cx,
+                    content_x,
+                    cx,
+                ));
+            }
             if !self.config.show_agents {
                 continue;
             }
@@ -714,6 +750,8 @@ impl HerdrWindow {
                     })),
             );
         }
+        let footer = self.spaces_footer(font, look, content_x, cx);
+        let top_controls = self.top_controls(cx);
         div()
             .id("sidebar")
             .debug_selector(|| "sidebar".into())
@@ -738,99 +776,104 @@ impl HerdrWindow {
                     .debug_selector(|| "spaces-section".into())
                     .flex()
                     .flex_col()
-                    .flex_1()
-                    .map(|mut section| {
-                        section.style().flex_grow =
-                            Some(if self.config.show_agents { split } else { 1. });
-                        section
+                    .map(|section| {
+                        if sidebar_tabs || !spaces_open {
+                            section.flex_none()
+                        } else {
+                            section
+                                .flex_1()
+                                .map(|mut section| {
+                                    section.style().flex_grow = Some(above_grow);
+                                    section
+                                })
+                                .min_h_0()
+                        }
                     })
-                    .min_h_0()
                     .overflow_hidden()
-                    .child(header("spaces", font, theme, look))
-                    .child(spaces)
-                    .child(
-                        div()
-                            .flex_none()
-                            .h(px(line_height(font) + 2. * layout.footer_padding()))
-                            .px(px(content_x))
-                            .flex()
-                            .items_center()
-                            // Menu hugs the sidebar's edge, as in the terminal client.
-                            .justify_between()
-                            .text_color(rgb(theme.muted))
-                            .gap(px(20.))
-                            .child(
-                                div()
-                                    .id("new-workspace")
-                                    .cursor_pointer()
-                                    .hover(|s| s.text_color(rgb(theme.foreground)))
-                                    .child("new")
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.command(Command::Workspace, window, cx)
-                                    })),
-                            )
-                            .child(
-                                div()
-                                    .id("sidebar-menu")
-                                    .debug_selector(|| "sidebar-menu".into())
-                                    .cursor_pointer()
-                                    .hover(|s| s.text_color(rgb(theme.foreground)))
-                                    .child(label_text("menu"))
-                                    .on_click(cx.listener(
-                                        |this, event: &ClickEvent, window, cx| {
-                                            this.menu.anchor = event.position();
-                                            this.open_menu(window, cx);
-                                        },
-                                    )),
-                            ),
-                    ),
+                    .child(self.section_header(
+                        Section::Spaces,
+                        sidebar_tabs.then(|| top_controls.into_any_element()),
+                        font,
+                        theme,
+                        look,
+                        cx,
+                    ))
+                    .when(spaces_open, |section| section.child(spaces))
+                    .when(!sidebar_tabs, |section| section.child(footer)),
             )
-            .when(self.config.show_agents, |sidebar| {
+            .when(
+                sidebar_tabs && spaces_open && (tabs_open || agents_shown && agents_open),
+                |sidebar| {
+                    sidebar.child(self.section_handle(
+                        SidebarDrag::Spaces,
+                        "sidebar-spaces-resize",
+                        theme,
+                        cx,
+                    ))
+                },
+            )
+            .when(sidebar_tabs, |sidebar| {
+                sidebar.child(
+                    div()
+                        .debug_selector(|| "tabs-section".into())
+                        .flex()
+                        .flex_col()
+                        .map(|section| {
+                            if tabs_open {
+                                section
+                                    .flex_1()
+                                    .map(|mut section| {
+                                        section.style().flex_grow = Some(above_grow);
+                                        section
+                                    })
+                                    .min_h_0()
+                            } else {
+                                section.flex_none()
+                            }
+                        })
+                        .overflow_hidden()
+                        .child(self.section_header(Section::Tabs, None, font, theme, look, cx))
+                        .when(tabs_open, |section| section.child(tabs)),
+                )
+            })
+            .when(agents_shown, |sidebar| {
                 sidebar
-                    .child(
-                        div()
-                            .id("sidebar-split-resize")
-                            .debug_selector(|| "sidebar-split-resize".into())
-                            .h(px(6.))
-                            .flex_none()
-                            .cursor(CursorStyle::ResizeUpDown)
-                            .border_t_1()
-                            .border_color(rgb(theme.active))
-                            .hover(|s| s.bg(rgba(crate::panel_resize::RESIZE_HOVER)))
-                            .on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(|this, event: &MouseDownEvent, _, cx| {
-                                    cx.stop_propagation();
-                                    this.sidebar_split_modified = true;
-                                    if event.click_count == 2 {
-                                        this.sidebar_drag = None;
-                                        this.sidebar_split = None;
-                                        this.save_chrome();
-                                    } else {
-                                        this.sidebar_drag = Some(SidebarDrag::Split);
-                                    }
-                                    cx.notify();
-                                }),
-                            ),
-                    )
+                    .when(above_open && agents_open, |sidebar| {
+                        sidebar.child(self.section_handle(
+                            SidebarDrag::Split,
+                            "sidebar-split-resize",
+                            theme,
+                            cx,
+                        ))
+                    })
                     .child(
                         div()
                             .debug_selector(|| "agents-section".into())
                             .flex()
                             .flex_col()
-                            .flex_1()
-                            .map(|mut section| {
-                                section.style().flex_grow = Some(1. - split);
-                                section
+                            .map(|section| {
+                                if agents_open {
+                                    section
+                                        .flex_1()
+                                        .map(|mut section| {
+                                            section.style().flex_grow = Some(agents_grow);
+                                            section
+                                        })
+                                        .min_h_0()
+                                } else {
+                                    section.flex_none()
+                                }
                             })
-                            .min_h_0()
                             .overflow_hidden()
-                            .child(
-                                header("agents", font, theme, look)
-                                    .justify_between()
-                                    .child(agents_sort(self, cx)),
-                            )
-                            .child(agents),
+                            .child(self.section_header(
+                                Section::Agents,
+                                Some(agents_sort(self, cx).into_any_element()),
+                                font,
+                                theme,
+                                look,
+                                cx,
+                            ))
+                            .when(agents_open, |section| section.child(agents)),
                     )
             })
             .child(self.render_device_footer(cx))
@@ -900,19 +943,13 @@ impl HerdrWindow {
                                                     f32::from(window.viewport_size().width),
                                                 ));
                                             }
-                                            SidebarDrag::Split => {
-                                                let height = (f32::from(bounds.size.height)
-                                                    - 6.
-                                                    - DEVICE_FOOTER_HEIGHT)
-                                                    .max(1.);
-                                                this.sidebar_split = Some(
-                                                    ((f32::from(
-                                                        event.position.y - bounds.origin.y,
-                                                    ) - 3.)
-                                                        / height)
-                                                        .clamp(0.1, 0.9),
-                                                );
-                                            }
+                                            SidebarDrag::Split | SidebarDrag::Spaces => this
+                                                .drag_section(
+                                                    drag,
+                                                    f32::from(event.position.y),
+                                                    bounds,
+                                                    header_h,
+                                                ),
                                         }
                                         cx.stop_propagation();
                                         cx.notify();
@@ -942,26 +979,4 @@ impl HerdrWindow {
                 .size_full(),
             )
     }
-}
-
-pub(super) fn header(
-    label: &'static str,
-    font: &FontConfig,
-    theme: &Theme,
-    look: SidebarLook,
-) -> Div {
-    div()
-        .debug_selector(|| format!("header-{label}"))
-        .flex_none()
-        .h(px(line_height(font) + 2. * look.density.header_padding()))
-        .px(px(look.content_x()))
-        .flex()
-        .items_center()
-        .text_size(px(font.size))
-        .text_color(rgb(theme.muted))
-        .child(
-            div()
-                .debug_selector(|| format!("header-label-{label}"))
-                .child(label_text(&look.header_label(label))),
-        )
 }

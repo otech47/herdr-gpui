@@ -6,7 +6,7 @@ use super::{
         Indicators, agent_labels, agent_place, status_indicator, status_style, status_symbol,
     },
     layout_tests,
-    render::header,
+    sections::header,
     workspace_label,
     workspaces::workspace_entries,
 };

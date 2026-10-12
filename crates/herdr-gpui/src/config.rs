@@ -63,6 +63,13 @@ pub struct Config {
     pub confirm_close_tab: bool,
     pub confirm_close_pane: bool,
     pub show_agents: bool,
+    /// The tab strip above the terminal. Off, the sidebar is the only tab list.
+    pub show_tab_strip: bool,
+    /// The focused space's tabs listed in the sidebar under the spaces.
+    pub show_sidebar_tabs: bool,
+    /// A new space opens in a window of its own, and a space asked for from
+    /// outside opens a window when none shows it.
+    pub new_space_in_window: bool,
     /// CPU and memory of the selected host in the status bar.
     pub show_system_load: bool,
     /// Snapshot a checkout's files each time one of its agents starts or
@@ -273,6 +280,9 @@ impl Default for Config {
             confirm_close_tab: true,
             confirm_close_pane: true,
             show_agents: true,
+            show_tab_strip: true,
+            show_sidebar_tabs: false,
+            new_space_in_window: false,
             show_system_load: true,
             agent_checkpoints: true,
             show_listening_ports: true,
@@ -311,6 +321,9 @@ struct Settings {
     confirm_close_tab: Option<bool>,
     confirm_close_pane: Option<bool>,
     show_agents: Option<bool>,
+    show_tab_strip: Option<bool>,
+    show_sidebar_tabs: Option<bool>,
+    new_space_in_window: Option<bool>,
     show_system_load: Option<bool>,
     agent_checkpoints: Option<bool>,
     show_listening_ports: Option<bool>,
@@ -622,6 +635,9 @@ impl Config {
         config.confirm_close_tab = settings.confirm_close_tab.unwrap_or(true);
         config.confirm_close_pane = settings.confirm_close_pane.unwrap_or(true);
         config.show_agents = settings.show_agents.unwrap_or(true);
+        config.show_tab_strip = settings.show_tab_strip.unwrap_or(true);
+        config.show_sidebar_tabs = settings.show_sidebar_tabs.unwrap_or(false);
+        config.new_space_in_window = settings.new_space_in_window.unwrap_or(false);
         config.show_system_load = settings.show_system_load.unwrap_or(true);
         config.agent_checkpoints = settings.agent_checkpoints.unwrap_or(true);
         config.show_listening_ports = settings.show_listening_ports.unwrap_or(true);
