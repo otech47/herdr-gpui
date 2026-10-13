@@ -312,12 +312,17 @@ impl HerdrWindow {
                 &endpoint.collapsed_repos
             };
             let entries = visible_workspace_entries(&snapshot.workspaces, collapsed_repos);
-            let drag = self
-                .workspace_drag
-                .as_ref()
-                .filter(|drag| selected && drag.previewing(&snapshot.workspaces));
+            let drag = self.workspace_drag.as_ref().filter(|drag| {
+                selected
+                    && drag.previewing(
+                        snapshot
+                            .workspaces
+                            .iter()
+                            .map(|workspace| workspace.workspace_id.as_str()),
+                    )
+            });
             let floating = drag.is_some_and(|drag| drag.floating());
-            let plan = drag.and_then(|drag| Plan::new(&snapshot.workspaces, &drag.workspace));
+            let plan = drag.and_then(|drag| Plan::new(&snapshot.workspaces, &drag.key));
             // Each unit's shift for the drop in preview, from the heights the
             // last frame laid out: shifting moves rows, never resizes them.
             let base = space_rows;

@@ -3,7 +3,12 @@
 //! the others, and how the others slide aside to preview the drop. Positions
 //! are along one axis, so the same rules serve a column and a row.
 
-use std::time::{Duration, Instant};
+use gpui::{Pixels, Point, Task};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 /// How long a press rests before what it pressed lifts.
 pub(crate) const LIFT_DELAY: Duration = Duration::from_millis(250);
@@ -19,6 +24,113 @@ pub(crate) const SLIDE: Duration = if cfg!(test) {
 } else {
     Duration::from_millis(150)
 };
+
+/// A press on a sidebar row that may become a reorder: the row it holds,
+/// how far the pointer has carried it, and the gap `T` it is over.
+pub(crate) struct Drag<T> {
+    pub(crate) boot: String,
+    pub(crate) key: String,
+    origin: Point<Pixels>,
+    pointer: Point<Pixels>,
+    pub(crate) lifted: bool,
+    /// The gap under the pointer, `None` over the carried unit's own place.
+    pub(crate) target: Option<T>,
+    /// The order the list had when the drag was dropped with a move sent,
+    /// kept so the preview lasts exactly until the daemon's answer.
+    dropped: Option<Vec<String>>,
+    /// Each shifted row's slide, by key. Render reads and advances them, so
+    /// they live behind a cell; they end with the drag.
+    slides: RefCell<HashMap<String, Slide>>,
+    /// Lifts the row once the press has rested, then ends a dropped preview
+    /// the daemon never answered. Dropping the drag cancels it.
+    timer: Task<()>,
+}
+
+impl<T> Drag<T> {
+    pub(crate) fn new(boot: String, key: String, origin: Point<Pixels>, timer: Task<()>) -> Self {
+        Self {
+            boot,
+            key,
+            origin,
+            pointer: origin,
+            lifted: false,
+            target: None,
+            dropped: None,
+            slides: RefCell::default(),
+            timer,
+        }
+    }
+
+    /// How far the lifted row has followed the pointer.
+    pub(crate) fn offset(&self) -> Pixels {
+        self.pointer.y - self.origin.y
+    }
+
+    /// Where a row paints on its way to shift `to`, and whether it is still
+    /// moving. A row starts from its resting place.
+    pub(crate) fn slide(&self, key: &str, to: f32, now: Instant) -> (f32, bool) {
+        let mut slides = self.slides.borrow_mut();
+        let slide = slides.entry(key.to_owned()).or_insert(Slide {
+            from: 0.,
+            to: 0.,
+            start: now,
+        });
+        *slide = slide.toward(to, now, SLIDE);
+        (slide.at(now, SLIDE), slide.progress(now, SLIDE) < 1.)
+    }
+
+    /// Records a carried row at the pointer, so it slides from there once
+    /// dropped rather than from where it was picked up.
+    pub(crate) fn pin(&self, key: &str, at: f32, now: Instant) {
+        self.slides.borrow_mut().insert(
+            key.to_owned(),
+            Slide {
+                from: at,
+                to: at,
+                start: now,
+            },
+        );
+    }
+
+    /// Whether the lifted row still follows the pointer.
+    pub(crate) fn floating(&self) -> bool {
+        self.lifted && self.dropped.is_none()
+    }
+
+    pub(crate) fn is_dropped(&self) -> bool {
+        self.dropped.is_some()
+    }
+
+    /// Whether the list should show the drop in place: while it floats, and
+    /// after it is dropped until the daemon's order replaces the old one.
+    pub(crate) fn previewing<'a>(&self, order: impl IntoIterator<Item = &'a str>) -> bool {
+        self.lifted
+            && self
+                .dropped
+                .as_ref()
+                .is_none_or(|dropped| dropped.iter().map(String::as_str).eq(order))
+    }
+
+    /// Lifts the row. Returns whether it was resting.
+    pub(crate) fn lift(&mut self) -> bool {
+        !std::mem::replace(&mut self.lifted, true)
+    }
+
+    /// Follows the pointer, lifting the row once it has travelled far
+    /// enough. Returns whether the row was lifted by this move.
+    pub(crate) fn follow(&mut self, position: Point<Pixels>) -> bool {
+        self.pointer = position;
+        let moved = position - self.origin;
+        !self.lifted && f32::from(moved.x.abs().max(moved.y.abs())) > LIFT_DISTANCE && self.lift()
+    }
+
+    /// Keeps the preview after a move was sent, until the daemon's order
+    /// differs from `order` or `timer` ends it.
+    pub(crate) fn drop(&mut self, order: Vec<String>, timer: Task<()>) {
+        self.dropped = Some(order);
+        self.timer = timer;
+    }
+}
 
 /// Where a dropped item lands: beside another, since a drop past the last
 /// item shown still has to land after it rather than at the very end of a

@@ -12,85 +12,18 @@
 
 use crate::{
     HerdrWindow,
-    reorder::{LIFT_DELAY, LIFT_DISTANCE, SETTLE_TIMEOUT, SLIDE, Slide, slot_for},
+    reorder::{Drag, LIFT_DELAY, SETTLE_TIMEOUT, slot_for},
 };
-use gpui::{Context, Pixels, Point, Task};
+use gpui::{Context, Pixels, Point};
 use herdr_client::{Method, protocol::ClientShellWorkspace};
-use std::{cell::RefCell, collections::HashMap, time::Instant};
 
 use super::workspaces::{grouped_keys, workspace_entries};
 
 /// A press on a workspace row that may become a reorder.
-pub(crate) struct WorkspaceDrag {
-    boot: String,
-    pub(super) workspace: String,
-    origin: Point<Pixels>,
-    pub(super) pointer: Point<Pixels>,
-    pub(super) lifted: bool,
-    /// The gap under the pointer, `None` over the carried unit's own place.
-    pub(super) target: Option<Target>,
-    /// The order the list had when the drag was dropped with a move sent,
-    /// kept so the preview lasts exactly until the daemon's answer.
-    dropped: Option<Vec<String>>,
-    /// Each shifted row's slide, by workspace. Render reads and advances them,
-    /// so they live behind a cell; they end with the drag.
-    slides: RefCell<HashMap<String, Slide>>,
-    /// Lifts the row once the press has rested, then ends a dropped preview
-    /// the daemon never answered. Dropping the drag cancels it.
-    _timer: Task<()>,
-}
-
-impl WorkspaceDrag {
-    /// How far the lifted row has followed the pointer.
-    pub(super) fn offset(&self) -> Pixels {
-        self.pointer.y - self.origin.y
-    }
-
-    /// Where a row paints on its way to shift `to`, and whether it is still
-    /// moving. A row starts from its resting place.
-    pub(super) fn slide(&self, workspace: &str, to: f32, now: Instant) -> (f32, bool) {
-        let mut slides = self.slides.borrow_mut();
-        let slide = slides.entry(workspace.to_owned()).or_insert(Slide {
-            from: 0.,
-            to: 0.,
-            start: now,
-        });
-        *slide = slide.toward(to, now, SLIDE);
-        (slide.at(now, SLIDE), slide.progress(now, SLIDE) < 1.)
-    }
-
-    /// Records a carried row at the pointer, so it slides from there once
-    /// dropped rather than from where it was picked up.
-    pub(super) fn pin(&self, workspace: &str, at: f32, now: Instant) {
-        self.slides.borrow_mut().insert(
-            workspace.to_owned(),
-            Slide {
-                from: at,
-                to: at,
-                start: now,
-            },
-        );
-    }
-
-    /// Whether the lifted row still follows the pointer.
-    pub(super) fn floating(&self) -> bool {
-        self.lifted && self.dropped.is_none()
-    }
-
-    /// Whether the list should show the drop in place: while it floats, and
-    /// after it is dropped until the daemon's order replaces the old one.
-    pub(super) fn previewing(&self, workspaces: &[ClientShellWorkspace]) -> bool {
-        self.lifted
-            && self.dropped.as_ref().is_none_or(|order| {
-                order.iter().map(String::as_str).eq(workspaces
-                    .iter()
-                    .map(|workspace| workspace.workspace_id.as_str()))
-            })
-    }
-}
+pub(crate) type WorkspaceDrag = Drag<Target>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct Target {
+pub(crate) struct Target {
     pub(super) slot: usize,
     request: MoveBlock,
 }
@@ -257,24 +190,16 @@ impl HerdrWindow {
             cx.background_executor().timer(LIFT_DELAY).await;
             let _ = this.update(cx, |this, cx| this.lift_workspace(cx));
         });
-        self.workspace_drag = Some(WorkspaceDrag {
-            boot: snapshot.boot_id.clone(),
-            workspace: workspace.to_owned(),
-            origin: position,
-            pointer: position,
-            lifted: false,
-            target: None,
-            dropped: None,
-            slides: RefCell::default(),
-            _timer: lift,
-        });
+        self.workspace_drag = Some(Drag::new(
+            snapshot.boot_id.clone(),
+            workspace.to_owned(),
+            position,
+            lift,
+        ));
     }
 
     fn lift_workspace(&mut self, cx: &mut Context<Self>) {
-        if let Some(drag) = &mut self.workspace_drag
-            && !drag.lifted
-        {
-            drag.lifted = true;
+        if self.workspace_drag.as_mut().is_some_and(|drag| drag.lift()) {
             // The resting pointer is carrying a row, not asking for its menu.
             self.hover = None;
             cx.notify();
@@ -291,7 +216,11 @@ impl HerdrWindow {
         target: impl FnOnce(Pixels) -> Option<Target>,
         cx: &mut Context<Self>,
     ) -> bool {
-        let Some(drag) = self.workspace_drag.as_mut().filter(|d| d.dropped.is_none()) else {
+        let Some(drag) = self
+            .workspace_drag
+            .as_mut()
+            .filter(|drag| !drag.is_dropped())
+        else {
             return false;
         };
         // A release outside the window never reaches the sidebar.
@@ -301,9 +230,7 @@ impl HerdrWindow {
             cx.notify();
             return lifted;
         }
-        drag.pointer = position;
-        let moved = position - drag.origin;
-        if !drag.lifted && f32::from(moved.x.abs().max(moved.y.abs())) > LIFT_DISTANCE {
+        if drag.follow(position) {
             self.lift_workspace(cx);
         }
         let Some(drag) = self.workspace_drag.as_mut().filter(|drag| drag.lifted) else {
@@ -340,20 +267,19 @@ impl HerdrWindow {
             target.request.params(),
         ) {
             Ok(_) => {
-                drag.dropped = Some(
-                    snapshot
-                        .workspaces
-                        .iter()
-                        .map(|workspace| workspace.workspace_id.clone())
-                        .collect(),
-                );
-                drag._timer = cx.spawn(async move |this, cx| {
+                let order = snapshot
+                    .workspaces
+                    .iter()
+                    .map(|workspace| workspace.workspace_id.clone())
+                    .collect();
+                let settle = cx.spawn(async move |this, cx| {
                     cx.background_executor().timer(SETTLE_TIMEOUT).await;
                     let _ = this.update(cx, |this, cx| {
                         this.workspace_drag = None;
                         cx.notify();
                     });
                 });
+                drag.drop(order, settle);
                 self.workspace_drag = Some(drag);
             }
             Err(error) => self.local_error = Some(format!("Workspace move not sent: {error}")),
