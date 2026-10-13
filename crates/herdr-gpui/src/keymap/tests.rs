@@ -235,8 +235,8 @@ fn daemon_keystrokes_move_from_gui_defaults_but_not_from_gui_config() {
     assert!(list(&keymap, Command::SplitRight).is_empty());
     assert_eq!(list(&keymap, Command::Tab), ["cmd-t", "alt-1", "ctrl-a c"]);
     assert_eq!(list(&keymap, Command::TabNumber(1)), ["cmd-1"]);
-    assert_eq!(list(&keymap, Command::CloseTab), ["cmd-shift-w"]);
-    assert_eq!(list(&keymap, Command::ClosePane), ["cmd-w"]);
+    assert_eq!(list(&keymap, Command::CloseTab), ["cmd-w"]);
+    assert_eq!(list(&keymap, Command::ClosePane), ["cmd-shift-w"]);
     assert_eq!(list(&keymap, Command::About), ["cmd-e"]);
     assert_eq!(list(&keymap, Command::NextTab), ["cmd-shift-]"]);
     assert_eq!(list(&keymap, Command::PreviousTab), ["cmd-shift-["]);

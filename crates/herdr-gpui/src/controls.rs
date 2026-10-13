@@ -370,13 +370,13 @@ pub const COMMANDS: &[CommandInfo] = &[
         command: Command::ClosePane,
         name: "close_pane",
         label: "Close Pane",
-        shortcuts: &["cmd-w"],
+        shortcuts: &["cmd-shift-w"],
     },
     CommandInfo {
         command: Command::CloseTab,
         name: "close_tab",
         label: "Close Tab",
-        shortcuts: &["cmd-shift-w"],
+        shortcuts: &["cmd-w"],
     },
     CommandInfo {
         command: Command::TabNumber(1),
