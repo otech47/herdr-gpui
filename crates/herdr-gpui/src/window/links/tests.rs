@@ -7,6 +7,8 @@ use herdr_client::protocol::{
 };
 use serde_json::json;
 
+mod busy_pane;
+
 const URL: &str = "https://example.com/wrapped/path";
 
 fn snapshot() -> ClientShellSnapshot {

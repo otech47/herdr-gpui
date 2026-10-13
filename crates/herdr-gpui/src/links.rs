@@ -180,6 +180,12 @@ impl LinkCell {
         })
     }
 
+    /// Whether both cells are in the same pane, whatever it has printed
+    /// between them.
+    pub(crate) fn same_pane(&self, other: &Self) -> bool {
+        self.boot == other.boot && self.pane_id == other.pane_id
+    }
+
     /// Whether both cells read the same pane content, wherever in it they are.
     pub(crate) fn same_content(&self, other: &Self) -> bool {
         self.boot == other.boot

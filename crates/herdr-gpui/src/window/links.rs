@@ -88,13 +88,16 @@ pub(crate) struct PressedLink {
 }
 
 impl PressedLink {
-    /// Whether a release reads the same link as this press did.
+    /// Whether a release reads the same link as this press did. A pane prints
+    /// on through a click, so the cells need only share a pane. A cell missing
+    /// at one end is a write in progress; the address read locally decides.
     fn same_link(&self, release: &Self) -> bool {
         self.url == release.url
             && self.file == release.file
             && match (&self.cell, &release.cell) {
-                (Some(pressed), Some(released)) => pressed.same_content(released),
-                (pressed, released) => pressed.is_none() && released.is_none(),
+                (Some(pressed), Some(released)) => pressed.same_pane(released),
+                (None, None) => true,
+                _ => self.url.is_some(),
             }
     }
 }
@@ -325,8 +328,17 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        let Some(release) = self.terminal_link_press(release, modifiers) else {
-            return false;
+        let release = match self.terminal_link_press(release, modifiers) {
+            Some(release) => release,
+            // Output since the press hides the daemon's reading of the link;
+            // the daemon reads the released cell again.
+            None if pressed.url.is_none() && pressed.cell.is_some() => PressedLink {
+                url: None,
+                cell: self.link_cell_at(release),
+                file: None,
+                position: release,
+            },
+            None => return false,
         };
         if !pressed.same_link(&release) {
             return false;
