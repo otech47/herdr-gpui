@@ -41,7 +41,8 @@ show_agents = true
 show_tab_strip = true
 # List the focused space's tabs in the sidebar, under the spaces. Each row is
 # named after its agent's terminal title, else the agent, else the shell's
-# directory. Click to focus, right-click for the tab menu.
+# directory. Click to focus, right-click for the tab menu, and the x at the
+# end of the row closes the tab.
 show_sidebar_tabs = false
 # Open each new space in a window of its own, and open a window for a space
 # that `herdr-gpui workspace focus` asks for when no window shows it.

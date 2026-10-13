@@ -1895,10 +1895,10 @@ Windows setup) nothing is saved and the window says so.
   Terminal menu, and palette) asks Herdr to open the pane's history in the
   configured editor, through `pane.edit_scrollback`. It is offered only by
   daemons that advertise the method.
-- Cmd-W closes the focused tab, as its menu's Close does, and Cmd-Shift-W
-  closes the focused pane. A tab asks first only while an agent in it is
-  working or blocked, and never with `confirm_close_tab = false`; a pane asks
-  unless `confirm_close_pane = false`.
+- Cmd-W closes the focused tab, as the x on its sidebar row and its menu's
+  Close do, and Cmd-Shift-W closes the focused pane. A tab asks first only
+  while an agent in it is working or blocked, and never with
+  `confirm_close_tab = false`; a pane asks unless `confirm_close_pane = false`.
   **Cancel is selected by default**: Enter alone cancels;
   Tab then Enter selects and confirms Close. In the pane dialog, Space toggles
   **Do not ask again**. Closing can terminate running

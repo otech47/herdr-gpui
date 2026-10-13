@@ -24,6 +24,7 @@ use herdr_client::protocol::{AgentStatus, ClientShellWorkspace};
 use std::borrow::Cow;
 
 /// Read-only inputs every row of one render shares.
+#[derive(Clone, Copy)]
 pub(super) struct RowContext<'a> {
     pub(super) indicators: super::agents::Indicators,
     pub(super) font: &'a FontConfig,

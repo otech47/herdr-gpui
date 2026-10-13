@@ -1,11 +1,13 @@
 //! The shown space's tabs as sidebar rows, one line each: its state, the
-//! number cmd-1 to cmd-9 count it by, then its title.
+//! number cmd-1 to cmd-9 count it by, then its title, with a close button at
+//! the end.
 
 use super::{
     agent_name,
     cell::{AgentRow, Cell, RowContext, RowData, RowLayout},
     label_text,
     tokens::{ResolvedToken, TextRole, TokenKind},
+    trailing::Trailing,
 };
 use crate::{HerdrWindow, NavigationTarget, config::TokenStyle};
 use gpui::{prelude::*, *};
@@ -37,6 +39,8 @@ impl HerdrWindow {
                     .into_any_element(),
             ];
         }
+        let trailing = Trailing::new(row_cx);
+        let tab_cx = trailing.context(row_cx);
         listed
             .iter()
             .enumerate()
@@ -47,6 +51,7 @@ impl HerdrWindow {
                     .find(|agent| agent.tab_id == tab.tab_id);
                 let id = tab.tab_id.clone();
                 let context_id = id.clone();
+                let close_id = id.clone();
                 let navigate_endpoint = endpoint_id.to_owned();
                 Cell::new(
                     rows,
@@ -64,10 +69,11 @@ impl HerdrWindow {
                         status_text: None,
                         lines: tab_lines(name, position + 1),
                     }),
-                    row_cx,
+                    &tab_cx,
                 )
                 .selected(tab.focused)
                 .row()
+                .child(trailing.place(self.tab_close_button(&close_id, cx)))
                 .id(SharedString::from(format!("tab-{endpoint_id}-{id}")))
                 .on_mouse_down(
                     MouseButton::Right,
@@ -85,6 +91,33 @@ impl HerdrWindow {
                 .into_any_element()
             })
             .collect()
+    }
+
+    /// The x at the end of a tab's row. It closes the tab the way the row's
+    /// menu does, and a press on it stays here rather than focusing the tab.
+    fn tab_close_button(&self, id: &str, cx: &mut Context<Self>) -> Stateful<Div> {
+        let (muted, foreground) = (self.theme.muted, self.theme.foreground);
+        let selector = format!("tab-close-{id}");
+        let close_id = id.to_owned();
+        div()
+            .id(SharedString::from(selector.clone()))
+            .debug_selector(move || selector.clone())
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(crate::config::corners::SMALL))
+            .hover(move |button| button.bg(rgba((foreground << 8) | 0x24)))
+            .child(
+                svg()
+                    .path("icons/close.svg")
+                    .size(px(10.))
+                    .text_color(rgb(muted)),
+            )
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_click(cx.listener(move |this, _, window, cx| {
+                cx.stop_propagation();
+                this.open_tab_close(&close_id, window, cx);
+            }))
     }
 }
 

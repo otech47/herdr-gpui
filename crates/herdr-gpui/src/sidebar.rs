@@ -16,6 +16,7 @@ mod row;
 mod sections;
 mod tabs;
 mod tokens;
+mod trailing;
 mod view;
 mod workspaces;
 

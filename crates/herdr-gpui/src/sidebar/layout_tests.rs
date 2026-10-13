@@ -45,6 +45,8 @@ mod selection_scroll;
 #[cfg(test)]
 mod sidebar_cache;
 #[cfg(test)]
+mod sidebar_tabs;
+#[cfg(test)]
 mod split_pane;
 #[cfg(test)]
 mod status_bar;
