@@ -20,6 +20,10 @@ pub(super) trait SidebarDensity {
     fn pr_counts(&self) -> bool {
         self.workspace_details()
     }
+    /// A one-line repository row names its branch after its label, muted.
+    fn inline_branch(&self) -> bool {
+        false
+    }
     fn header_padding(&self) -> f32;
     fn host_padding(&self) -> f32;
     fn footer_padding(&self) -> f32;
@@ -121,6 +125,47 @@ impl SidebarDensity for Compact {
     }
     fn footer_padding(&self) -> f32 {
         2.
+    }
+}
+
+/// One line per row, the branch on it, no row padding. Horizontal metrics
+/// stay the base density's, so the labels line up with the tab rows under
+/// the spaces.
+pub(super) struct Tight(Density);
+
+impl Tight {
+    fn base(&self) -> &'static dyn SidebarDensity {
+        density(self.0)
+    }
+}
+
+impl SidebarDensity for Tight {
+    fn padding(&self) -> f32 {
+        self.base().padding()
+    }
+    fn gap(&self) -> f32 {
+        self.base().gap()
+    }
+    fn row_padding(&self) -> f32 {
+        0.
+    }
+    fn child_indent(&self) -> f32 {
+        self.base().child_indent()
+    }
+    fn workspace_details(&self) -> bool {
+        false
+    }
+    fn inline_branch(&self) -> bool {
+        true
+    }
+    fn header_padding(&self) -> f32 {
+        self.base().header_padding()
+    }
+    fn host_padding(&self) -> f32 {
+        self.base().host_padding()
+    }
+    fn footer_padding(&self) -> f32 {
+        self.base().footer_padding()
     }
 }
 
@@ -377,16 +422,37 @@ const LIFT_INSET: f32 = 6.;
 /// The least rounding a lifted card gets, even from square rows.
 const LIFT_RADIUS: f32 = 4.;
 
+fn density(density: Density) -> &'static dyn SidebarDensity {
+    match density {
+        Density::Normal => &Normal,
+        Density::Compact => &Compact,
+        Density::Comfortable => &Comfortable,
+    }
+}
+
+fn style(style: Style) -> &'static dyn SidebarStyle {
+    match style {
+        Style::Flat => &Flat,
+        Style::Rounded => &Rounded,
+    }
+}
+
 pub(super) fn for_mode(mode: LayoutMode) -> SidebarLook {
     SidebarLook {
+        density: density(mode.density()),
+        style: style(mode.style()),
+    }
+}
+
+/// The spaces list's look while the tabs list sits under it: the mode's
+/// style and horizontal metrics around one-line rows.
+pub(super) fn for_spaces(mode: LayoutMode) -> SidebarLook {
+    SidebarLook {
         density: match mode.density() {
-            Density::Normal => &Normal,
-            Density::Compact => &Compact,
-            Density::Comfortable => &Comfortable,
+            Density::Normal => &Tight(Density::Normal),
+            Density::Compact => &Tight(Density::Compact),
+            Density::Comfortable => &Tight(Density::Comfortable),
         },
-        style: match mode.style() {
-            Style::Flat => &Flat,
-            Style::Rounded => &Rounded,
-        },
+        style: style(mode.style()),
     }
 }

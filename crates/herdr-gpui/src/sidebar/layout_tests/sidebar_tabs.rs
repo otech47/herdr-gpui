@@ -1,5 +1,5 @@
-//! The sidebar with the shown space's tabs listed under the spaces: every
-//! tab row carries its own close.
+//! The sidebar with the shown space's tabs listed under the spaces: the
+//! spaces shrink to one line each, and every tab row carries its own close.
 
 use super::*;
 use crate::config::{Density, LayoutMode, Style};
@@ -17,6 +17,7 @@ fn tabs_fixture(
         };
         let snapshot = Arc::make_mut(view.live.snapshot.as_mut().unwrap());
         snapshot.focused_workspace_id = Some("w0".into());
+        snapshot.workspaces[0].git_ahead_behind = Some((0, 18));
         view
     });
     cx.simulate_resize(size(px(800.), px(600.)));
@@ -28,6 +29,49 @@ fn draw(cx: &mut gpui::VisualTestContext) {
         cx.default_global::<TextProbes>().0.clear();
         full_draw(window, cx).clear(cx);
     });
+}
+
+#[gpui::test]
+fn spaces_take_one_line_each_under_a_tabs_list(cx: &mut gpui::TestAppContext) {
+    let (view, cx) = tabs_fixture(cx);
+    draw(cx);
+    let line = view.read_with(cx, |view, _| view.config.sidebar.size * 4. / 3.);
+    // Comfortable rounded rows: a trim of 3 inside the highlight and twice
+    // that between rows. The spaces drop the density's own 4 and their
+    // branch line; the tab rows under them keep both.
+    let (trim, comfortable) = (3., 4.);
+    let row = cx.debug_bounds("row-herdr").unwrap();
+    assert_eq!(row.size.height, px(line + 2. * trim + 2. * trim));
+    assert!(cx.debug_bounds("detail-herdr").is_none());
+    let tab = cx.debug_bounds("row-tab-t0").unwrap();
+    assert_eq!(
+        tab.size.height,
+        px(line + 2. * (comfortable + trim) + 2. * trim)
+    );
+    assert_eq!(tab.left(), row.left());
+    assert_eq!(tab.right(), row.right());
+    cx.update(|_, cx| {
+        let probes = &cx.global::<TextProbes>().0;
+        assert!(probes.contains_key("main"));
+        assert!(probes.contains_key("\u{2193}18"));
+    });
+    let name = cx.debug_bounds("name-herdr").unwrap();
+    let upstream = cx.debug_bounds("upstream-herdr").unwrap();
+    assert_eq!(name.size.height, px(line));
+    assert_eq!(upstream.top(), name.top());
+    assert!(upstream.left() >= name.right());
+
+    view.update(cx, |view, cx| {
+        view.config.show_sidebar_tabs = false;
+        cx.notify();
+    });
+    draw(cx);
+    let row = cx.debug_bounds("row-herdr").unwrap();
+    assert_eq!(
+        row.size.height,
+        px(2. * line + 2. * (comfortable + trim) + 2. * trim)
+    );
+    assert!(cx.debug_bounds("detail-herdr").is_some());
 }
 
 #[gpui::test]

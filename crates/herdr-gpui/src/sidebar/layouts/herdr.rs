@@ -23,6 +23,11 @@ impl RowLayout for Herdr {
             row.lines.len().max(badge_lines).max(1)
         };
         let (branch, status, upstream) = (row.branch().unwrap_or(""), row.status(), row.upstream());
+        // A child row is already named by its branch.
+        let inline_branch = density.inline_branch()
+            && row.tree == RowTree::None
+            && !branch.is_empty()
+            && branch != row.label;
         let WorkspaceRow {
             label,
             tree,
@@ -40,9 +45,14 @@ impl RowLayout for Herdr {
                 .h(px(line_height(cx.font) * text_lines as f32))
                 .text_size(px(16.))
         });
+        let segments = [(label, true), (branch, false)];
         super::super::row::row(
             label,
-            &[(label, true)],
+            if inline_branch {
+                &segments
+            } else {
+                &segments[..1]
+            },
             branch,
             RowKind::Workspace,
             status,

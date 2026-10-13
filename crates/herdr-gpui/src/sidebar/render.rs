@@ -47,6 +47,12 @@ impl HerdrWindow {
             && self.config.sidebar_layout.spaces != crate::config::SpaceLayout::default();
         let theme = &self.theme;
         let sidebar_tabs = self.config.show_sidebar_tabs;
+        // Under a tabs list the spaces are an index: one line each.
+        let spaces_look = if sidebar_tabs {
+            layout::for_spaces(self.config.layout.mode)
+        } else {
+            look
+        };
         let agents_shown = self.config.show_agents;
         let spaces_open = self.section_open(Section::Spaces);
         let tabs_open = self.section_open(Section::Tabs);
@@ -291,6 +297,10 @@ impl HerdrWindow {
                 host: (multi && endpoint_id != crate::endpoint::LOCAL)
                     .then_some(endpoint.label.as_str()),
             };
+            let spaces_cx = RowContext {
+                look: spaces_look,
+                ..row_cx
+            };
             let daemon = crate::listening_ports::Daemon::from(&endpoint.connection.target);
             let live = if selected { &self.live } else { &endpoint.live };
             let Some(snapshot) = &live.snapshot else {
@@ -451,10 +461,10 @@ impl HerdrWindow {
                 let listed = (self.config.show_listening_ports && !removing_row)
                     .then(|| self.listening_ports.get(&daemon, &workspace.workspace_id))
                     .flatten();
-                let trailing = listed.map(|_| Trailing::new(&row_cx));
+                let trailing = listed.map(|_| Trailing::new(&spaces_cx));
                 let workspace_cx = trailing
                     .as_ref()
-                    .map_or(row_cx, |trailing| trailing.context(&row_cx));
+                    .map_or(spaces_cx, |trailing| trailing.context(&spaces_cx));
                 let globe = trailing.as_ref().zip(listed).map(|(trailing, listed)| {
                     let id = (endpoint_id.as_str(), workspace.workspace_id.as_str());
                     self.ports_globe(trailing, id, listed, cx)
