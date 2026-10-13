@@ -552,6 +552,9 @@ impl HerdrWindow {
                 command,
             })
         })();
+        if result.is_ok() {
+            self.kept_space.asked();
+        }
         let Some(form) = &mut self.menu.device_setup else {
             return;
         };

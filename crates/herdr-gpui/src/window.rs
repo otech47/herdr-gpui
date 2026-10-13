@@ -17,6 +17,7 @@ pub(crate) use flash::Flash;
 mod image_source;
 mod images;
 mod input;
+mod kept_space;
 mod lifecycle;
 mod links;
 pub(crate) use links::PressedLink;
@@ -107,6 +108,7 @@ pub(crate) struct HerdrWindow {
     pub(crate) sessions_anchor: std::rc::Rc<std::cell::Cell<Point<Pixels>>>,
     pub(crate) activation_deadline: Option<std::time::Instant>,
     pub(crate) pending_navigation: Option<OwnedNavigationTarget>,
+    pub(crate) kept_space: kept_space::KeptSpace,
     pub(crate) pending_toast: Option<u64>,
     /// Applied once the daemon answers, then cleared.
     pub(crate) startup: Option<Startup>,
@@ -382,6 +384,7 @@ impl HerdrWindow {
         };
         let old_tab = focused_tab(&self.live);
         self.poll_endpoints(cx);
+        self.keep_space();
         self.settle_startup(window, cx);
         self.post_system_notifications(window, cx);
         self.ring_bell(window);
@@ -711,6 +714,7 @@ impl HerdrWindow {
             selection_epoch: 0,
             activation_deadline: None,
             pending_navigation: None,
+            kept_space: Default::default(),
             startup: None,
             pending_toast: None,
             toasts_hidden: false,

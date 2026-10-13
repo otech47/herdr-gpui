@@ -467,6 +467,7 @@ pub(crate) fn fixture_window(window: &mut Window, cx: &mut Context<HerdrWindow>)
         sessions_anchor: Default::default(),
         activation_deadline: None,
         pending_navigation: None,
+        kept_space: Default::default(),
         pending_toast: None,
         startup: None,
         toasts_hidden: false,
