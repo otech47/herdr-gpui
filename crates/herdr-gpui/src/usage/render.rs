@@ -42,9 +42,7 @@ impl HerdrWindow {
             .id("usage")
             .debug_selector(|| "usage".into())
             .flex()
-            .flex_shrink_1()
-            .min_w_0()
-            .overflow_hidden()
+            .flex_none()
             .items_center()
             .gap(px(4.));
         for reading in &shown {
@@ -76,12 +74,12 @@ impl HerdrWindow {
             .path("icons/refresh.svg")
             .size(px(11.))
             .text_color(rgb(theme.muted));
-        // The segments clip when crowded; refresh stays in reach beside them.
+        // Never clipped: the bar's message gives way first, then what
+        // follows it.
         Some(
             div()
                 .flex()
-                .flex_shrink_1()
-                .min_w_0()
+                .flex_none()
                 .items_center()
                 .gap(px(4.))
                 .child(row)
@@ -137,8 +135,6 @@ impl HerdrWindow {
             .debug_selector(move || format!("usage-{key}"))
             .relative()
             .flex()
-            // Whole segments: a crowded bar clips the last ones rather than
-            // truncating every label mid-word.
             .flex_none()
             .items_center()
             .gap(px(6.))

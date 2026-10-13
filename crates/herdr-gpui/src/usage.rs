@@ -193,6 +193,30 @@ impl Usage {
         self.entries.get(self.host.as_ref()?)
     }
 
+    /// Shows `providers`, by id, each with a session and a weekly window
+    /// that full, for `host`, as if a read had answered, with no worker.
+    #[cfg(test)]
+    pub(crate) fn seed(&mut self, host: Host, providers: &[(&str, f64)]) {
+        use model::{Account, Kind, Window};
+        self.host = Some(host.clone());
+        self.entries.entry(host).or_default().readings = providers
+            .iter()
+            .filter_map(|&(id, used)| {
+                let provider = registry::find(id)?;
+                let windows = vec![
+                    Window::new(Kind::Session, used, None, None),
+                    Window::new(Kind::Weekly, used, None, None),
+                ];
+                Some(Reading {
+                    provider,
+                    report: Some(Report::new(provider, Account::default(), windows)),
+                    error: None,
+                    access: None,
+                })
+            })
+            .collect();
+    }
+
     /// Whether the tracked host is being read right now.
     pub fn busy(&self) -> bool {
         self.host.is_some() && self.busy == self.host

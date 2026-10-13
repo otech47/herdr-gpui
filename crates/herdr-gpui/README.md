@@ -507,9 +507,9 @@ systems, and remote hosts from a Windows client, show it as unavailable. Set top
 or turn off **Show CPU and memory** in Settings, to hide it and stop sampling.
 
 Workspaces that run a server show the TCP ports it listens on: a globe at the
-end of the workspace's sidebar row that opens a small menu of them while the
-pointer rests on it, and `:3000` chips in the status bar for the focused
-workspace. Choosing a port opens the page in a browser tab of that workspace
+end of the workspace's sidebar row, and one in the status bar for the focused
+workspace, each opening a small menu of them while the pointer rests on it.
+Choosing a port opens the page in a browser tab of that workspace
 (`http://localhost:<port>` on this machine). A port belongs to
 a workspace when its process inherited the `HERDR_WORKSPACE_ID` Herdr sets in
 every pane, so system services and servers started outside Herdr never show,

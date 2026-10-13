@@ -1,6 +1,7 @@
-//! A workspace's listening ports behind a globe at its row's trailing edge.
-//! Resting on the globe opens a menu of the ports over it; leaving both
-//! closes it again, so the row itself stays one line.
+//! A workspace's listening ports behind a globe: at its row's trailing edge,
+//! and in the status bar for the focused workspace. Resting on the globe
+//! opens a menu of the ports; leaving both closes it again, so the row and
+//! the bar stay one line each.
 
 use super::trailing::Trailing;
 use crate::{HerdrWindow, fonts::StyledFont, listening_ports::Listed};
@@ -26,10 +27,20 @@ enum Phase {
     Dismissed(Point<Pixels>),
 }
 
+/// Where a globe sits, which decides which way its menu opens.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Site {
+    /// The workspace's sidebar row: the menu hangs down over the globe.
+    Row,
+    /// The status bar: the menu stands on the globe's top edge.
+    Bar,
+}
+
 /// The ports menu a globe is opening or has open. The globe's and the menu's
 /// hovers only report here; the frame poll decides, so their order within
 /// one event does not matter.
 pub(crate) struct PortsMenu {
+    site: Site,
     endpoint: String,
     workspace: String,
     over_globe: bool,
@@ -38,8 +49,8 @@ pub(crate) struct PortsMenu {
 }
 
 impl PortsMenu {
-    fn is_for(&self, endpoint: &str, workspace: &str) -> bool {
-        self.endpoint == endpoint && self.workspace == workspace
+    fn is_for(&self, site: Site, endpoint: &str, workspace: &str) -> bool {
+        self.site == site && self.endpoint == endpoint && self.workspace == workspace
     }
 
     fn shown(&self) -> bool {
@@ -54,55 +65,83 @@ impl HerdrWindow {
     pub(super) fn ports_globe(
         &self,
         trailing: &Trailing,
+        place: (&str, &str),
+        listed: Listed<'_>,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        let glyph = (trailing.size * 0.7).round();
+        trailing.place(self.globe(Site::Row, place, listed, glyph, cx))
+    }
+
+    /// The status bar's globe for the focused workspace, its menu standing
+    /// on it while open.
+    pub(crate) fn ports_bar_globe(
+        &self,
+        place: (&str, &str),
+        listed: Listed<'_>,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        self.globe(Site::Bar, place, listed, 14., cx)
+            .size(px(18.))
+            .cursor_pointer()
+    }
+
+    fn globe(
+        &self,
+        site: Site,
         (endpoint, workspace): (&str, &str),
         listed: Listed<'_>,
+        glyph: f32,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
         let theme = &self.theme;
         let open = self
             .ports_menu
             .as_ref()
-            .is_some_and(|menu| menu.is_for(endpoint, workspace) && menu.shown());
+            .is_some_and(|menu| menu.is_for(site, endpoint, workspace) && menu.shown());
         let (foreground, muted) = (theme.foreground, theme.muted);
         let wash = rgba((foreground << 8) | 0x24);
-        let id = format!("ports-{endpoint}-{workspace}");
+        let id = match site {
+            Site::Row => format!("ports-{endpoint}-{workspace}"),
+            Site::Bar => format!("ports-bar-{endpoint}-{workspace}"),
+        };
         let selector = id.clone();
         let hover = (endpoint.to_owned(), workspace.to_owned());
         let click = hover.clone();
-        let menu = open.then(|| self.ports_menu_panel((endpoint, workspace), listed, cx));
-        trailing.place(
-            div()
-                .id(SharedString::from(id))
-                .debug_selector(move || selector.clone())
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(px(crate::config::corners::SMALL))
-                .when(open, |globe| globe.bg(wash))
-                .hover(move |globe| globe.bg(wash))
-                .child(
-                    svg()
-                        .path("icons/globe.svg")
-                        .size(px((trailing.size * 0.7).round()))
-                        .text_color(rgb(if open { foreground } else { muted })),
-                )
-                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
-                    this.hover_ports_globe(&hover.0, &hover.1, *hovered, cx);
-                }))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    this.open_ports_menu(&click.0, &click.1, true, cx);
-                }))
-                .children(menu),
-        )
+        let menu = open.then(|| self.ports_menu_panel(site, (endpoint, workspace), listed, cx));
+        div()
+            .id(SharedString::from(id))
+            .debug_selector(move || selector.clone())
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(px(crate::config::corners::SMALL))
+            .when(open, |globe| globe.bg(wash))
+            .hover(move |globe| globe.bg(wash))
+            .child(
+                svg()
+                    .path("icons/globe.svg")
+                    .size(px(glyph))
+                    .text_color(rgb(if open { foreground } else { muted })),
+            )
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                this.hover_ports_globe(site, &hover.0, &hover.1, *hovered, cx);
+            }))
+            .on_click(cx.listener(move |this, _, _, cx| {
+                cx.stop_propagation();
+                this.open_ports_menu(site, &click.0, &click.1, true, cx);
+            }))
+            .children(menu)
     }
 
-    /// The menu with its top right corner on the globe's, so the pointer that
-    /// opened it starts inside. It occludes what it covers: the rows under it
-    /// neither hover nor take a press meant for a line.
+    /// The menu on the globe's top right corner, hanging over a row so the
+    /// pointer that opened it starts inside, or standing on the status bar.
+    /// It occludes what it covers: the rows under it neither hover nor take
+    /// a press meant for a line.
     fn ports_menu_panel(
         &self,
+        site: Site,
         (endpoint, workspace): (&str, &str),
         listed: Listed<'_>,
         cx: &mut Context<Self>,
@@ -121,6 +160,10 @@ impl HerdrWindow {
                     cx.notify();
                 }
             }));
+        let anchor = match site {
+            Site::Row => Anchor::TopRight,
+            Site::Bar => Anchor::BottomRight,
+        };
         // The anchor point needs these insets: a flex child without them is
         // centered on the globe.
         div()
@@ -131,7 +174,7 @@ impl HerdrWindow {
             .child(
                 deferred(
                     anchored()
-                        .anchor(Anchor::TopRight)
+                        .anchor(anchor)
                         .snap_to_window_with_margin(Edges::all(px(12.)))
                         .child(panel),
                 )
@@ -142,6 +185,7 @@ impl HerdrWindow {
 
     fn hover_ports_globe(
         &mut self,
+        site: Site,
         endpoint: &str,
         workspace: &str,
         hovered: bool,
@@ -150,13 +194,13 @@ impl HerdrWindow {
         if hovered {
             // Resting on the globe is not resting on the row.
             self.hover = None;
-            self.open_ports_menu(endpoint, workspace, false, cx);
+            self.open_ports_menu(site, endpoint, workspace, false, cx);
             return;
         }
         let Some(menu) = &mut self.ports_menu else {
             return;
         };
-        if !menu.is_for(endpoint, workspace) {
+        if !menu.is_for(site, endpoint, workspace) {
             return;
         }
         menu.over_globe = false;
@@ -165,16 +209,18 @@ impl HerdrWindow {
         }
     }
 
-    /// Arms the menu for a row from a hover, or shows it at once for a click.
+    /// Arms the menu for a globe from a hover, or shows it at once for a
+    /// click.
     fn open_ports_menu(
         &mut self,
+        site: Site,
         endpoint: &str,
         workspace: &str,
         at_once: bool,
         cx: &mut Context<Self>,
     ) {
         if let Some(menu) = &mut self.ports_menu
-            && menu.is_for(endpoint, workspace)
+            && menu.is_for(site, endpoint, workspace)
         {
             menu.over_globe = true;
             if at_once && !menu.shown() {
@@ -184,6 +230,7 @@ impl HerdrWindow {
             return;
         }
         self.ports_menu = Some(PortsMenu {
+            site,
             endpoint: endpoint.to_owned(),
             workspace: workspace.to_owned(),
             over_globe: true,

@@ -1,5 +1,6 @@
-//! Drawing a workspace's listening ports: a globe and `:3000 :5173` after
-//! it, each number opening its page in a browser tab of that workspace.
+//! Drawing a workspace's listening ports: the status bar's globe for the
+//! focused workspace, and the menu a globe opens, one line per port, each
+//! opening its page in a browser tab of that workspace.
 
 use super::{
     Link, Port,
@@ -35,70 +36,13 @@ impl HerdrWindow {
                 .id("listening-ports")
                 .debug_selector(|| "listening-ports".into())
                 .flex_none()
+                .flex()
+                .items_center()
                 .h_full()
-                .px(px(6.))
-                .child(chips(
-                    listed,
-                    (&endpoint.id, workspace),
-                    &self.theme,
-                    14.,
-                    cx,
-                )),
+                .px(px(2.))
+                .child(self.ports_bar_globe((&endpoint.id, workspace), listed, cx)),
         )
     }
-}
-
-/// A globe and one clickable number per port. `place` is the endpoint and
-/// workspace whose browser tab a click opens.
-fn chips(
-    listed: super::Listed<'_>,
-    (endpoint, workspace): (&str, &str),
-    theme: &Theme,
-    glyph: f32,
-    cx: &mut Context<HerdrWindow>,
-) -> Div {
-    let (muted, foreground, surface) = (theme.muted, theme.foreground, theme.surface);
-    div()
-        .flex()
-        .items_center()
-        .gap(px(GAP))
-        .overflow_hidden()
-        .child(
-            svg()
-                .path("icons/globe.svg")
-                .size(px(glyph))
-                .flex_none()
-                .text_color(rgb(muted)),
-        )
-        .children(listed.ports.iter().map(|port| {
-            let link = port.link(listed.origin);
-            let hint = SharedString::from(hint(port, link.as_ref()));
-            let id = SharedString::from(format!("port-{endpoint}-{workspace}-{}", port.number));
-            let chip = div()
-                .id(id.clone())
-                .debug_selector(|| id.to_string())
-                .flex_none()
-                .text_color(rgb(muted))
-                .child(format!(":{}", port.number))
-                .tooltip(move |_, cx| {
-                    cx.new(|_| crate::usage::Hint {
-                        text: hint.clone(),
-                        foreground,
-                        surface,
-                    })
-                    .into()
-                });
-            let Some(link) = link else {
-                return chip;
-            };
-            let (endpoint, workspace) = (endpoint.to_owned(), workspace.to_owned());
-            chip.cursor_pointer()
-                .hover(|style| style.text_color(rgb(foreground)).underline())
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    cx.stop_propagation();
-                    this.open_port_link(&endpoint, &workspace, &link, window, cx);
-                }))
-        }))
 }
 
 /// The ports as a menu, one line each: the number, then the process that

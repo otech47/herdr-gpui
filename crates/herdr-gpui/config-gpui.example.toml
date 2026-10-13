@@ -60,10 +60,10 @@ show_system_load = true
 # Settings > General.
 agent_checkpoints = true
 # Show the TCP ports each workspace's servers listen on, behind a globe at the
-# end of its sidebar row and in the status bar; click one to open it in a
-# browser tab. Hosts are
-# scanned every five seconds with ss or lsof, a remote one over SSH; false
-# stops all scanning. Also under Settings > General.
+# end of its sidebar row and one in the status bar for the focused workspace.
+# Rest on a globe for the list; click a port to open it in a browser tab.
+# Hosts are scanned every five seconds with ss or lsof, a remote one over
+# SSH; false stops all scanning. Also under Settings > General.
 show_listening_ports = true
 # macOS only: whether Option-letter reaches a pane as an Alt shortcut (Alt-P
 # for Option-P) or types the character the keyboard layout puts there. "auto"
