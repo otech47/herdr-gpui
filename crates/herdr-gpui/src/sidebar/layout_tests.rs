@@ -50,6 +50,7 @@ mod sidebar_tabs;
 mod split_pane;
 #[cfg(test)]
 mod status_bar;
+#[cfg(test)]
 mod status_ports;
 #[cfg(test)]
 mod text_width;
