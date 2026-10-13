@@ -118,7 +118,10 @@ pub(crate) fn open_window(
                     fixture,
                 );
                 view.updater = updater;
-                view.startup = shown.map(crate::window::Startup::Show);
+                view.startup = shown.map(|workspace| crate::window::Startup::Show {
+                    workspace,
+                    tab: None,
+                });
                 crate::window_state::WindowState::observe(window, cx);
                 view
             })
@@ -201,7 +204,7 @@ pub(crate) fn run() -> std::process::ExitCode {
             "  browser open URL    Show URL in a browser tab of the running app (see browser --help)"
         );
         println!(
-            "  workspace focus ID  Bring the running app's window showing space ID to the front, or open one"
+            "  workspace focus ID [--tab TAB]\n                      Bring the running app's window showing space ID to the front, or open one"
         );
         #[cfg(feature = "integration-test")]
         println!(

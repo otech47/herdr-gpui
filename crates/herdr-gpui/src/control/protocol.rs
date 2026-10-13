@@ -21,6 +21,16 @@ pub(crate) enum Request {
     /// Bring the window showing the caller's workspace to the front, or open one.
     #[serde(rename = "workspace.focus")]
     FocusWorkspace(Caller),
+    /// The same, then select one tab of that workspace in that window alone.
+    #[serde(rename = "tab.focus")]
+    FocusTab(TabFocus),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TabFocus {
+    pub caller: Caller,
+    pub tab_id: String,
 }
 
 /// What a tab shows: a web address, or a local file by absolute path, which
@@ -177,6 +187,20 @@ mod tests {
                 ..
             })
         ));
+        let tab: Request = serde_json::from_str(
+            r#"{"method":"tab.focus","caller":{"workspace_id":"w_1"},"tab_id":"w_1:t2"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            tab,
+            Request::FocusTab(TabFocus {
+                caller: Caller {
+                    workspace_id: Some("w_1".into()),
+                    ..Default::default()
+                },
+                tab_id: "w_1:t2".into(),
+            })
+        );
     }
 
     #[test]
@@ -188,6 +212,8 @@ mod tests {
             r#"{"method":"browser.open","page":{"url":"https://a.test"},"caller":{"shell":"x"},"focus":true}"#,
             r#"{"method":"browser.open","focus":true}"#,
             r#"{"method":"browser.feedback","wait_seconds":1}"#,
+            r#"{"method":"tab.focus","caller":{}}"#,
+            r#"{"method":"tab.focus","caller":{},"tab_id":"w_1:t2","focus":true}"#,
             r#"["browser.open"]"#,
         ] {
             assert!(

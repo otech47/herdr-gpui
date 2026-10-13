@@ -70,8 +70,11 @@ pub(crate) use server_keys::ActiveServerKeymap;
 #[derive(Clone, Debug)]
 pub(crate) enum Startup {
     /// Show this space: the one the window showed when last saved, or the one
-    /// a control request opened the window for.
-    Show(String),
+    /// a control request opened the window for, at one of its tabs when named.
+    Show {
+        workspace: String,
+        tab: Option<String>,
+    },
     /// Create a space and show it.
     NewWorkspace,
 }

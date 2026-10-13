@@ -43,7 +43,10 @@ pub enum BrowserCommand {
 /// `herdr-gpui workspace ...`, answered by the running app.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkspaceCommand {
-    Focus { workspace: String },
+    Focus {
+        workspace: String,
+        tab: Option<String>,
+    },
     Help,
 }
 
@@ -92,6 +95,8 @@ pub enum CliError {
     UnexpectedArgument(OsString),
     #[error("--workspace requires an ID")]
     MissingWorkspace,
+    #[error("--tab requires a tab ID")]
+    MissingTab,
     #[error("browser arguments must be UTF-8")]
     InvalidBrowserEncoding(OsString),
     #[error("workspace requires a command: focus, or --help")]
@@ -148,17 +153,26 @@ fn parse_workspace(mut args: impl Iterator<Item = OsString>) -> Result<Workspace
     match command.to_str() {
         Some("--help" | "-h") => Ok(WorkspaceCommand::Help),
         Some("focus") => {
-            let workspace = args
-                .next()
-                .filter(|value| !value.is_empty() && !value.as_encoded_bytes().starts_with(b"-"))
-                .ok_or(CliError::MissingWorkspace)?;
-            match args.next() {
-                None => Ok(WorkspaceCommand::Focus {
-                    workspace: utf8(workspace)?,
-                }),
-                Some(extra) if extra == "--help" || extra == "-h" => Ok(WorkspaceCommand::Help),
-                Some(extra) => Err(CliError::UnexpectedArgument(extra)),
+            let value = |value: Option<OsString>| {
+                value.filter(|value| {
+                    !value.is_empty() && !value.as_encoded_bytes().starts_with(b"-")
+                })
+            };
+            let workspace = value(args.next()).ok_or(CliError::MissingWorkspace)?;
+            let mut tab = None;
+            while let Some(arg) = args.next() {
+                match arg.to_str() {
+                    Some("--help" | "-h") => return Ok(WorkspaceCommand::Help),
+                    Some("--tab") => {
+                        tab = Some(utf8(value(args.next()).ok_or(CliError::MissingTab)?)?);
+                    }
+                    _ => return Err(CliError::UnexpectedArgument(arg)),
+                }
             }
+            Ok(WorkspaceCommand::Focus {
+                workspace: utf8(workspace)?,
+                tab,
+            })
         }
         _ => Err(CliError::UnknownWorkspaceCommand(command)),
     }

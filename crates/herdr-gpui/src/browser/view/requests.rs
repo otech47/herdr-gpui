@@ -50,13 +50,14 @@ impl HerdrWindow {
     }
 
     /// Brings this window to the front if the workspace a control request
-    /// names is the one it shows.
+    /// names is the one it shows, and selects the named tab of it.
     pub(crate) fn raise_if_showing(
         &mut self,
         target: &Target<'_>,
+        tab: Option<&str>,
         strict: bool,
         window: &mut Window,
-        _cx: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) -> bool {
         let Some((index, workspace)) = self.browser_target(target, strict) else {
             return false;
@@ -70,17 +71,24 @@ impl HerdrWindow {
             .as_ref()
             .and_then(|snapshot| snapshot.focused_workspace_id.as_deref())
             == Some(workspace.as_str());
-        if shown {
-            window.activate_window();
+        if !shown {
+            return false;
         }
-        shown
+        if let Some(tab) = tab {
+            let endpoint = self.endpoints[index].id.clone();
+            self.navigate_endpoint(&endpoint, NavigationTarget::Tab(tab), cx);
+        }
+        window.activate_window();
+        true
     }
 
-    /// Shows the workspace a control request names: in a window of its own
-    /// under `new_space_in_window`, else in this window, brought to the front.
+    /// Shows the workspace a control request names, at the named tab: in a
+    /// window of its own under `new_space_in_window`, else in this window,
+    /// brought to the front.
     pub(crate) fn show_requested_workspace(
         &mut self,
         target: &Target<'_>,
+        tab: Option<&str>,
         strict: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -91,13 +99,20 @@ impl HerdrWindow {
         if self.config.new_space_in_window {
             crate::app::open_window_for(
                 self.endpoints[index].connection.target.clone(),
-                Some(crate::window::Startup::Show(workspace)),
+                Some(crate::window::Startup::Show {
+                    workspace,
+                    tab: tab.map(str::to_owned),
+                }),
                 cx,
             );
             return true;
         }
         let endpoint = self.endpoints[index].id.clone();
-        if !self.navigate_endpoint(&endpoint, NavigationTarget::Workspace(&workspace), cx) {
+        let navigation = match tab {
+            Some(tab) => NavigationTarget::Tab(tab),
+            None => NavigationTarget::Workspace(workspace.as_str()),
+        };
+        if !self.navigate_endpoint(&endpoint, navigation, cx) {
             return false;
         }
         window.activate_window();

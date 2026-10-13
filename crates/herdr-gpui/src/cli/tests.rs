@@ -119,6 +119,47 @@ fn browser_commands_never_start_the_gui() {
     );
 }
 
+#[test]
+fn workspace_focus_takes_a_tab() {
+    let mode = |args: &[&str]| LaunchOptions::parse(args.iter().copied()).map(|o| o.mode);
+    assert_eq!(
+        mode(&["workspace", "focus", "w_1"]).unwrap(),
+        LaunchMode::Workspace(WorkspaceCommand::Focus {
+            workspace: "w_1".into(),
+            tab: None,
+        })
+    );
+    assert_eq!(
+        mode(&["workspace", "focus", "w_1", "--tab", "w_1:t2"]).unwrap(),
+        LaunchMode::Workspace(WorkspaceCommand::Focus {
+            workspace: "w_1".into(),
+            tab: Some("w_1:t2".into()),
+        })
+    );
+    assert_eq!(
+        mode(&["workspace", "focus", "w_1", "--help"]).unwrap(),
+        LaunchMode::Workspace(WorkspaceCommand::Help)
+    );
+    let rejected: [(&[&str], CliError); 4] = [
+        (&["workspace", "focus"], CliError::MissingWorkspace),
+        (
+            &["workspace", "focus", "w_1", "--tab"],
+            CliError::MissingTab,
+        ),
+        (
+            &["workspace", "focus", "w_1", "--tab", "--help"],
+            CliError::MissingTab,
+        ),
+        (
+            &["workspace", "focus", "w_1", "x"],
+            CliError::UnexpectedArgument("x".into()),
+        ),
+    ];
+    for (args, expected) in rejected {
+        assert_eq!(mode(args).unwrap_err(), expected, "{args:?}");
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn browser_arguments_must_be_utf8() {

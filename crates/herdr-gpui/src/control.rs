@@ -21,6 +21,7 @@ use gpui::App;
 pub use protocol::ErrorCode;
 use protocol::{
     BrowserOpen, Caller, FeedbackRequest, MAX_WAIT_SECONDS, OpenedIn, Page, Request, Response,
+    TabFocus,
 };
 #[cfg(unix)]
 use std::path::PathBuf;
@@ -189,14 +190,15 @@ fn open_browser(request: &BrowserOpen, cx: &mut App) -> Response {
     )
 }
 
-/// Brings the window showing the named workspace to the front. Without one,
-/// the frontmost window of its daemon shows it, or a window opens for it.
+/// Brings the window showing the named workspace to the front, at the named
+/// tab. Without one, the frontmost window of its daemon shows it, or a window
+/// opens for it.
 #[cfg(unix)]
-fn focus_workspace(caller: &Caller, cx: &mut App) -> Response {
-    if !valid_caller(caller) {
+fn focus_workspace(caller: &Caller, tab: Option<&str>, cx: &mut App) -> Response {
+    if !valid_caller(caller) || tab.is_some_and(|tab| !plain(tab, 256)) {
         return Response::error(
             ErrorCode::InvalidRequest,
-            "Invalid workspace, pane, or daemon",
+            "Invalid workspace, tab, pane, or daemon",
         );
     }
     let Some(workspace) = caller.workspace_id.as_deref() else {
@@ -220,7 +222,7 @@ fn focus_workspace(caller: &Caller, cx: &mut App) -> Response {
     for strict in [true, false] {
         for handle in &windows {
             let raised = handle.update(cx, |view, window, cx| {
-                view.raise_if_showing(&target, strict, window, cx)
+                view.raise_if_showing(&target, tab, strict, window, cx)
             });
             if raised.unwrap_or(false) {
                 cx.activate(true);
@@ -231,7 +233,7 @@ fn focus_workspace(caller: &Caller, cx: &mut App) -> Response {
     for strict in [true, false] {
         for handle in &windows {
             let shown = handle.update(cx, |view, window, cx| {
-                view.show_requested_workspace(&target, strict, window, cx)
+                view.show_requested_workspace(&target, tab, strict, window, cx)
             });
             if shown.unwrap_or(false) {
                 cx.activate(true);
@@ -382,7 +384,12 @@ pub(crate) fn install(cx: &mut App) {
                         }
                         Request::Reload(caller) => incoming.respond(reload(&caller, cx)),
                         Request::FocusWorkspace(caller) => {
-                            incoming.respond(focus_workspace(&caller, cx));
+                            incoming.respond(focus_workspace(&caller, None, cx));
+                        }
+                        Request::FocusTab(request) => {
+                            let response =
+                                focus_workspace(&request.caller, Some(&request.tab_id), cx);
+                            incoming.respond(response);
                         }
                         Request::Feedback(request) => {
                             feedback(&request, incoming, &mut waiters, cx);
@@ -480,8 +487,13 @@ fn browser_open(target: &str, workspace: Option<String>, focus: bool) -> crate::
     }
 }
 
-fn workspace_focus(workspace: String) -> crate::Result<String> {
-    match send(&Request::FocusWorkspace(caller(Some(workspace))?))? {
+fn workspace_focus(workspace: String, tab: Option<String>) -> crate::Result<String> {
+    let caller = caller(Some(workspace))?;
+    let request = match tab {
+        Some(tab_id) => Request::FocusTab(TabFocus { caller, tab_id }),
+        None => Request::FocusWorkspace(caller),
+    };
+    match send(&request)? {
         Response::Focused { workspace_id } => Ok(format!("Showing workspace {workspace_id}")),
         response => Err(rejected(response)),
     }
@@ -533,10 +545,12 @@ Exit status: 0 done, 1 refused, 2 invalid arguments, 3 Herdr GPUI not running,
 4 no notes (feedback).";
 
 const WORKSPACE_USAGE: &str = "\
-herdr-gpui workspace focus ID
+herdr-gpui workspace focus ID [--tab TAB]
     Bring the window of the running Herdr GPUI that shows workspace ID to the
     front. When no window shows it, the frontmost window switches to it, or a
-    window opens for it when new_space_in_window is set.
+    window opens for it when new_space_in_window is set. With --tab, that one
+    window also selects tab TAB of the workspace. Other windows stay where
+    they are.
 Exit status: 0 done, 1 refused, 2 invalid arguments, 3 Herdr GPUI not running.";
 
 pub(crate) fn run_workspace(command: WorkspaceCommand) -> ExitCode {
@@ -545,7 +559,7 @@ pub(crate) fn run_workspace(command: WorkspaceCommand) -> ExitCode {
             println!("{WORKSPACE_USAGE}");
             ExitCode::SUCCESS
         }
-        WorkspaceCommand::Focus { workspace } => report(workspace_focus(workspace)),
+        WorkspaceCommand::Focus { workspace, tab } => report(workspace_focus(workspace, tab)),
     }
 }
 

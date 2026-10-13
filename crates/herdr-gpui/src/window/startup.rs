@@ -1,6 +1,9 @@
 //! What a window was opened to show, applied once its daemon answers.
-use crate::{Command, HerdrWindow, NavigationTarget, controls, window::Startup};
+use crate::{
+    Command, HerdrWindow, NavigationTarget, OwnedNavigationTarget, controls, window::Startup,
+};
 use gpui::{Context, Window};
+use herdr_client::protocol::ClientShellSnapshot;
 
 impl HerdrWindow {
     /// Applies the startup request once the surface is ready, and notes the
@@ -11,15 +14,8 @@ impl HerdrWindow {
         };
         if self.startup.is_some() && self.navigation_ready() {
             match self.startup.take() {
-                Some(Startup::Show(workspace)) => {
-                    let known = snapshot
-                        .workspaces
-                        .iter()
-                        .any(|candidate| candidate.workspace_id == workspace);
-                    if known && snapshot.focused_workspace_id.as_deref() != Some(workspace.as_str())
-                    {
-                        self.pending_navigation = Some(NavigationTarget::Workspace(workspace));
-                    }
+                Some(Startup::Show { workspace, tab }) => {
+                    self.pending_navigation = shown_navigation(&snapshot, workspace, tab);
                 }
                 Some(Startup::NewWorkspace) => {
                     if let Some((method, params)) = controls::request(Command::Workspace, &snapshot)
@@ -38,4 +34,30 @@ impl HerdrWindow {
             .flatten();
         crate::window_state::WindowState::note_workspace(window, shown, cx);
     }
+}
+
+/// The navigation that shows `workspace` at `tab`: the tab when the snapshot
+/// lists it under that workspace, else the workspace when it exists, and
+/// nothing when the snapshot already shows it.
+pub(crate) fn shown_navigation(
+    snapshot: &ClientShellSnapshot,
+    workspace: String,
+    tab: Option<String>,
+) -> Option<OwnedNavigationTarget> {
+    let tab = tab.filter(|tab| {
+        snapshot
+            .tabs
+            .iter()
+            .any(|candidate| &candidate.tab_id == tab && candidate.workspace_id == workspace)
+    });
+    if let Some(tab) = tab {
+        return (snapshot.focused_tab_id.as_deref() != Some(tab.as_str()))
+            .then_some(NavigationTarget::Tab(tab));
+    }
+    let known = snapshot
+        .workspaces
+        .iter()
+        .any(|candidate| candidate.workspace_id == workspace);
+    (known && snapshot.focused_workspace_id.as_deref() != Some(workspace.as_str()))
+        .then_some(NavigationTarget::Workspace(workspace))
 }

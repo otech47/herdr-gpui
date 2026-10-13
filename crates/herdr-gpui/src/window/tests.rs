@@ -341,3 +341,5 @@ fn host_theme_reaches_each_connection_and_follows_theme_changes(cx: &mut gpui::T
 }
 
 mod kept_space;
+
+mod startup;
