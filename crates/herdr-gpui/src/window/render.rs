@@ -338,9 +338,11 @@ impl Render for HerdrWindow {
             )
             // The cached regions paint the cells; the canvas above them takes
             // input and paints what changes without them. Both fill this box,
-            // so every region shares the canvas's bounds.
+            // so every region shares the canvas's bounds. A frame the daemon
+            // has not resized yet may be larger than the box, so the box
+            // clips it and the padding stays clear.
             .child(
-                div().relative().size_full().children(regions).child(
+                div().relative().size_full().overflow_hidden().children(regions).child(
                     canvas(
                         move |bounds, _, cx| {
                             entity.update(cx, |this, _| {
