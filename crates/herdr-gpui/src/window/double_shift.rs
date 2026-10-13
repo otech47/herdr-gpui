@@ -84,6 +84,7 @@ impl HerdrWindow {
             && self.selection.is_none()
             && self.workspace_drag.is_none()
             && self.tab_drag.is_none()
+            && self.tab_row_drag.is_none()
             && self.sidebar_drag.is_none()
             && self.split_drag.is_none()
             && self.scrollbar_drag.is_none();

@@ -214,6 +214,8 @@ pub(crate) struct HerdrWindow {
     pub(crate) workspace_drag: Option<sidebar::WorkspaceDrag>,
     /// A press on a tab that may lift it for reordering.
     pub(crate) tab_drag: Option<tab_drag::TabDrag>,
+    /// A press on a sidebar tab row that may lift it for reordering.
+    pub(crate) tab_row_drag: Option<sidebar::TabRowDrag>,
     pub(crate) sidebar_split: Option<f32>,
     pub(crate) sidebar_split_modified: bool,
     /// Sections folded to their headers, and the spaces list's dragged height.
@@ -786,6 +788,7 @@ impl HerdrWindow {
             sidebar_drag: None,
             workspace_drag: None,
             tab_drag: None,
+            tab_row_drag: None,
             sidebar_split: None,
             sidebar_split_modified: false,
             sidebar_collapsed: Default::default(),

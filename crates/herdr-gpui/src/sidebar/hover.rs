@@ -70,6 +70,10 @@ impl HerdrWindow {
             .workspace_drag
             .as_ref()
             .is_some_and(super::WorkspaceDrag::floating)
+            || self
+                .tab_row_drag
+                .as_ref()
+                .is_some_and(super::TabRowDrag::floating)
         {
             return;
         }

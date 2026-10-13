@@ -11,7 +11,7 @@ use super::{
     reorder::{self, Plan},
     row::{RowIcon, RowLift, RowTree, removing_dot},
     sections::header_height,
-    sidebar_width, sorted_agents,
+    sidebar_width, sorted_agents, tab_reorder,
     tokens::{self, SpaceContext},
     trailing::Trailing,
     visible_workspace_entries,
@@ -114,6 +114,8 @@ impl HerdrWindow {
         let mut drop_rows = Vec::new();
         let mut drop_requests = Vec::new();
         let mut drop_dragged = 0;
+        // The same for a lifted tab row, from the tabs list.
+        let mut tab_drop = None;
         let now = std::time::Instant::now();
         let mut sliding = false;
         for (endpoint_index, endpoint) in self.endpoints.iter().enumerate() {
@@ -624,14 +626,10 @@ impl HerdrWindow {
                 };
             }
             if sidebar_tabs && selected && tabs_open {
-                tabs = tabs.children(self.tab_rows(
-                    snapshot,
-                    &endpoint_id,
-                    rows,
-                    &row_cx,
-                    content_x,
-                    cx,
-                ));
+                let listed = self.tab_rows(snapshot, &endpoint_id, rows, &row_cx, content_x, cx);
+                tabs = tabs.children(listed.rows);
+                tab_drop = listed.drop;
+                sliding |= listed.sliding;
             }
             if !self.config.show_agents {
                 continue;
@@ -901,10 +899,11 @@ impl HerdrWindow {
                         window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
                             if phase == DispatchPhase::Capture {
                                 let _ = moving.update(cx, |this, cx| {
+                                    let held = event.pressed_button == Some(MouseButton::Left);
                                     let scroll = this.sidebar_scroll[0].clone();
-                                    if this.move_workspace_drag(
+                                    let moved = this.move_workspace_drag(
                                         event.position,
-                                        event.pressed_button == Some(MouseButton::Left),
+                                        held,
                                         |lift| {
                                             reorder::resolve(
                                                 &drop_rows,
@@ -915,7 +914,19 @@ impl HerdrWindow {
                                             )
                                         },
                                         cx,
-                                    ) {
+                                    ) || {
+                                        let scroll = this.sidebar_scroll[2].clone();
+                                        this.move_tab_row_drag(
+                                            event.position,
+                                            held,
+                                            |lift| {
+                                                let (rows, dragged) = tab_drop.as_ref()?;
+                                                tab_reorder::resolve(rows, *dragged, &scroll, lift)
+                                            },
+                                            cx,
+                                        )
+                                    };
+                                    if moved {
                                         cx.stop_propagation();
                                     } else if let Some(drag) = this.sidebar_drag {
                                         match drag {
@@ -947,7 +958,9 @@ impl HerdrWindow {
                             {
                                 let _ = released.update(cx, |this, cx| {
                                     // A lifted row's release is its drop, not a click.
-                                    if this.release_workspace_drag(cx) {
+                                    if this.release_workspace_drag(cx)
+                                        | this.release_tab_row_drag(cx)
+                                    {
                                         cx.stop_propagation();
                                     } else if this.sidebar_drag.take().is_some() {
                                         this.save_chrome();

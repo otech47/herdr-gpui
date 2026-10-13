@@ -15,6 +15,7 @@ mod render;
 mod reorder;
 mod row;
 mod sections;
+mod tab_reorder;
 mod tabs;
 mod tokens;
 mod trailing;
@@ -38,6 +39,7 @@ pub(crate) use {
     rail::SidebarMode,
     reorder::WorkspaceDrag,
     row::{compact, github_mark, label_text},
+    tab_reorder::TabRowDrag,
     view::SidebarView,
     workspaces::workspace_label,
 };

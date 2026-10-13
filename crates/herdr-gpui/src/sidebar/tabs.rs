@@ -9,9 +9,32 @@ use super::{
     tokens::{ResolvedToken, TextRole, TokenKind},
     trailing::Trailing,
 };
-use crate::{HerdrWindow, NavigationTarget, config::TokenStyle};
+use crate::{HerdrWindow, NavigationTarget, config::TokenStyle, reorder::preview};
 use gpui::{prelude::*, *};
 use herdr_client::protocol::{ClientShellAgent, ClientShellSnapshot, ClientShellTab};
+use std::time::Instant;
+
+/// Each listed row as its own drop unit, its child index and painted shift.
+pub(super) type DropRows = Vec<(usize, usize, Pixels)>;
+
+/// The tabs list's rows, and what a drag among them needs from this frame.
+pub(super) struct TabRows {
+    pub(super) rows: Vec<AnyElement>,
+    /// While a drag previews, the rows and the carried row's index.
+    pub(super) drop: Option<(DropRows, usize)>,
+    /// Whether a row is still sliding, so the next frame is drawn.
+    pub(super) sliding: bool,
+}
+
+/// The tabs the list shows: the focused space's, in the daemon's order.
+pub(super) fn shown_tabs(snapshot: &ClientShellSnapshot) -> Vec<&ClientShellTab> {
+    let focused = snapshot.focused_workspace_id.as_deref();
+    snapshot
+        .tabs
+        .iter()
+        .filter(|tab| Some(tab.workspace_id.as_str()) == focused)
+        .collect()
+}
 
 impl HerdrWindow {
     pub(super) fn tab_rows(
@@ -22,26 +45,52 @@ impl HerdrWindow {
         row_cx: &RowContext<'_>,
         content_x: f32,
         cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
-        let focused_workspace = snapshot.focused_workspace_id.as_deref();
-        let listed: Vec<(&ClientShellTab, String)> = snapshot
-            .tabs
-            .iter()
-            .filter(|tab| Some(tab.workspace_id.as_str()) == focused_workspace)
+    ) -> TabRows {
+        let listed: Vec<(&ClientShellTab, String)> = shown_tabs(snapshot)
+            .into_iter()
             .map(|tab| (tab, tab_title(tab, snapshot)))
             .collect();
         if listed.is_empty() {
-            return vec![
-                div()
-                    .px(px(content_x))
-                    .text_color(rgb(row_cx.theme.muted))
-                    .child(label_text("no tabs"))
-                    .into_any_element(),
-            ];
+            return TabRows {
+                rows: vec![
+                    div()
+                        .px(px(content_x))
+                        .text_color(rgb(row_cx.theme.muted))
+                        .child(label_text("no tabs"))
+                        .into_any_element(),
+                ],
+                drop: None,
+                sliding: false,
+            };
         }
+        let scroll = &self.sidebar_scroll[2];
+        let drag = self
+            .tab_row_drag
+            .as_ref()
+            .filter(|drag| drag.previewing(listed.iter().map(|(tab, _)| tab.tab_id.as_str())))
+            .and_then(|drag| {
+                let dragged = listed.iter().position(|(tab, _)| tab.tab_id == drag.key)?;
+                Some((drag, dragged))
+            });
+        let floating = drag.is_some_and(|(drag, _)| drag.floating());
+        // Each row's shift for the drop in preview, from the heights the last
+        // frame laid out: shifting moves rows, never resizes them.
+        let shifts = drag.map_or_else(Vec::new, |(drag, dragged)| {
+            let heights: Vec<f32> = (0..listed.len())
+                .map(|row| {
+                    scroll
+                        .bounds_for_item(row)
+                        .map_or(0., |bounds| f32::from(bounds.size.height))
+                })
+                .collect();
+            preview(&heights, dragged, drag.target.unwrap_or(dragged))
+        });
+        let now = Instant::now();
+        let mut sliding = false;
+        let mut drop = Vec::new();
         let trailing = Trailing::new(row_cx);
         let tab_cx = trailing.context(row_cx);
-        listed
+        let rows = listed
             .iter()
             .enumerate()
             .map(|(position, (tab, name))| {
@@ -52,8 +101,25 @@ impl HerdrWindow {
                 let id = tab.tab_id.clone();
                 let context_id = id.clone();
                 let close_id = id.clone();
+                let press_id = id.clone();
                 let navigate_endpoint = endpoint_id.to_owned();
-                Cell::new(
+                let carried = floating && drag.is_some_and(|(_, dragged)| dragged == position);
+                let shift = match drag {
+                    Some((drag, _)) if carried => {
+                        drag.pin(&id, f32::from(drag.offset()), now);
+                        drag.offset()
+                    }
+                    Some((drag, _)) => {
+                        let (at, moving) = drag.slide(&id, shifts[position], now);
+                        sliding |= moving;
+                        px(at)
+                    }
+                    None => px(0.),
+                };
+                if drag.is_some() {
+                    drop.push((position, position, shift));
+                }
+                let element = Cell::new(
                     rows,
                     RowData::Agent(AgentRow {
                         key: format!("tab-{id}"),
@@ -88,9 +154,31 @@ impl HerdrWindow {
                     this.navigate_endpoint(&navigate_endpoint, NavigationTarget::Tab(&id), cx);
                     window.focus(&this.focus, cx);
                 }))
-                .into_any_element()
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                        if event.click_count == 1 {
+                            this.press_tab_row(&press_id, event.position, cx);
+                        }
+                    }),
+                )
+                .when(carried, |row| row.cursor_grabbing())
+                .when(shift != px(0.), |row| row.top(shift))
+                .into_any_element();
+                if carried {
+                    // Painted last so it floats over the rows it passes, while
+                    // its layout slot keeps the others' positions stable.
+                    deferred(element).with_priority(1).into_any_element()
+                } else {
+                    element
+                }
             })
-            .collect()
+            .collect();
+        TabRows {
+            rows,
+            drop: drag.map(|(_, dragged)| (drop, dragged)),
+            sliding,
+        }
     }
 
     /// The x at the end of a tab's row. It closes the tab the way the row's

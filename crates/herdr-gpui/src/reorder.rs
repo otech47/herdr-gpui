@@ -3,7 +3,7 @@
 //! the others, and how the others slide aside to preview the drop. Positions
 //! are along one axis, so the same rules serve a column and a row.
 
-use gpui::{Pixels, Point, Task};
+use gpui::{Pixels, Point, ScrollHandle, Task};
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -116,12 +116,12 @@ impl<T> Drag<T> {
         !std::mem::replace(&mut self.lifted, true)
     }
 
-    /// Follows the pointer, lifting the row once it has travelled far
-    /// enough. Returns whether the row was lifted by this move.
+    /// Follows the pointer. Returns whether a resting row has now travelled
+    /// far enough to lift.
     pub(crate) fn follow(&mut self, position: Point<Pixels>) -> bool {
         self.pointer = position;
         let moved = position - self.origin;
-        !self.lifted && f32::from(moved.x.abs().max(moved.y.abs())) > LIFT_DISTANCE && self.lift()
+        !self.lifted && f32::from(moved.x.abs().max(moved.y.abs())) > LIFT_DISTANCE
     }
 
     /// Keeps the preview after a move was sent, until the daemon's order
@@ -184,6 +184,32 @@ impl Slide {
             start: now,
         }
     }
+}
+
+/// Each unit's resting span, from its rows' last layout in `scroll`: each
+/// row's unit, child index and painted shift. The shift comes off, or the
+/// list would chase its own preview.
+pub(crate) fn resting_spans(
+    rows: &[(usize, usize, Pixels)],
+    units: usize,
+    scroll: &ScrollHandle,
+) -> Vec<Option<(f32, f32)>> {
+    let offset = scroll.offset().y;
+    let mut spans: Vec<Option<(Pixels, Pixels)>> = vec![None; units];
+    for &(unit, row, shift) in rows {
+        let (Some(bounds), Some(span)) = (scroll.bounds_for_item(row), spans.get_mut(unit)) else {
+            continue;
+        };
+        let (top, bottom) = (
+            bounds.top() + offset - shift,
+            bounds.bottom() + offset - shift,
+        );
+        *span = Some(span.map_or((top, bottom), |(t, b)| (t.min(top), b.max(bottom))));
+    }
+    spans
+        .iter()
+        .map(|span| span.map(|(top, bottom)| (f32::from(top), f32::from(bottom))))
+        .collect()
 }
 
 /// The gap the carried card points to, from every unit's resting span and

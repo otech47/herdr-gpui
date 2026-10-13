@@ -97,5 +97,91 @@ fn every_tab_row_closes_from_its_own_x(cx: &mut gpui::TestAppContext) {
         assert_eq!(view.menu.page, Some(crate::menu::Page::ConfirmClose));
         assert!(view.pending_navigation.is_none());
         assert!(view.workspace_drag.is_none());
+        assert!(view.tab_row_drag.is_none());
     });
+}
+
+#[gpui::test]
+fn holding_a_tab_row_lifts_it_and_a_release_picks_the_gap(cx: &mut gpui::TestAppContext) {
+    use gpui::point;
+
+    let (view, cx) = tabs_fixture(cx);
+    view.update(cx, |view, _| {
+        view.live.status = crate::state::ConnectionStatus::Connected;
+        view.live.supports_tab_move = true;
+    });
+    draw(cx);
+    let target = |view: &Entity<HerdrWindow>, cx: &mut gpui::VisualTestContext| {
+        view.read_with(cx, |view, _| {
+            let drag = view.tab_row_drag.as_ref()?;
+            assert!(drag.lifted);
+            drag.target
+        })
+    };
+    let first = cx.debug_bounds("row-tab-t0").unwrap();
+    let second = cx.debug_bounds("row-tab-t1").unwrap();
+    assert_eq!(second.top(), first.bottom());
+
+    // A quick click stays a click.
+    cx.simulate_mouse_down(first.center(), MouseButton::Left, Modifiers::default());
+    cx.simulate_mouse_up(first.center(), MouseButton::Left, Modifiers::default());
+    cx.executor().advance_clock(crate::reorder::LIFT_DELAY * 2);
+    cx.run_until_parked();
+    view.update(cx, |view, _| {
+        assert!(view.tab_row_drag.is_none());
+        assert!(view.pending_navigation.take().is_some());
+    });
+
+    // Held in place, the row lifts without moving.
+    cx.simulate_mouse_down(first.center(), MouseButton::Left, Modifiers::default());
+    view.read_with(cx, |view, _| {
+        assert!(!view.tab_row_drag.as_ref().unwrap().lifted)
+    });
+    cx.executor().advance_clock(crate::reorder::LIFT_DELAY);
+    cx.run_until_parked();
+    draw(cx);
+    assert_eq!(target(&view, cx), None);
+    assert_eq!(cx.debug_bounds("row-tab-t1").unwrap(), second);
+
+    // Past the second row's middle, it lands after it: the daemon's gap 2.
+    let below = point(first.center().x, second.bottom() - px(2.));
+    cx.simulate_mouse_move(below, MouseButton::Left, Modifiers::default());
+    draw(cx);
+    assert_eq!(target(&view, cx), Some(2));
+    // The second row closes the lifted one's place.
+    let lifted = cx.debug_bounds("row-tab-t0").unwrap();
+    assert_eq!(lifted.top() - first.top(), below.y - first.center().y);
+    assert_eq!(cx.debug_bounds("row-tab-t1").unwrap().top(), first.top());
+
+    // The release is the drop, not a click on the row under it. Nothing was
+    // sent without a daemon, so every row is back in place.
+    cx.simulate_mouse_up(below, MouseButton::Left, Modifiers::default());
+    draw(cx);
+    view.read_with(cx, |view, _| {
+        assert!(view.tab_row_drag.is_none());
+        assert!(view.pending_navigation.is_none());
+    });
+    assert_eq!(cx.debug_bounds("row-tab-t0").unwrap(), first);
+    assert_eq!(cx.debug_bounds("row-tab-t1").unwrap(), second);
+
+    // Moving a press lifts it without waiting, and the gap resolves against
+    // the lifted frame's layout. Escape puts the row back.
+    cx.simulate_mouse_down(second.center(), MouseButton::Left, Modifiers::default());
+    let above = point(second.center().x, first.top() + px(2.));
+    for _ in 0..2 {
+        cx.simulate_mouse_move(above, MouseButton::Left, Modifiers::default());
+        draw(cx);
+    }
+    assert_eq!(target(&view, cx), Some(0));
+    assert_eq!(cx.debug_bounds("row-tab-t0").unwrap().top(), second.top());
+    cx.simulate_keystrokes("escape");
+    draw(cx);
+    view.read_with(cx, |view, _| assert!(view.tab_row_drag.is_none()));
+    assert_eq!(cx.debug_bounds("row-tab-t0").unwrap(), first);
+
+    // A daemon without `tab.move` leaves the rows where they are.
+    view.update(cx, |view, _| view.live.supports_tab_move = false);
+    cx.simulate_mouse_down(first.center(), MouseButton::Left, Modifiers::default());
+    view.read_with(cx, |view, _| assert!(view.tab_row_drag.is_none()));
+    cx.simulate_mouse_up(first.center(), MouseButton::Left, Modifiers::default());
 }

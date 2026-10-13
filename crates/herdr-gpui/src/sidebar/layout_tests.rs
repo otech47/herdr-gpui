@@ -516,6 +516,7 @@ pub(crate) fn fixture_window(window: &mut Window, cx: &mut Context<HerdrWindow>)
         sidebar_drag: None,
         workspace_drag: None,
         tab_drag: None,
+        tab_row_drag: None,
         sidebar_split: None,
         sidebar_split_modified: false,
         sidebar_collapsed: Default::default(),

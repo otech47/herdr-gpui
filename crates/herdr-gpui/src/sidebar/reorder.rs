@@ -12,7 +12,7 @@
 
 use crate::{
     HerdrWindow,
-    reorder::{Drag, LIFT_DELAY, SETTLE_TIMEOUT, slot_for},
+    reorder::{Drag, LIFT_DELAY, SETTLE_TIMEOUT, resting_spans, slot_for},
 };
 use gpui::{Context, Pixels, Point};
 use herdr_client::{Method, protocol::ClientShellWorkspace};
@@ -311,26 +311,7 @@ pub(super) fn resolve(
     scroll: &gpui::ScrollHandle,
     lift: Pixels,
 ) -> Option<Target> {
-    let len = requests.len().checked_sub(1)?;
-    let offset = scroll.offset().y;
-    let mut spans: Vec<Option<(Pixels, Pixels)>> = vec![None; len];
-    // Rows sit where the preview shifted them; the gaps are measured where
-    // they rest, or the list would chase its own preview.
-    for &(unit, row, shift) in rows {
-        let Some(bounds) = scroll.bounds_for_item(row) else {
-            continue;
-        };
-        let (top, bottom) = (
-            bounds.top() + offset - shift,
-            bounds.bottom() + offset - shift,
-        );
-        let span = &mut spans[unit];
-        *span = Some(span.map_or((top, bottom), |(t, b)| (t.min(top), b.max(bottom))));
-    }
-    let spans: Vec<_> = spans
-        .iter()
-        .map(|span| span.map(|(top, bottom)| (f32::from(top), f32::from(bottom))))
-        .collect();
+    let spans = resting_spans(rows, requests.len().checked_sub(1)?, scroll);
     let (top, bottom) = (*spans.get(dragged)?)?;
     let lift = f32::from(lift);
     let slot = slot_for(&spans, dragged, (top + lift, bottom + lift));
