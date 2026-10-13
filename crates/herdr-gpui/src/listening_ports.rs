@@ -20,7 +20,7 @@ use crate::{
     usage::{Host, Shell},
 };
 use herdr_client::ConnectTarget;
-pub(crate) use render::chips;
+pub(crate) use render::menu;
 pub(crate) use scan::{Link, Origin, Port, Ports, parse};
 use std::{
     collections::HashMap,

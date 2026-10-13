@@ -156,6 +156,8 @@ pub(crate) struct HerdrWindow {
     pub(crate) hover: Option<sidebar::HoverRest>,
     /// The menu that resting opened, which the pointer closes by leaving it.
     pub(crate) hover_menu: Option<sidebar::HoverMenu>,
+    /// The ports menu a workspace row's globe opened.
+    pub(crate) ports_menu: Option<sidebar::PortsMenu>,
     pub(crate) local_error: Option<String>,
     pub(crate) menu: menu::MenuState,
     /// A `worktree.remove` queued after its dialog closed.
@@ -433,6 +435,7 @@ impl HerdrWindow {
         self.poll_device_setup(window, cx);
         self.poll_worktree_source(cx);
         self.poll_hover_menu(std::time::Instant::now(), window, cx);
+        self.poll_ports_menu(std::time::Instant::now(), window, cx);
         if self.tick_flash(std::time::Instant::now()) {
             cx.notify();
         }
@@ -745,6 +748,7 @@ impl HerdrWindow {
             marked: String::new(),
             hover: None,
             hover_menu: None,
+            ports_menu: None,
             local_error: error,
             menu: menu::MenuState::new(cx),
             removal: None,

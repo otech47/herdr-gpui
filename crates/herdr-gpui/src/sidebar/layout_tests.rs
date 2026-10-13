@@ -503,6 +503,7 @@ pub(crate) fn fixture_window(window: &mut Window, cx: &mut Context<HerdrWindow>)
         marked: String::new(),
         hover: None,
         hover_menu: None,
+        ports_menu: None,
         local_error: None,
         menu: crate::menu::MenuState::new(cx),
         settings: Default::default(),

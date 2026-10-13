@@ -58,8 +58,9 @@ show_system_load = true
 # kept. Taking one never changes the index or files. Also under
 # Settings > General.
 agent_checkpoints = true
-# Show the TCP ports each workspace's servers listen on, under its sidebar row
-# and in the status bar; click one to open it in a browser tab. Hosts are
+# Show the TCP ports each workspace's servers listen on, behind a globe at the
+# end of its sidebar row and in the status bar; click one to open it in a
+# browser tab. Hosts are
 # scanned every five seconds with ss or lsof, a remote one over SSH; false
 # stops all scanning. Also under Settings > General.
 show_listening_ports = true

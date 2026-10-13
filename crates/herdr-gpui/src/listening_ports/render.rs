@@ -50,7 +50,7 @@ impl HerdrWindow {
 
 /// A globe and one clickable number per port. `place` is the endpoint and
 /// workspace whose browser tab a click opens.
-pub(crate) fn chips(
+fn chips(
     listed: super::Listed<'_>,
     (endpoint, workspace): (&str, &str),
     theme: &Theme,
@@ -96,20 +96,72 @@ pub(crate) fn chips(
                 .hover(|style| style.text_color(rgb(foreground)).underline())
                 .on_click(cx.listener(move |this, _, window, cx| {
                     cx.stop_propagation();
-                    match &link {
-                        Link::Page(url) => {
-                            this.open_workspace_page(
-                                &endpoint,
-                                &workspace,
-                                url.clone(),
-                                window,
-                                cx,
-                            );
-                        }
-                        Link::Tunnel(key) => {
-                            this.open_tunneled_page(&endpoint, &workspace, key.clone(), window, cx);
-                        }
-                    }
+                    this.open_port_link(&endpoint, &workspace, &link, window, cx);
+                }))
+        }))
+}
+
+/// The ports as a menu, one line each: the number, then the process that
+/// listens on it. A line opens its page and closes the menu; a port this
+/// machine cannot reach is listed but stays inert, its hint saying why.
+pub(crate) fn menu(
+    listed: super::Listed<'_>,
+    (endpoint, workspace): (&str, &str),
+    theme: &Theme,
+    cx: &mut Context<HerdrWindow>,
+) -> Div {
+    let (muted, foreground, surface, active) =
+        (theme.muted, theme.foreground, theme.surface, theme.active);
+    div()
+        .p(px(GAP))
+        .flex()
+        .flex_col()
+        .rounded(px(crate::config::corners::CONTROL))
+        .border_1()
+        .border_color(rgb(active))
+        .bg(rgb(surface))
+        .text_color(rgb(foreground))
+        .shadow_lg()
+        .children(listed.ports.iter().map(|port| {
+            let link = port.link(listed.origin);
+            let hint = SharedString::from(hint(port, link.as_ref()));
+            let id =
+                SharedString::from(format!("port-menu-{endpoint}-{workspace}-{}", port.number));
+            let line = div()
+                .id(id.clone())
+                .debug_selector(|| id.to_string())
+                .flex()
+                .items_center()
+                .gap(px(GAP * 2.))
+                .px(px(GAP))
+                .py(px(4.))
+                .rounded(px(crate::config::corners::SMALL))
+                .child(div().flex_none().child(format!(":{}", port.number)))
+                .when(!port.process.is_empty(), |line| {
+                    line.child(
+                        div()
+                            .flex_none()
+                            .text_color(rgb(muted))
+                            .child(port.process.clone()),
+                    )
+                });
+            let Some(link) = link else {
+                return line.text_color(rgb(muted)).tooltip(move |_, cx| {
+                    cx.new(|_| crate::usage::Hint {
+                        text: hint.clone(),
+                        foreground,
+                        surface,
+                    })
+                    .into()
+                });
+            };
+            let (endpoint, workspace) = (endpoint.to_owned(), workspace.to_owned());
+            line.cursor_pointer()
+                .hover(move |line| line.bg(rgb(active)))
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    cx.stop_propagation();
+                    this.dismiss_ports_menu(window, cx);
+                    this.open_port_link(&endpoint, &workspace, &link, window, cx);
                 }))
         }))
 }
@@ -130,6 +182,27 @@ fn hint(port: &Port, link: Option<&Link>) -> String {
 }
 
 impl HerdrWindow {
+    /// Opens what a listed port links to: its page in a browser tab of the
+    /// workspace, through a tunnel first when the port is remote and local
+    /// to its host.
+    pub(crate) fn open_port_link(
+        &mut self,
+        endpoint: &str,
+        workspace: &str,
+        link: &Link,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match link {
+            Link::Page(url) => {
+                self.open_workspace_page(endpoint, workspace, url.clone(), window, cx);
+            }
+            Link::Tunnel(key) => {
+                self.open_tunneled_page(endpoint, workspace, key.clone(), window, cx);
+            }
+        }
+    }
+
     /// Opens a remote loopback-only port through an SSH tunnel: an existing
     /// one at once, otherwise a new one started on the background executor,
     /// since SSH may take seconds to connect. The page opens once the tunnel

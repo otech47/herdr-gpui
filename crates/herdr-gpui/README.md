@@ -506,10 +506,11 @@ every two seconds over its own SSH shell, kept open while the host is connected
 systems, and remote hosts from a Windows client, show it as unavailable. Set top-level `show_system_load = false`,
 or turn off **Show CPU and memory** in Settings, to hide it and stop sampling.
 
-Workspaces that run a server show the TCP ports it listens on, as `:3000`
-chips on a line under the workspace's sidebar row and, for the focused
-workspace, in the status bar. Clicking one opens the page in a browser tab of
-that workspace (`http://localhost:<port>` on this machine). A port belongs to
+Workspaces that run a server show the TCP ports it listens on: a globe at the
+end of the workspace's sidebar row that opens a small menu of them while the
+pointer rests on it, and `:3000` chips in the status bar for the focused
+workspace. Choosing a port opens the page in a browser tab of that workspace
+(`http://localhost:<port>` on this machine). A port belongs to
 a workspace when its process inherited the `HERDR_WORKSPACE_ID` Herdr sets in
 every pane, so system services and servers started outside Herdr never show,
 and its `HERDR_SOCKET_PATH` names the same daemon, so two sessions on one

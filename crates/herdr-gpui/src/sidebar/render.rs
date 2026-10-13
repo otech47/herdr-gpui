@@ -13,6 +13,7 @@ use super::{
     sections::header_height,
     sidebar_width, sorted_agents,
     tokens::{self, SpaceContext},
+    trailing::Trailing,
     visible_workspace_entries,
     workspaces::{displayed_workspace_status, workspace_badge, workspace_label},
 };
@@ -445,36 +446,19 @@ impl HerdrWindow {
                             &workspace.workspace_id,
                         )
                     });
-                let ports = (self.config.show_listening_ports && !removing_row)
+                // Ports hang behind a globe at the row's end, so a listening
+                // workspace keeps the one line every other row has.
+                let listed = (self.config.show_listening_ports && !removing_row)
                     .then(|| self.listening_ports.get(&daemon, &workspace.workspace_id))
-                    .flatten()
-                    .map(|listed| {
-                        // Under the label column, clear of the status dot.
-                        let indent = if indented {
-                            layout.child_indent() + indicators.width(font) - STATUS_WIDTH
-                        } else {
-                            0.
-                        };
-                        div()
-                            .debug_selector(|| format!("ports-{endpoint_id}-{id}"))
-                            .h(px(line_height(font)))
-                            .flex_none()
-                            .w_full()
-                            .min_w_0()
-                            .pl(px(content_x
-                                + indent
-                                + indicators.width(font)
-                                + layout.gap()))
-                            .pr(px(content_x))
-                            .text_size(px((font.size * 0.85).round()))
-                            .child(crate::listening_ports::chips(
-                                listed,
-                                (&endpoint_id, &workspace.workspace_id),
-                                theme,
-                                (font.size * 0.85).round(),
-                                cx,
-                            ))
-                    });
+                    .flatten();
+                let trailing = listed.map(|_| Trailing::new(&row_cx));
+                let workspace_cx = trailing
+                    .as_ref()
+                    .map_or(row_cx, |trailing| trailing.context(&row_cx));
+                let globe = trailing.as_ref().zip(listed).map(|(trailing, listed)| {
+                    let id = (endpoint_id.as_str(), workspace.workspace_id.as_str());
+                    self.ports_globe(trailing, id, listed, cx)
+                });
                 let element = Cell::new(
                     rows,
                     RowData::Workspace(WorkspaceRow {
@@ -504,7 +488,7 @@ impl HerdrWindow {
                         status: shown_status,
                         lines,
                     }),
-                    &row_cx,
+                    &workspace_cx,
                 )
                 .selected(selected && workspace.focused)
                 .highlighted(selected && menu_target == Some(id.as_str()))
@@ -514,6 +498,7 @@ impl HerdrWindow {
                     (false, false) => RowLift::Resting,
                 })
                 .row()
+                .when_some(globe, |row, globe| row.child(globe))
                 .on_mouse_down(
                     MouseButton::Right,
                     cx.listener(move |this, event: &MouseDownEvent, window, cx| {
@@ -611,26 +596,10 @@ impl HerdrWindow {
                         }),
                     )
                 })
-                .when(carried, |row| row.cursor_grabbing());
-                // Ports ride under their row as one list item, so the drop
-                // preview still measures one height per workspace.
-                let element = match ports {
-                    None => element
-                        .when(gap > 0., |row| row.mt(px(gap)))
-                        .when(shift != px(0.), |row| row.top(shift))
-                        .into_any_element(),
-                    Some(ports) => div()
-                        .flex()
-                        .flex_col()
-                        .flex_none()
-                        .w_full()
-                        .relative()
-                        .when(gap > 0., |unit| unit.mt(px(gap)))
-                        .when(shift != px(0.), |unit| unit.top(shift))
-                        .child(element)
-                        .child(ports)
-                        .into_any_element(),
-                };
+                .when(carried, |row| row.cursor_grabbing())
+                .when(gap > 0., |row| row.mt(px(gap)))
+                .when(shift != px(0.), |row| row.top(shift))
+                .into_any_element();
                 spaces = if carried {
                     // Painted last so it floats over the rows it passes, while
                     // its layout slot keeps the others' positions stable.
