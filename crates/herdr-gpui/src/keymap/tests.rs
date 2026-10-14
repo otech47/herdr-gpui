@@ -1,5 +1,7 @@
 use super::*;
 
+mod launcher_chords;
+
 fn overrides(entries: &[(&str, Binding)]) -> BTreeMap<String, Binding> {
     entries
         .iter()
