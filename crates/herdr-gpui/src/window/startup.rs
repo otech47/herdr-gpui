@@ -1,6 +1,7 @@
 //! What a window was opened to show, applied once its daemon answers.
 use crate::{
     Command, HerdrWindow, NavigationTarget, OwnedNavigationTarget, controls, window::Startup,
+    window_state::Shown,
 };
 use gpui::{Context, Window};
 use herdr_client::protocol::ClientShellSnapshot;
@@ -9,12 +10,15 @@ impl HerdrWindow {
     /// Applies the startup request once the surface is ready, and notes the
     /// space the window shows so it reopens there.
     pub(crate) fn settle_startup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.settle_device_startup(cx) {
+            return;
+        }
         let Some(snapshot) = self.live.snapshot.clone() else {
             return;
         };
         if self.startup.is_some() && self.navigation_ready() {
             match self.startup.take() {
-                Some(Startup::Show { workspace, tab }) => {
+                Some(Startup::Show { workspace, tab, .. }) => {
                     self.pending_navigation = shown_navigation(&snapshot, workspace, tab);
                 }
                 Some(Startup::NewWorkspace) => {
@@ -28,11 +32,63 @@ impl HerdrWindow {
                 None => {}
             }
         }
-        let local = self.endpoints[self.selected_endpoint].id == crate::endpoint::LOCAL;
-        let shown = local
-            .then(|| snapshot.focused_workspace_id.clone())
-            .flatten();
+        if self.startup.is_some() {
+            return;
+        }
+        let endpoint = &self.endpoints[self.selected_endpoint];
+        let device = (endpoint.id != crate::endpoint::LOCAL).then(|| endpoint.id.clone());
+        let shown = snapshot
+            .focused_workspace_id
+            .clone()
+            .map(|workspace| Shown { workspace, device });
         crate::window_state::WindowState::note_workspace(window, shown, cx);
+    }
+
+    /// A startup onto a saved device's space waits for the catalog to list
+    /// the device, then moves the window there. Returns whether it is still
+    /// waiting, or just moved.
+    fn settle_device_startup(&mut self, cx: &mut Context<Self>) -> bool {
+        let waiting = match &self.startup {
+            Some(Startup::Show {
+                device: Some(device),
+                ..
+            }) => *device != self.endpoints[self.selected_endpoint].id,
+            _ => false,
+        };
+        if !waiting {
+            return false;
+        }
+        if !self.catalog_loaded() {
+            return true;
+        }
+        let Some(Startup::Show {
+            workspace,
+            tab,
+            device: Some(device),
+        }) = self.startup.take()
+        else {
+            return false;
+        };
+        let listed = self
+            .endpoints
+            .iter()
+            .any(|endpoint| endpoint.id == device && endpoint.enabled);
+        if !listed {
+            // Waiting on a device no longer in the catalog would never end.
+            return false;
+        }
+        let target = match &tab {
+            Some(tab) => NavigationTarget::Tab(tab.as_str()),
+            None => NavigationTarget::Workspace(workspace.as_str()),
+        };
+        if !self.move_to_device(&device, target, cx) {
+            self.startup = Some(Startup::Show {
+                workspace,
+                tab,
+                device: Some(device),
+            });
+        }
+        true
     }
 }
 

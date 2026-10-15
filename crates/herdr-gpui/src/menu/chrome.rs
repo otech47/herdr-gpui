@@ -290,35 +290,38 @@ impl HerdrWindow {
         let mut panel = div()
             .id("menu-panel")
             .debug_selector(|| "menu-panel".into())
-            .when(matches!(page, Page::Workspace | Page::Dialog(_)), |panel| {
-                panel
-                    .w(px(if page == Page::Workspace {
-                        340.
-                    } else if page == Page::Dialog(WorkspaceAction::DeleteWorktree) {
-                        480.
-                    } else if settled {
-                        // A listing needs room for a title and its branch.
-                        560.
-                    } else {
-                        420.
-                    })
-                    .min((viewport.width - px(24.)).max(px(0.))))
-                    // Every dialog may use the window's height: a captioned form
-                    // whose buttons need scrolling into view reads as clipped.
-                    .max_h((viewport.height - px(24.)).max(px(0.)))
-                    // A listing is a picker: it takes a settled height and
-                    // scrolls inside it, as the theme and command pickers do.
-                    .when(settled, |panel| {
-                        panel
-                            .flex()
-                            .flex_col()
-                            .h(px(560. * (font.size / 12.))
-                                .min((viewport.height - px(24.)).max(px(0.))))
-                            .overflow_hidden()
-                    })
-                    // Lift the popup off the terminal behind it, as the pickers do.
-                    .shadow_lg()
-            })
+            .when(
+                matches!(page, Page::Workspace | Page::Dialog(_) | Page::Launcher),
+                |panel| {
+                    panel
+                        .w(px(if page == Page::Workspace {
+                            340.
+                        } else if page == Page::Dialog(WorkspaceAction::DeleteWorktree) {
+                            480.
+                        } else if settled {
+                            // A listing needs room for a title and its branch.
+                            560.
+                        } else {
+                            420.
+                        })
+                        .min((viewport.width - px(24.)).max(px(0.))))
+                        // Every dialog may use the window's height: a captioned form
+                        // whose buttons need scrolling into view reads as clipped.
+                        .max_h((viewport.height - px(24.)).max(px(0.)))
+                        // A listing is a picker: it takes a settled height and
+                        // scrolls inside it, as the theme and command pickers do.
+                        .when(settled, |panel| {
+                            panel
+                                .flex()
+                                .flex_col()
+                                .h(px(560. * (font.size / 12.))
+                                    .min((viewport.height - px(24.)).max(px(0.))))
+                                .overflow_hidden()
+                        })
+                        // Lift the popup off the terminal behind it, as the pickers do.
+                        .shadow_lg()
+                },
+            )
             .when(footer_anchored, |panel| {
                 self.anchor_footer_panel(panel, viewport, page)
             })
@@ -408,7 +411,7 @@ impl HerdrWindow {
                 !footer_anchored
                     && !matches!(page, Page::Usage(_))
                     && !pointer_anchored
-                    && !matches!(page, Page::Dialog(_)),
+                    && !matches!(page, Page::Dialog(_) | Page::Launcher),
                 |panel| {
                     panel
                         .w((viewport.width - px(32.)).max(px(0.)).min(px(
@@ -592,6 +595,8 @@ impl HerdrWindow {
             panel = panel.child(self.render_palette(cx));
         } else if page == Page::ConfirmClose {
             panel = panel.child(self.render_close_confirmation(cx));
+        } else if page == Page::Launcher {
+            panel = panel.child(self.render_launcher(cx));
         } else if page == Page::Preferences {
             panel = panel.child(self.render_preferences(cx));
         } else if page == Page::AppUpdate {

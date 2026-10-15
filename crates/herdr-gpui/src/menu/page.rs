@@ -55,6 +55,8 @@ pub(crate) enum Page {
     Checkpoints,
     /// One prompt sent to several agents, and their comparison.
     FanOut,
+    /// Which device a `[[launchers]]` chord runs its command for.
+    Launcher,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

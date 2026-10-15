@@ -46,6 +46,8 @@ pub enum WorkspaceCommand {
     Focus {
         workspace: String,
         tab: Option<String>,
+        /// The endpoint ID the workspace belongs to, when not any.
+        device: Option<String>,
     },
     Help,
 }
@@ -97,6 +99,8 @@ pub enum CliError {
     MissingWorkspace,
     #[error("--tab requires a tab ID")]
     MissingTab,
+    #[error("--device requires an endpoint ID")]
+    MissingDevice,
     #[error("browser arguments must be UTF-8")]
     InvalidBrowserEncoding(OsString),
     #[error("workspace requires a command: focus, or --help")]
@@ -160,11 +164,15 @@ fn parse_workspace(mut args: impl Iterator<Item = OsString>) -> Result<Workspace
             };
             let workspace = value(args.next()).ok_or(CliError::MissingWorkspace)?;
             let mut tab = None;
+            let mut device = None;
             while let Some(arg) = args.next() {
                 match arg.to_str() {
                     Some("--help" | "-h") => return Ok(WorkspaceCommand::Help),
                     Some("--tab") => {
                         tab = Some(utf8(value(args.next()).ok_or(CliError::MissingTab)?)?);
+                    }
+                    Some("--device") => {
+                        device = Some(utf8(value(args.next()).ok_or(CliError::MissingDevice)?)?);
                     }
                     _ => return Err(CliError::UnexpectedArgument(arg)),
                 }
@@ -172,6 +180,7 @@ fn parse_workspace(mut args: impl Iterator<Item = OsString>) -> Result<Workspace
             Ok(WorkspaceCommand::Focus {
                 workspace: utf8(workspace)?,
                 tab,
+                device,
             })
         }
         _ => Err(CliError::UnknownWorkspaceCommand(command)),

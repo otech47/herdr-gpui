@@ -613,6 +613,22 @@ pub enum Error {
         #[source]
         source: gpui::InvalidKeystrokeError,
     },
+    #[error("launchers: invalid keystroke {keystroke:?}")]
+    InvalidLauncherKey {
+        keystroke: String,
+        #[source]
+        source: gpui::InvalidKeystrokeError,
+    },
+    #[error(
+        "launchers: {0:?} needs a cmd, ctrl, alt, or fn modifier and must not be a keybinding, pane key, or prefix"
+    )]
+    LauncherKeyTaken(String),
+    #[error("launchers: {0:?} is listed twice")]
+    DuplicateLauncherKey(String),
+    #[error("launchers: {0:?} has no command")]
+    EmptyLauncherCommand(String),
+    #[error("[[launchers]] must list at most {0} entries")]
+    TooManyLaunchers(usize),
     #[error(
         "pane_keys: {0:?} needs a cmd, ctrl, alt, or fn modifier so typing still reaches the terminal"
     )]

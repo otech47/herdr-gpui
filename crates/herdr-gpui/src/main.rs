@@ -43,6 +43,7 @@ mod icons;
 mod input;
 mod integrations;
 mod keymap;
+mod launcher;
 mod lenient;
 mod links;
 mod listening_ports;

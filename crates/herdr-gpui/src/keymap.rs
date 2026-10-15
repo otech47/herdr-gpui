@@ -438,8 +438,21 @@ fn custom_triggers(command: &ClientShellCommand) -> impl Iterator<Item = Trigger
 
 /// GPUI's own matching, so a shifted symbol such as `?` matches however the
 /// keyboard reports it.
-fn typed_matches(typed: &Keystroke, bound: &Keystroke) -> bool {
+pub(crate) fn typed_matches(typed: &Keystroke, bound: &Keystroke) -> bool {
     typed.should_match(&KeybindingKeystroke::from_keystroke(bound.clone()))
+}
+
+/// Whether two bound keystrokes name the same key, however they are spelled.
+pub(crate) fn same_keystroke(a: &Keystroke, b: &Keystroke) -> bool {
+    identity(a) == identity(b)
+}
+
+impl Keymap {
+    /// Whether a `[[launchers]]` keystroke can run here, under the rule a
+    /// daemon command's direct keystroke follows.
+    pub(crate) fn accepts_direct(&self, keystroke: &Keystroke) -> bool {
+        self.runs_custom(&Trigger::Direct(keystroke.clone()))
+    }
 }
 
 /// A keystroke without one of these would stop typing from reaching the

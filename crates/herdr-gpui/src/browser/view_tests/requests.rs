@@ -15,6 +15,7 @@ fn request(
                 daemon: daemon.map(std::path::Path::new),
                 workspace,
                 pane: Some("w0:p1"),
+                device: None,
             };
             view.open_requested_browser_tab(
                 &target,

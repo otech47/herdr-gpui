@@ -24,6 +24,16 @@ struct Geometry {
     /// The space the window showed, so it reopens there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     workspace: Option<String>,
+    /// The saved device that space belongs to; none for the local daemon.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    device: Option<String>,
+}
+
+/// The space a restored window reopens on, and its device when saved.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Shown {
+    pub workspace: String,
+    pub device: Option<String>,
 }
 
 impl Geometry {
@@ -58,6 +68,7 @@ impl Geometry {
             height: bounds.size.height.into(),
             display: None,
             workspace: None,
+            device: None,
         }
     }
 }
@@ -170,7 +181,7 @@ impl WindowState {
     pub(crate) fn placement(
         default: Bounds<Pixels>,
         cx: &mut App,
-    ) -> (Bounds<Pixels>, Option<DisplayId>, Option<String>) {
+    ) -> (Bounds<Pixels>, Option<DisplayId>, Option<Shown>) {
         if !cx.has_global::<Self>() {
             return (default, None, None);
         }
@@ -191,9 +202,12 @@ impl WindowState {
         let display = saved_display(geometry.display, &uuids)
             .and_then(|index| displays.get(index).cloned())
             .or_else(|| cx.primary_display());
-        let workspace = geometry.workspace.clone();
+        let shown = geometry.workspace.clone().map(|workspace| Shown {
+            workspace,
+            device: geometry.device.clone(),
+        });
         let bounds = fit(geometry, display.as_ref().map(|display| display.bounds())).bounds();
-        (bounds, display.map(|display| display.id()), workspace)
+        (bounds, display.map(|display| display.id()), shown)
     }
 
     fn save(&self) {
@@ -239,25 +253,30 @@ impl WindowState {
         }
     }
 
-    fn set_workspace(&mut self, id: WindowId, workspace: Option<String>) {
+    fn set_workspace(&mut self, id: WindowId, shown: Option<Shown>) {
         if self.quitting {
             return;
         }
+        let (workspace, device) = match shown {
+            Some(shown) => (Some(shown.workspace), shown.device),
+            None => (None, None),
+        };
         if let Some((_, geometry)) = self.live.iter_mut().find(|(key, _)| *key == id)
-            && geometry.workspace != workspace
+            && (geometry.workspace != workspace || geometry.device != device)
         {
             geometry.workspace = workspace;
+            geometry.device = device;
             self.save();
         }
     }
 
     /// Records the space `window` shows, so it reopens there.
-    pub(crate) fn note_workspace(window: &Window, workspace: Option<String>, cx: &mut App) {
+    pub(crate) fn note_workspace(window: &Window, shown: Option<Shown>, cx: &mut App) {
         if !cx.has_global::<Self>() {
             return;
         }
         let id = window.window_handle().window_id();
-        cx.global_mut::<Self>().set_workspace(id, workspace);
+        cx.global_mut::<Self>().set_workspace(id, shown);
     }
 
     pub(crate) fn observe<T: 'static>(window: &mut Window, cx: &mut Context<T>) {
@@ -293,6 +312,7 @@ mod tests {
             height: 700.,
             display: None,
             workspace: None,
+            device: None,
         }
     }
 
@@ -377,6 +397,52 @@ mod tests {
         assert_eq!(read(&path).unwrap(), vec![on_external, geometry(0.)]);
         fs::write(&path, br#"[{"x":1,"y":2,"width":900,"height":700}]"#).unwrap();
         assert_eq!(read(&path).unwrap()[0].display, None);
+    }
+
+    #[test]
+    fn a_saved_devices_space_round_trips_and_a_local_one_names_no_device() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("windows.json");
+        let on_device = Geometry {
+            workspace: Some("w_3".into()),
+            device: Some("ssh:0123456789abcdef0123456789abcdef".into()),
+            ..geometry(0.)
+        };
+        let local = Geometry {
+            workspace: Some("w_8".into()),
+            ..geometry(100.)
+        };
+        write(&path, &[on_device.clone(), local.clone()]).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert_eq!(text.matches("\"device\"").count(), 1);
+        assert_eq!(read(&path).unwrap(), vec![on_device, local]);
+        let mut state = WindowState {
+            restored: VecDeque::new(),
+            live: Vec::new(),
+            writer: Some(Writer::start("window-state", path.clone()).unwrap()),
+            quitting: false,
+        };
+        let id = WindowId::from(1);
+        state.update(id, geometry(0.));
+        state.set_workspace(
+            id,
+            Some(Shown {
+                workspace: "w_3".into(),
+                device: Some("ssh:0123456789abcdef0123456789abcdef".into()),
+            }),
+        );
+        state.set_workspace(
+            id,
+            Some(Shown {
+                workspace: "w_3".into(),
+                device: None,
+            }),
+        );
+        let writer = state.shutdown().unwrap();
+        writer.finish();
+        let saved = read(&path).unwrap();
+        assert_eq!(saved[0].workspace.as_deref(), Some("w_3"));
+        assert_eq!(saved[0].device, None);
     }
 
     #[test]

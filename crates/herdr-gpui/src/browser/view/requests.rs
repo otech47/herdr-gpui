@@ -10,15 +10,20 @@ use gpui::*;
 
 impl HerdrWindow {
     /// The endpoint and workspace a control request names, if this window
-    /// shows it. `strict` requires the caller's own daemon; otherwise any
-    /// endpoint showing the named workspace qualifies. Only the Unix control
+    /// shows it. A named device is the only endpoint searched. Otherwise
+    /// `strict` requires the caller's own daemon, and any endpoint showing
+    /// the named workspace qualifies without it. Only the Unix control
     /// socket asks.
     fn browser_target(&self, target: &Target<'_>, strict: bool) -> Option<(usize, String)> {
         self.endpoints
             .iter()
             .enumerate()
             .find_map(|(index, endpoint)| {
-                if strict {
+                if let Some(device) = target.device {
+                    if endpoint.id != device {
+                        return None;
+                    }
+                } else if strict {
                     let matches = match target.daemon {
                         Some(daemon) => {
                             endpoint.connection.target.socket_path().ok().as_deref() == Some(daemon)
@@ -97,11 +102,15 @@ impl HerdrWindow {
             return false;
         };
         if self.config.new_space_in_window {
+            // A window always opens onto the local daemon; a saved device's
+            // space is reached by moving the new window there.
+            let device = (index != 0).then(|| self.endpoints[index].id.clone());
             crate::app::open_window_for(
-                self.endpoints[index].connection.target.clone(),
+                self.endpoints[0].connection.target.clone(),
                 Some(crate::window::Startup::Show {
                     workspace,
                     tab: tab.map(str::to_owned),
+                    device,
                 }),
                 cx,
             );

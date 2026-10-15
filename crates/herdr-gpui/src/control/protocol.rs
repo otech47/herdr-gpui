@@ -58,6 +58,11 @@ pub(crate) struct Caller {
     /// sessions' identical workspace IDs apart.
     #[serde(default)]
     pub daemon_socket: Option<String>,
+    /// The app's own ID of the endpoint the workspace belongs to: `local`,
+    /// or `ssh:` and a saved device's profile ID. Only that endpoint is
+    /// searched. Omitted on the wire when unset, as older apps refuse it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -146,6 +151,7 @@ mod tests {
                 pane_id: Some("w_1:p1".into()),
                 workspace_id: Some("w_1".into()),
                 daemon_socket: None,
+                device: None,
             },
             focus: true,
         });
@@ -155,6 +161,17 @@ mod tests {
             r#"{"method":"browser.open","page":{"url":"http://localhost:3000/"},"caller":{"pane_id":"w_1:p1","workspace_id":"w_1","daemon_socket":null},"focus":true}"#
         );
         assert_eq!(serde_json::from_str::<Request>(&text).unwrap(), request);
+        let on_device = Request::FocusWorkspace(Caller {
+            workspace_id: Some("w_1".into()),
+            device: Some("ssh:0123456789abcdef0123456789abcdef".into()),
+            ..Default::default()
+        });
+        let text = serde_json::to_string(&on_device).unwrap();
+        assert_eq!(
+            text,
+            r#"{"method":"workspace.focus","pane_id":null,"workspace_id":"w_1","daemon_socket":null,"device":"ssh:0123456789abcdef0123456789abcdef"}"#
+        );
+        assert_eq!(serde_json::from_str::<Request>(&text).unwrap(), on_device);
         let minimal: Request = serde_json::from_str(
             r#"{"method":"browser.open","page":{"file":"/srv/a.html"},"caller":{},"focus":false}"#,
         )

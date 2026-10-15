@@ -42,6 +42,10 @@ impl HerdrWindow {
         if self.settings_key(event, window, cx) {
             return;
         }
+        if self.menu.page == Some(Page::Launcher) {
+            self.launcher_key(event, window, cx);
+            return;
+        }
         if self.menu.page == Some(Page::Dialog(WorkspaceAction::OpenWorktree))
             && (self
                 .menu

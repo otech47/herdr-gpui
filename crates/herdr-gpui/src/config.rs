@@ -107,6 +107,8 @@ pub struct Config {
     pub(crate) pane_keys: PaneKeys,
     /// Per saved device, by catalog profile ID.
     pub(crate) devices: BTreeMap<String, DeviceSettings>,
+    /// The `[[launchers]]` chords, in file order.
+    pub(crate) launchers: Vec<Launcher>,
     pub palette: crate::palette::PaletteConfig,
     /// Keys the file names that this build does not know, sorted. They are
     /// ignored, as Herdr ignores its own, so a config written by a newer
@@ -116,6 +118,73 @@ pub struct Config {
 
 /// A device list larger than any real catalog is a config mistake.
 const MAX_DEVICES: usize = 256;
+
+/// More chords than a keyboard has keys is a config mistake.
+const MAX_LAUNCHERS: usize = 64;
+
+/// One `[[launchers]]` entry: a keystroke that runs a shell command on this
+/// computer for a device chosen in a prompt, which the command learns from
+/// its environment.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Launcher {
+    pub key: gpui::Keystroke,
+    /// The prompt's title.
+    pub label: String,
+    pub command: String,
+    /// Whether the chord asks which saved device the command is for. Off, or
+    /// with no saved device to choose, it runs for this computer at once.
+    pub ask_device: bool,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct LauncherSettings {
+    key: String,
+    label: Option<String>,
+    command: String,
+    ask_device: Option<bool>,
+}
+
+/// Every chord needs a modifier the keymap leaves free, no two share one,
+/// and each runs something.
+fn launchers(settings: Vec<LauncherSettings>, keymap: &Keymap) -> Result<Vec<Launcher>> {
+    if settings.len() > MAX_LAUNCHERS {
+        return Err(Error::TooManyLaunchers(MAX_LAUNCHERS));
+    }
+    let mut launchers: Vec<Launcher> = Vec::with_capacity(settings.len());
+    for entry in settings {
+        let key =
+            gpui::Keystroke::parse(&entry.key).map_err(|source| Error::InvalidLauncherKey {
+                keystroke: entry.key.clone(),
+                source,
+            })?;
+        if !keymap.accepts_direct(&key) {
+            return Err(Error::LauncherKeyTaken(entry.key));
+        }
+        if launchers
+            .iter()
+            .any(|other| crate::keymap::same_keystroke(&other.key, &key))
+        {
+            return Err(Error::DuplicateLauncherKey(entry.key));
+        }
+        let command = entry.command.trim();
+        if command.is_empty() {
+            return Err(Error::EmptyLauncherCommand(entry.key));
+        }
+        let label = entry
+            .label
+            .map(|label| label.trim().to_owned())
+            .filter(|label| !label.is_empty())
+            .unwrap_or_else(|| command.to_owned());
+        launchers.push(Launcher {
+            key,
+            label,
+            command: command.to_owned(),
+            ask_device: entry.ask_device.unwrap_or(true),
+        });
+    }
+    Ok(launchers)
+}
 
 /// Whose `[keys]` a saved device answers to, as `herdr --remote-keybindings`
 /// chooses for the TUI. Local is upstream's default: muscle memory stays the
@@ -302,6 +371,7 @@ impl Default for Config {
             keybinding_overrides: BTreeMap::new(),
             pane_keys: PaneKeys::new(),
             devices: BTreeMap::new(),
+            launchers: Vec::new(),
             unknown_keys: Vec::new(),
             palette: crate::palette::PaletteConfig::default(),
             sidebar: font(monospace, 12.0),
@@ -345,6 +415,7 @@ struct Settings {
     keybindings: BTreeMap<String, Binding>,
     pane_keys: PaneKeys,
     devices: BTreeMap<String, DeviceSettings>,
+    launchers: Vec<LauncherSettings>,
     palette: crate::palette::PaletteConfig,
 }
 
@@ -623,6 +694,7 @@ impl Config {
             return Err(Error::TooManyDevices(MAX_DEVICES));
         }
         config.devices = settings.devices;
+        config.launchers = launchers(settings.launchers, &config.keybindings)?;
         settings.palette.validate()?;
         config.palette = settings.palette;
         if let Some(theme) = settings.theme {

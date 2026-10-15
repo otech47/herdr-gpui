@@ -2006,6 +2006,23 @@ Windows setup) nothing is saved and the window says so.
   or one that cannot be read, leaves the device on local keys, and the menu
   says why. Only keybindings follow the server; themes, sidebar, and toasts
   stay local, and no remote config file is read.
+- `[[launchers]]` entries in `config-gpui.local.toml` are chords that start
+  an agent session on a device of your choice. Each has a `key` (a keystroke
+  with a cmd, ctrl, alt, or fn modifier that no keybinding, pane key, or
+  prefix holds), a `command` run by `sh -c` on this computer, an optional
+  `label` for the prompt's title, and `ask_device` (default `true`). With a
+  saved SSH device enabled, the chord opens a prompt listing this computer
+  and every enabled device: up and down or a digit pick one, Enter runs,
+  Escape cancels. Without a saved device, or with `ask_device = false`, the
+  command runs for this computer at once. A plain new tab never asks. The
+  command gets `HERDR_LAUNCH_DEVICE` (the endpoint ID: `local`, or `ssh:`
+  and the device's profile ID), `HERDR_LAUNCH_DEVICE_LABEL`, and for a saved
+  device `HERDR_LAUNCH_HOST` (its SSH destination); for this computer it also
+  gets `HERDR_ACTIVE_WORKSPACE_ID` and `HERDR_SOCKET_PATH` as a daemon
+  command would. Pair it with `herdr-gpui workspace focus ID --device
+  ENDPOINT`, which raises the window showing that device's workspace, or
+  opens one for it under `new_space_in_window`. A window remembers the device
+  of the space it shows and reopens on it, once the catalog lists the device.
 - Cmd-B toggles sidebar visibility locally without changing daemon state.
   Cmd-, opens Settings; Cmd-/ opens the grouped native shortcut reference.
   Native shortcut labels and keycaps come from the shared `controls::COMMANDS`

@@ -118,9 +118,10 @@ pub(crate) fn open_window(
                     fixture,
                 );
                 view.updater = updater;
-                view.startup = shown.map(|workspace| crate::window::Startup::Show {
-                    workspace,
+                view.startup = shown.map(|shown| crate::window::Startup::Show {
+                    workspace: shown.workspace,
                     tab: None,
+                    device: shown.device,
                 });
                 crate::window_state::WindowState::observe(window, cx);
                 view

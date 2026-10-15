@@ -71,9 +71,12 @@ pub(crate) use server_keys::ActiveServerKeymap;
 pub(crate) enum Startup {
     /// Show this space: the one the window showed when last saved, or the one
     /// a control request opened the window for, at one of its tabs when named.
+    /// A saved device's space names the device, which the window moves to
+    /// once the catalog lists it.
     Show {
         workspace: String,
         tab: Option<String>,
+        device: Option<String>,
     },
     /// Create a space and show it.
     NewWorkspace,
@@ -259,6 +262,9 @@ pub(crate) struct HerdrWindow {
     pub(crate) server_keys: Option<server_keys::ServerKeymap>,
     pub(super) shift_taps: double_shift::ShiftTaps,
     pub(crate) _prefix_interceptor: Subscription,
+    /// What the launchers would have run, in place of spawning it.
+    #[cfg(test)]
+    pub(crate) launched: Vec<crate::launcher::LaunchPlan>,
 }
 
 /// See `HerdrWindow::surface_signal`.
@@ -816,6 +822,8 @@ impl HerdrWindow {
             server_keys: None,
             shift_taps: Default::default(),
             _prefix_interceptor: Self::intercept_prefix(window, cx),
+            #[cfg(test)]
+            launched: Vec::new(),
             _activation: cx.observe_window_activation(window, |this, window, cx| {
                 this.active = window.is_window_active();
                 if this.active {

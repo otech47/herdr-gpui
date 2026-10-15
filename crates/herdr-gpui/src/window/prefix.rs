@@ -53,6 +53,11 @@ impl HerdrWindow {
                 cx.stop_propagation();
                 cx.notify();
             } else if self.menu.page.is_none()
+                && let Some(index) = self.launcher_for(keystroke)
+            {
+                cx.stop_propagation();
+                self.open_launcher(index, window, cx);
+            } else if self.menu.page.is_none()
                 && let Some((id, action)) = self.custom_command(keystroke, false)
             {
                 cx.stop_propagation();

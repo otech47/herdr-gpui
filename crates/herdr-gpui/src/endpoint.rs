@@ -607,6 +607,26 @@ impl HerdrWindow {
         if !self.select_endpoint(endpoint, cx) {
             return false;
         }
+        self.queue_navigation(target, cx);
+        true
+    }
+
+    /// `navigate_endpoint` for a window reopening onto a saved device's
+    /// space: the move is this window's own, not the chosen host.
+    pub(crate) fn move_to_device(
+        &mut self,
+        endpoint: &str,
+        target: NavigationTarget<&str>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if self.menu.page.is_some() || !self.switch_endpoint(endpoint, cx) {
+            return false;
+        }
+        self.queue_navigation(target, cx);
+        true
+    }
+
+    fn queue_navigation(&mut self, target: NavigationTarget<&str>, cx: &mut Context<Self>) {
         self.pending_toast = None;
         self.pending_navigation = None;
         if self.input_ready() {
@@ -614,7 +634,12 @@ impl HerdrWindow {
         } else {
             self.pending_navigation = Some((&target).into());
         }
-        true
+    }
+
+    /// Whether the saved device catalog has been read since the window
+    /// opened, so a device missing from `endpoints` is really gone.
+    pub(crate) fn catalog_loaded(&self) -> bool {
+        self.catalog.initialized
     }
 
     pub(super) fn input_ready(&self) -> bool {

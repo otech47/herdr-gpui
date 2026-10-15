@@ -127,6 +127,7 @@ fn workspace_focus_takes_a_tab() {
         LaunchMode::Workspace(WorkspaceCommand::Focus {
             workspace: "w_1".into(),
             tab: None,
+            device: None,
         })
     );
     assert_eq!(
@@ -134,6 +135,7 @@ fn workspace_focus_takes_a_tab() {
         LaunchMode::Workspace(WorkspaceCommand::Focus {
             workspace: "w_1".into(),
             tab: Some("w_1:t2".into()),
+            device: None,
         })
     );
     assert_eq!(
@@ -157,6 +159,43 @@ fn workspace_focus_takes_a_tab() {
     ];
     for (args, expected) in rejected {
         assert_eq!(mode(args).unwrap_err(), expected, "{args:?}");
+    }
+}
+
+#[test]
+fn workspace_focus_takes_a_device() {
+    let mode = |args: &[&str]| LaunchOptions::parse(args.iter().copied()).map(|o| o.mode);
+    let device = "ssh:0123456789abcdef0123456789abcdef";
+    assert_eq!(
+        mode(&["workspace", "focus", "w_1", "--device", device]).unwrap(),
+        LaunchMode::Workspace(WorkspaceCommand::Focus {
+            workspace: "w_1".into(),
+            tab: None,
+            device: Some(device.into()),
+        })
+    );
+    assert_eq!(
+        mode(&[
+            "workspace",
+            "focus",
+            "w_1",
+            "--device",
+            device,
+            "--tab",
+            "w_1:t2"
+        ])
+        .unwrap(),
+        LaunchMode::Workspace(WorkspaceCommand::Focus {
+            workspace: "w_1".into(),
+            tab: Some("w_1:t2".into()),
+            device: Some(device.into()),
+        })
+    );
+    for args in [
+        &["workspace", "focus", "w_1", "--device"][..],
+        &["workspace", "focus", "w_1", "--device", "--tab", "w_1:t2"],
+    ] {
+        assert_eq!(mode(args).unwrap_err(), CliError::MissingDevice, "{args:?}");
     }
 }
 

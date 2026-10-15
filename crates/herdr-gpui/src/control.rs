@@ -53,12 +53,14 @@ fn socket_path() -> Option<PathBuf> {
 }
 
 /// What a request asks the windows to find: a workspace, optionally of one
-/// particular local daemon, and the pane asking.
+/// particular local daemon or saved device, and the pane asking.
 #[cfg(unix)]
 pub(crate) struct Target<'a> {
     pub daemon: Option<&'a Path>,
     pub workspace: Option<&'a str>,
     pub pane: Option<&'a str>,
+    /// An endpoint ID that alone is searched, whatever `daemon` says.
+    pub device: Option<&'a str>,
 }
 
 /// Where a window opened a requested tab.
@@ -88,6 +90,7 @@ fn valid_caller(caller: &Caller) -> bool {
             .daemon_socket
             .as_deref()
             .is_none_or(|path| plain(path, 4096))
+        && caller.device.as_deref().is_none_or(|id| plain(id, 256))
 }
 
 #[cfg(unix)]
@@ -152,6 +155,7 @@ fn open_browser(request: &BrowserOpen, cx: &mut App) -> Response {
         daemon: caller.daemon_socket.as_deref().map(Path::new),
         workspace: caller.workspace_id.as_deref(),
         pane: caller.pane_id.as_deref(),
+        device: caller.device.as_deref(),
     };
     // First the window connected to the caller's own daemon; then, when the
     // socket paths are spelled differently, any window showing its workspace.
@@ -215,6 +219,7 @@ fn focus_workspace(caller: &Caller, tab: Option<&str>, cx: &mut App) -> Response
         daemon: caller.daemon_socket.as_deref().map(Path::new),
         workspace: Some(workspace),
         pane: None,
+        device: caller.device.as_deref(),
     };
     let focused = Response::Focused {
         workspace_id: workspace.to_owned(),
@@ -424,6 +429,7 @@ fn caller(workspace: Option<String>) -> crate::Result<Caller> {
         pane_id: env_id("HERDR_PANE_ID"),
         workspace_id: workspace.or_else(|| env_id("HERDR_WORKSPACE_ID")),
         daemon_socket: caller_daemon()?,
+        device: None,
     })
 }
 
@@ -487,8 +493,13 @@ fn browser_open(target: &str, workspace: Option<String>, focus: bool) -> crate::
     }
 }
 
-fn workspace_focus(workspace: String, tab: Option<String>) -> crate::Result<String> {
-    let caller = caller(Some(workspace))?;
+fn workspace_focus(
+    workspace: String,
+    tab: Option<String>,
+    device: Option<String>,
+) -> crate::Result<String> {
+    let mut caller = caller(Some(workspace))?;
+    caller.device = device;
     let request = match tab {
         Some(tab_id) => Request::FocusTab(TabFocus { caller, tab_id }),
         None => Request::FocusWorkspace(caller),
@@ -545,12 +556,14 @@ Exit status: 0 done, 1 refused, 2 invalid arguments, 3 Herdr GPUI not running,
 4 no notes (feedback).";
 
 const WORKSPACE_USAGE: &str = "\
-herdr-gpui workspace focus ID [--tab TAB]
+herdr-gpui workspace focus ID [--tab TAB] [--device ENDPOINT]
     Bring the window of the running Herdr GPUI that shows workspace ID to the
     front. When no window shows it, the frontmost window switches to it, or a
     window opens for it when new_space_in_window is set. With --tab, that one
     window also selects tab TAB of the workspace. Other windows stay where
-    they are.
+    they are. With --device, only that endpoint is searched: local, or ssh:
+    followed by a saved device's profile ID, so a device's workspace is shown
+    rather than a local one with the same ID.
 Exit status: 0 done, 1 refused, 2 invalid arguments, 3 Herdr GPUI not running.";
 
 pub(crate) fn run_workspace(command: WorkspaceCommand) -> ExitCode {
@@ -559,7 +572,11 @@ pub(crate) fn run_workspace(command: WorkspaceCommand) -> ExitCode {
             println!("{WORKSPACE_USAGE}");
             ExitCode::SUCCESS
         }
-        WorkspaceCommand::Focus { workspace, tab } => report(workspace_focus(workspace, tab)),
+        WorkspaceCommand::Focus {
+            workspace,
+            tab,
+            device,
+        } => report(workspace_focus(workspace, tab, device)),
     }
 }
 

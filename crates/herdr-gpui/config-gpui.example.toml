@@ -193,6 +193,18 @@ project_roots = []
 # [devices.0123456789abcdef0123456789abcdef]
 # keybindings = "server"
 
+# Chords that start an agent session on a device of your choice. With a saved
+# SSH device enabled the key opens a prompt listing this computer and every
+# enabled device; the command then runs here through `sh -c` with
+# HERDR_LAUNCH_DEVICE, HERDR_LAUNCH_DEVICE_LABEL and, for a device, its SSH
+# destination as HERDR_LAUNCH_HOST. The key needs a cmd, ctrl, alt, or fn
+# modifier that no keybinding, pane key, or prefix holds. `label` names the
+# prompt; `ask_device = false` runs for this computer without asking.
+# [[launchers]]
+# key = "ctrl-cmd-2"
+# label = "claude in tools"
+# command = "herdr-launch tools ~/tools claude"
+
 # Preferences offers a searchable picker for all four families together or each row.
 # Platform default removes the local family override; fallback cascades remain active.
 [sidebar]
