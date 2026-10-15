@@ -5,6 +5,7 @@ use crate::{
     HerdrWindow, NavigationTarget,
     browser::{Location, Store, TabId},
     control::{Placed, Target},
+    sidebar::workspace_label_by_id,
 };
 use gpui::*;
 
@@ -82,6 +83,46 @@ impl HerdrWindow {
         if let Some(tab) = tab {
             let endpoint = self.endpoints[index].id.clone();
             self.navigate_endpoint(&endpoint, NavigationTarget::Tab(tab), cx);
+        }
+        window.activate_window();
+        true
+    }
+
+    /// Switches this window to the requested workspace when the space it
+    /// shows has the same name on another device, so one project keeps one window.
+    pub(crate) fn raise_if_showing_namesake(
+        &mut self,
+        target: &Target<'_>,
+        tab: Option<&str>,
+        strict: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some((index, workspace)) = self.browser_target(target, strict) else {
+            return false;
+        };
+        let shown = self.live.snapshot.as_ref().and_then(|snapshot| {
+            workspace_label_by_id(snapshot, snapshot.focused_workspace_id.as_deref()?)
+        });
+        let requested = if index == self.selected_endpoint {
+            &self.live
+        } else {
+            &self.endpoints[index].live
+        };
+        let requested = requested
+            .snapshot
+            .as_ref()
+            .and_then(|snapshot| workspace_label_by_id(snapshot, &workspace));
+        if shown.is_none() || shown != requested {
+            return false;
+        }
+        let endpoint = self.endpoints[index].id.clone();
+        let navigation = match tab {
+            Some(tab) => NavigationTarget::Tab(tab),
+            None => NavigationTarget::Workspace(workspace.as_str()),
+        };
+        if !self.navigate_endpoint(&endpoint, navigation, cx) {
+            return false;
         }
         window.activate_window();
         true

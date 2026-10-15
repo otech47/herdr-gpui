@@ -18,7 +18,7 @@ use herdr_client::protocol::{ClientShellAgent, ClientShellSnapshot, ClientShellT
 use std::time::Instant;
 
 mod views;
-pub(crate) use views::ListedTab;
+pub(crate) use views::{ListedTab, workspace_label_by_id};
 
 /// Each listed row as its own drop unit, its child index and painted shift.
 pub(super) type DropRows = Vec<(usize, usize, Pixels)>;

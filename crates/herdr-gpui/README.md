@@ -2021,10 +2021,11 @@ Windows setup) nothing is saved and the window says so.
   device `HERDR_LAUNCH_HOST` (its SSH destination); for this computer it also
   gets `HERDR_ACTIVE_WORKSPACE_ID` and `HERDR_SOCKET_PATH` as a daemon
   command would. Pair it with `herdr-gpui workspace focus ID --device
-  ENDPOINT`, which raises the window showing that device's workspace, or
-  opens one for it under `new_space_in_window`. A window remembers the device
-  of the space it shows and reopens on it, once the catalog lists the device.
-  A window opened for a space stays off the last chosen device.
+  ENDPOINT`, which raises the window showing that device's workspace, else
+  switches a window showing a space of the same name on another device to
+  it, else opens one for it under `new_space_in_window`. A window remembers
+  the device of the space it shows and reopens on it, once the catalog lists
+  the device. A window opened for a space stays off the last chosen device.
 - Cmd-B toggles sidebar visibility locally without changing daemon state.
   Cmd-, opens Settings; Cmd-/ opens the grouped native shortcut reference.
   Native shortcut labels and keycaps come from the shared `controls::COMMANDS`

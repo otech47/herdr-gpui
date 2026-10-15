@@ -195,8 +195,9 @@ fn open_browser(request: &BrowserOpen, cx: &mut App) -> Response {
 }
 
 /// Brings the window showing the named workspace to the front, at the named
-/// tab. Without one, the frontmost window of its daemon shows it, or a window
-/// opens for it.
+/// tab. Without one, a window showing a space of the same name switches to
+/// it, else the frontmost window of its daemon shows it, or a window opens
+/// for it.
 #[cfg(unix)]
 fn focus_workspace(caller: &Caller, tab: Option<&str>, cx: &mut App) -> Response {
     if !valid_caller(caller) || tab.is_some_and(|tab| !plain(tab, 256)) {
@@ -230,6 +231,17 @@ fn focus_workspace(caller: &Caller, tab: Option<&str>, cx: &mut App) -> Response
                 view.raise_if_showing(&target, tab, strict, window, cx)
             });
             if raised.unwrap_or(false) {
+                cx.activate(true);
+                return focused;
+            }
+        }
+    }
+    for strict in [true, false] {
+        for handle in &windows {
+            let switched = handle.update(cx, |view, window, cx| {
+                view.raise_if_showing_namesake(&target, tab, strict, window, cx)
+            });
+            if switched.unwrap_or(false) {
                 cx.activate(true);
                 return focused;
             }
