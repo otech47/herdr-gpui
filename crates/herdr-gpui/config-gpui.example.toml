@@ -43,7 +43,12 @@ show_tab_strip = true
 # take one line each. Each row is named after its agent's terminal title, else
 # the agent, else the shell's directory. Click to focus, right-click for the
 # tab menu, hold or drag a row to reorder the tabs, and the x at the end of
-# the row closes the tab.
+# the row closes the tab. With a saved device, the label at the end of the
+# tabs header cycles the view: "device" lists the selected device's space,
+# "all" adds every other device's space of the same name in one list, each
+# row naming its device, and "by device" groups them under a line per device.
+# Cmd-1 to cmd-9 count the rows as listed, so they reach the other device's
+# tabs too. Only the selected device's tabs close or reorder from the list.
 show_sidebar_tabs = false
 # Open each new space in a window of its own, and open a window for a space
 # that `herdr-gpui workspace focus` asks for when no window shows it.

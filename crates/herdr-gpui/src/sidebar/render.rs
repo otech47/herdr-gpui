@@ -626,7 +626,7 @@ impl HerdrWindow {
                 };
             }
             if sidebar_tabs && selected && tabs_open {
-                let listed = self.tab_rows(snapshot, &endpoint_id, rows, &row_cx, content_x, cx);
+                let listed = self.tab_rows(rows, &row_cx, content_x, cx);
                 tabs = tabs.children(listed.rows);
                 tab_drop = listed.drop;
                 sliding |= listed.sliding;
@@ -814,7 +814,14 @@ impl HerdrWindow {
                             }
                         })
                         .overflow_hidden()
-                        .child(self.section_header(Section::Tabs, None, font, theme, look, cx))
+                        .child(self.section_header(
+                            Section::Tabs,
+                            self.tabs_view_toggle(cx),
+                            font,
+                            theme,
+                            look,
+                            cx,
+                        ))
                         .when(tabs_open, |section| section.child(tabs)),
                 )
             })

@@ -53,6 +53,8 @@ mod status_bar;
 #[cfg(test)]
 mod status_ports;
 #[cfg(test)]
+mod tabs_views;
+#[cfg(test)]
 mod text_width;
 #[cfg(test)]
 mod update_panel;
@@ -523,6 +525,7 @@ pub(crate) fn fixture_window(window: &mut Window, cx: &mut Context<HerdrWindow>)
         sidebar_split_modified: false,
         sidebar_collapsed: Default::default(),
         sidebar_spaces_height: None,
+        sidebar_tabs_view: Default::default(),
         sidebar_sections_modified: false,
         sidebar_preferences: None,
         sidebar_modified: false,

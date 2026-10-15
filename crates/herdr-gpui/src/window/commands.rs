@@ -390,6 +390,14 @@ impl HerdrWindow {
                 window.focus(&self.focus, cx);
                 return;
             }
+            // The sidebar's number, when its list counts across devices.
+            Command::TabNumber(number) if self.listed_tab(number).is_some() => {
+                if let Some((endpoint, tab)) = self.listed_tab(number) {
+                    self.navigate_endpoint(&endpoint, NavigationTarget::Tab(&tab), cx);
+                }
+                window.focus(&self.focus, cx);
+                return;
+            }
             Command::MoveTabPrevious | Command::MoveTabNext if !self.live.supports_tab_move => {
                 self.local_error = Some("Moving tabs needs a newer Herdr daemon.".into());
                 cx.notify();

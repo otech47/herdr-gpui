@@ -1,6 +1,7 @@
-//! The shown space's tabs as sidebar rows, one line each: its state, the
-//! number cmd-1 to cmd-9 count it by, then its title, with a close button at
-//! the end.
+//! The tabs list's rows, one line each: a tab's state, the number cmd-1 to
+//! cmd-9 count it by, then its title, with a close button at the end on the
+//! selected device's own tabs. The view in the header chooses which tabs
+//! are listed.
 
 use super::{
     agent_name,
@@ -9,10 +10,15 @@ use super::{
     tokens::{ResolvedToken, TextRole, TokenKind},
     trailing::Trailing,
 };
-use crate::{HerdrWindow, NavigationTarget, config::TokenStyle, reorder::preview};
+use crate::{
+    HerdrWindow, NavigationTarget, config::TokenStyle, preferences::TabsView, reorder::preview,
+};
 use gpui::{prelude::*, *};
 use herdr_client::protocol::{ClientShellAgent, ClientShellSnapshot, ClientShellTab};
 use std::time::Instant;
+
+mod views;
+pub(crate) use views::ListedTab;
 
 /// Each listed row as its own drop unit, its child index and painted shift.
 pub(super) type DropRows = Vec<(usize, usize, Pixels)>;
@@ -26,7 +32,8 @@ pub(super) struct TabRows {
     pub(super) sliding: bool,
 }
 
-/// The tabs the list shows: the focused space's, in the daemon's order.
+/// The selected device's listed tabs: the focused space's, in the daemon's
+/// order.
 pub(super) fn shown_tabs(snapshot: &ClientShellSnapshot) -> Vec<&ClientShellTab> {
     let focused = snapshot.focused_workspace_id.as_deref();
     snapshot
@@ -39,16 +46,18 @@ pub(super) fn shown_tabs(snapshot: &ClientShellSnapshot) -> Vec<&ClientShellTab>
 impl HerdrWindow {
     pub(super) fn tab_rows(
         &self,
-        snapshot: &ClientShellSnapshot,
-        endpoint_id: &str,
         rows: &'static dyn RowLayout,
         row_cx: &RowContext<'_>,
         content_x: f32,
         cx: &mut Context<Self>,
     ) -> TabRows {
-        let listed: Vec<(&ClientShellTab, String)> = shown_tabs(snapshot)
+        let listed: Vec<(ListedTab<'_>, String)> = self
+            .listed_tabs()
             .into_iter()
-            .map(|tab| (tab, tab_title(tab, snapshot)))
+            .map(|row| {
+                let name = tab_title(row.tab, row.snapshot);
+                (row, name)
+            })
             .collect();
         if listed.is_empty() {
             return TabRows {
@@ -63,13 +72,19 @@ impl HerdrWindow {
                 sliding: false,
             };
         }
+        let multi = self.endpoints.len() > 1;
+        let view = self.sidebar_tabs_view;
         let scroll = &self.sidebar_scroll[2];
+        // A reorder is a position within one space, so the views across devices do not drag.
         let drag = self
             .tab_row_drag
             .as_ref()
-            .filter(|drag| drag.previewing(listed.iter().map(|(tab, _)| tab.tab_id.as_str())))
+            .filter(|_| view == TabsView::Device)
+            .filter(|drag| drag.previewing(listed.iter().map(|(row, _)| row.tab.tab_id.as_str())))
             .and_then(|drag| {
-                let dragged = listed.iter().position(|(tab, _)| tab.tab_id == drag.key)?;
+                let dragged = listed
+                    .iter()
+                    .position(|(row, _)| row.tab.tab_id == drag.key)?;
                 Some((drag, dragged))
             });
         let floating = drag.is_some_and(|(drag, _)| drag.floating());
@@ -90,58 +105,78 @@ impl HerdrWindow {
         let mut drop = Vec::new();
         let trailing = Trailing::new(row_cx);
         let tab_cx = trailing.context(row_cx);
-        let rows = listed
-            .iter()
-            .enumerate()
-            .map(|(position, (tab, name))| {
-                let agent = snapshot
-                    .agents
-                    .iter()
-                    .find(|agent| agent.tab_id == tab.tab_id);
-                let id = tab.tab_id.clone();
-                let context_id = id.clone();
-                let close_id = id.clone();
-                let press_id = id.clone();
-                let navigate_endpoint = endpoint_id.to_owned();
-                let carried = floating && drag.is_some_and(|(_, dragged)| dragged == position);
-                let shift = match drag {
-                    Some((drag, _)) if carried => {
-                        drag.pin(&id, f32::from(drag.offset()), now);
-                        drag.offset()
-                    }
-                    Some((drag, _)) => {
-                        let (at, moving) = drag.slide(&id, shifts[position], now);
-                        sliding |= moving;
-                        px(at)
-                    }
-                    None => px(0.),
-                };
-                if drag.is_some() {
-                    drop.push((position, position, shift));
+        let mut elements = Vec::with_capacity(listed.len());
+        let mut group = None;
+        for (position, (row, name)) in listed.iter().enumerate() {
+            let endpoint = &self.endpoints[row.endpoint];
+            let own = row.endpoint == self.selected_endpoint;
+            if view == TabsView::ByDevice && multi && group != Some(row.endpoint) {
+                group = Some(row.endpoint);
+                elements.push(tab_group_line(
+                    &endpoint.id,
+                    &endpoint.label,
+                    content_x,
+                    row_cx,
+                ));
+            }
+            let device = (view == TabsView::All && multi).then_some(endpoint.label.as_str());
+            let agent = row
+                .snapshot
+                .agents
+                .iter()
+                .find(|agent| agent.tab_id == row.tab.tab_id);
+            let id = row.tab.tab_id.clone();
+            let endpoint_id = endpoint.id.clone();
+            let context_id = id.clone();
+            let close_id = id.clone();
+            let press_id = id.clone();
+            let navigate_endpoint = endpoint_id.clone();
+            let carried = floating && drag.is_some_and(|(_, dragged)| dragged == position);
+            let shift = match drag {
+                Some((drag, _)) if carried => {
+                    drag.pin(&id, f32::from(drag.offset()), now);
+                    drag.offset()
                 }
-                let element = Cell::new(
-                    rows,
-                    RowData::Agent(AgentRow {
-                        key: format!("tab-{id}"),
-                        name: name.as_str(),
-                        icon: match agent {
-                            Some(agent) => {
-                                crate::icons::AgentIcon::from_identity(agent.agent.as_deref())
-                            }
-                            None => crate::icons::AgentIcon::Generic,
-                        },
-                        status: tab.agent_status,
-                        place: None,
-                        status_text: None,
-                        lines: tab_lines(name, position + 1),
-                    }),
-                    &tab_cx,
-                )
-                .selected(tab.focused)
-                .row()
-                .child(trailing.place(self.tab_close_button(&close_id, cx)))
-                .id(SharedString::from(format!("tab-{endpoint_id}-{id}")))
-                .on_mouse_down(
+                Some((drag, _)) => {
+                    let (at, moving) = drag.slide(&id, shifts[position], now);
+                    sliding |= moving;
+                    px(at)
+                }
+                None => px(0.),
+            };
+            if drag.is_some() {
+                drop.push((position, position, shift));
+            }
+            let element = Cell::new(
+                rows,
+                RowData::Agent(AgentRow {
+                    key: if own {
+                        format!("tab-{id}")
+                    } else {
+                        format!("tab-{endpoint_id}-{id}")
+                    },
+                    name: name.as_str(),
+                    icon: match agent {
+                        Some(agent) => {
+                            crate::icons::AgentIcon::from_identity(agent.agent.as_deref())
+                        }
+                        None => crate::icons::AgentIcon::Generic,
+                    },
+                    status: row.tab.agent_status,
+                    place: None,
+                    status_text: None,
+                    lines: tab_lines(name, position + 1, device),
+                }),
+                &tab_cx,
+            )
+            .selected(own && row.tab.focused)
+            .row()
+            .when(own, |row| {
+                row.child(trailing.place(self.tab_close_button(&close_id, cx)))
+            })
+            .id(SharedString::from(format!("tab-{endpoint_id}-{id}")))
+            .when(own, |row| {
+                row.on_mouse_down(
                     MouseButton::Right,
                     cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                         cx.stop_propagation();
@@ -150,11 +185,13 @@ impl HerdrWindow {
                             this.menu.page == Some(crate::menu::Page::Tab);
                     }),
                 )
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    this.navigate_endpoint(&navigate_endpoint, NavigationTarget::Tab(&id), cx);
-                    window.focus(&this.focus, cx);
-                }))
-                .on_mouse_down(
+            })
+            .on_click(cx.listener(move |this, _, window, cx| {
+                this.navigate_endpoint(&navigate_endpoint, NavigationTarget::Tab(&id), cx);
+                window.focus(&this.focus, cx);
+            }))
+            .when(own && view == TabsView::Device, |row| {
+                row.on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, event: &MouseDownEvent, _, cx| {
                         if event.click_count == 1 {
@@ -162,23 +199,49 @@ impl HerdrWindow {
                         }
                     }),
                 )
-                .when(carried, |row| row.cursor_grabbing())
-                .when(shift != px(0.), |row| row.top(shift))
-                .into_any_element();
-                if carried {
-                    // Painted last so it floats over the rows it passes, while
-                    // its layout slot keeps the others' positions stable.
-                    deferred(element).with_priority(1).into_any_element()
-                } else {
-                    element
-                }
             })
-            .collect();
+            .when(carried, |row| row.cursor_grabbing())
+            .when(shift != px(0.), |row| row.top(shift))
+            .into_any_element();
+            if carried {
+                // Painted last so it floats over the rows it passes, while
+                // its layout slot keeps the others' positions stable.
+                elements.push(deferred(element).with_priority(1).into_any_element());
+            } else {
+                elements.push(element);
+            }
+        }
         TabRows {
-            rows,
+            rows: elements,
             drop: drag.map(|(_, dragged)| (drop, dragged)),
             sliding,
         }
+    }
+
+    /// The tabs header's view label, absent with one device alone.
+    pub(super) fn tabs_view_toggle(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if self.endpoints.len() < 2 {
+            return None;
+        }
+        let theme = &self.theme;
+        let toggle = div()
+            .id("tabs-view")
+            .debug_selector(|| "tabs-view".into())
+            .flex_none()
+            .min_w_0()
+            .truncate()
+            .text_color(rgb(theme.muted))
+            .cursor_pointer()
+            .hover(|style| style.text_color(rgb(theme.foreground)))
+            .on_click(cx.listener(|this, _, _, cx| {
+                cx.stop_propagation();
+                this.sidebar_tabs_view = this.sidebar_tabs_view.next();
+                this.sidebar_sections_modified = true;
+                this.save_chrome();
+                cx.notify();
+            }))
+            .child(label_text(self.sidebar_tabs_view.name()));
+        Some(toggle.into_any_element())
     }
 
     /// The x at the end of a tab's row. It closes the tab the way the row's
@@ -207,6 +270,23 @@ impl HerdrWindow {
                 this.open_tab_close(&close_id, window, cx);
             }))
     }
+}
+
+fn tab_group_line(
+    endpoint_id: &str,
+    label: &str,
+    content_x: f32,
+    row_cx: &RowContext<'_>,
+) -> AnyElement {
+    let selector = format!("tabs-group-{endpoint_id}");
+    div()
+        .debug_selector(move || selector.clone())
+        .flex_none()
+        .px(px(content_x))
+        .pt(px(row_cx.look.density.gap()))
+        .text_color(rgb(row_cx.theme.muted))
+        .child(label_text(label))
+        .into_any_element()
 }
 
 /// What a tab is called in the sidebar: its own name when renamed, else its
@@ -247,9 +327,14 @@ fn agent_title(agent: &ClientShellAgent) -> Option<String> {
 
 /// A tab's one sidebar line. The position takes the agent role so the row
 /// draws its agent's icon beside it; the title stays in the name color
-/// without the bold an agent row would give it.
-pub(super) fn tab_lines(title: &str, number: impl ToString) -> Vec<Vec<ResolvedToken>> {
-    vec![vec![
+/// without the bold an agent row would give it. A device name, in the view
+/// listing every device's tabs together, sits muted before the title.
+pub(super) fn tab_lines(
+    title: &str,
+    number: impl ToString,
+    device: Option<&str>,
+) -> Vec<Vec<ResolvedToken>> {
+    let mut line = vec![
         ResolvedToken {
             kind: TokenKind::StateIcon,
             style: TokenStyle::default(),
@@ -258,12 +343,19 @@ pub(super) fn tab_lines(title: &str, number: impl ToString) -> Vec<Vec<ResolvedT
             kind: TokenKind::Text(SharedString::from(number.to_string()), TextRole::Agent),
             style: TokenStyle::default(),
         },
-        ResolvedToken {
-            kind: TokenKind::Text(SharedString::from(title.to_owned()), TextRole::Workspace),
-            style: TokenStyle {
-                bold: Some(false),
-                ..TokenStyle::default()
-            },
+    ];
+    if let Some(device) = device {
+        line.push(ResolvedToken {
+            kind: TokenKind::Text(SharedString::from(device.to_owned()), TextRole::Muted),
+            style: TokenStyle::default(),
+        });
+    }
+    line.push(ResolvedToken {
+        kind: TokenKind::Text(SharedString::from(title.to_owned()), TextRole::Workspace),
+        style: TokenStyle {
+            bold: Some(false),
+            ..TokenStyle::default()
         },
-    ]]
+    });
+    vec![line]
 }
