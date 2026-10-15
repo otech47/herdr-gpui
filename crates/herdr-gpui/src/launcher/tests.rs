@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use super::{Choice, LaunchPlan, plan};
+use super::{Choice, LaunchPlan, api_socket, plan};
 use crate::{
     HerdrWindow,
     config::{Config, Launcher},
@@ -9,6 +9,7 @@ use crate::{
 };
 use gpui::{Keystroke, TestAppContext, VisualTestContext};
 use herdr_client::ConnectTarget;
+use std::path::Path;
 
 const MINI: &str = "ssh:0123456789abcdef0123456789abcdef";
 
@@ -104,6 +105,22 @@ fn the_plan_names_the_device_and_its_host() {
     assert_eq!(env(&remote, "HERDR_ACTIVE_WORKSPACE_ID"), None);
 }
 
+#[test]
+fn the_command_line_socket_sits_beside_the_client_socket() {
+    assert_eq!(
+        api_socket(Path::new("/home/me/.config/herdr/herdr-client.sock")).as_deref(),
+        Some(Path::new("/home/me/.config/herdr/herdr.sock"))
+    );
+    assert_eq!(
+        api_socket(Path::new(
+            "/home/me/.config/herdr/sessions/work/herdr-client.sock"
+        ))
+        .as_deref(),
+        Some(Path::new("/home/me/.config/herdr/sessions/work/herdr.sock"))
+    );
+    assert_eq!(api_socket(Path::new("/tmp/custom.sock")), None);
+}
+
 #[gpui::test]
 fn without_a_saved_device_the_chord_runs_locally_at_once(cx: &mut TestAppContext) {
     let (view, cx) = cx.add_window_view(fixture_window);
@@ -128,6 +145,9 @@ fn without_a_saved_device_the_chord_runs_locally_at_once(cx: &mut TestAppContext
             env(&view.launched[0], "HERDR_ACTIVE_WORKSPACE_ID").as_deref(),
             Some("w0")
         );
+        // The fixture's device is not a socket, so the script finds the
+        // daemon on its own.
+        assert_eq!(env(&view.launched[0], "HERDR_SOCKET_PATH"), None);
     });
 }
 

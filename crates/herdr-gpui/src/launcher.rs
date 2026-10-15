@@ -10,6 +10,7 @@ mod tests;
 use crate::{HerdrWindow, config::Launcher, menu::Page};
 use gpui::{Context, KeyDownEvent, Keystroke, Window};
 use herdr_client::ConnectTarget;
+use std::path::{Path, PathBuf};
 #[cfg(not(test))]
 use std::process::{Command, Stdio};
 
@@ -36,12 +37,19 @@ pub(crate) struct LaunchPlan {
     pub env: Vec<(String, String)>,
 }
 
+/// The JSON API socket the `herdr` command line needs, `herdr.sock` beside
+/// the app's `herdr-client.sock`. None for a client socket named some other way.
+pub(crate) fn api_socket(client: &Path) -> Option<PathBuf> {
+    let stem = client.file_stem()?.to_str()?.strip_suffix("-client")?;
+    Some(client.with_file_name(format!("{stem}.sock")))
+}
+
 /// The command and environment a launcher runs with for `choice`:
 /// `HERDR_LAUNCH_DEVICE` and `HERDR_LAUNCH_DEVICE_LABEL` always,
 /// `HERDR_LAUNCH_HOST` for a saved device, and the focused space of the
 /// device's daemon as `HERDR_ACTIVE_WORKSPACE_ID`, as the daemon's own
-/// commands get. The local daemon's socket is named so the script reaches
-/// the daemon this window shows.
+/// commands get. The local daemon's API socket is named so the script
+/// reaches the daemon this window shows.
 pub(crate) fn plan(
     launcher: &Launcher,
     choice: &Choice,
@@ -249,6 +257,8 @@ impl HerdrWindow {
                 .target
                 .socket_path()
                 .ok()
+                .as_deref()
+                .and_then(api_socket)
                 .and_then(|path| path.to_str().map(str::to_owned)),
             _ => None,
         };
