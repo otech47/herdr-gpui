@@ -28,6 +28,8 @@ mod selection;
 #[path = "smoke_clipboard.rs"]
 mod clipboard;
 
+#[path = "smoke_hold.rs"]
+mod hold;
 #[path = "smoke_sidebar.rs"]
 mod sidebar_fixture;
 pub use sidebar_fixture::start_sidebar;

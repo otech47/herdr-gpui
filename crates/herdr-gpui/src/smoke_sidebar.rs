@@ -63,6 +63,10 @@ fn symbol_cascade(window: &mut Window, cx: &mut App) -> Result<&'static str> {
 }
 
 pub fn start_sidebar(handle: WindowHandle<HerdrWindow>, cx: &mut App) {
+    if let Some(view) = hold::held_view() {
+        hold::hold_sidebar(handle, cx, view);
+        return;
+    }
     if std::env::var_os("HERDR_TEST_NOTIFICATIONS_ONLY").is_some() {
         start_notifications(handle, cx);
         return;
