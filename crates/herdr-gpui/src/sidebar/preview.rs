@@ -212,6 +212,7 @@ impl Preview {
                         place: Some((&self.workspaces[index % 3].label, None)),
                         status_text: None,
                         lines: Vec::new(),
+                        icon_line: None,
                     }),
                     &context,
                 )

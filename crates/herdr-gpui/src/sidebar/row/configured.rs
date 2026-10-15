@@ -27,24 +27,28 @@ pub(in crate::sidebar) struct TokenLook {
     pub(in crate::sidebar) focused: bool,
     /// A teleported checkout fades its name, as the native rows do.
     pub(in crate::sidebar) teleported: bool,
+    /// The line the agent's icon sits on when no line names the agent.
+    pub(in crate::sidebar) icon_line: Option<usize>,
 }
+
+pub(in crate::sidebar) const TAG_SCALE: f32 = 0.8;
 
 fn token_appearance(kind: &TokenKind, look: TokenLook, cx: &RowContext<'_>) -> (u32, FontWeight) {
     let theme = cx.theme;
     let (name, weight, secondary) = row_text(look.kind, look.focused, theme);
-    match kind {
-        TokenKind::StateIcon | TokenKind::Text(_, TextRole::Status) => {
+    match (kind, kind.role()) {
+        (TokenKind::StateIcon, _) | (_, Some(TextRole::Status)) => {
             (cx.indicators.color(look.status), FontWeight::NORMAL)
         }
-        TokenKind::Text(_, TextRole::Workspace) if look.teleported => {
-            (left_behind(name, theme), weight)
-        }
-        TokenKind::Text(_, TextRole::Workspace) => (name, weight),
-        TokenKind::Text(_, TextRole::Secondary | TextRole::Agent) => {
-            (secondary, FontWeight::NORMAL)
-        }
+        (_, Some(TextRole::Workspace)) if look.teleported => (left_behind(name, theme), weight),
+        (_, Some(TextRole::Workspace)) => (name, weight),
+        (_, Some(TextRole::Secondary | TextRole::Agent)) => (secondary, FontWeight::NORMAL),
         _ => (theme.muted, FontWeight::NORMAL),
     }
+}
+
+fn tag_glyphs(text: &str) -> usize {
+    (text.width() as f32 * TAG_SCALE).ceil() as usize
 }
 
 fn styled(
@@ -66,10 +70,12 @@ fn styled(
     (color, weight)
 }
 
-/// Status icons and git counters retain their full width when text truncates.
+/// Status icons, tags and git counters retain their full width when text
+/// truncates.
 fn fixed_glyphs(kind: &TokenKind, glyph: f32, status_width: f32) -> usize {
     match kind {
         TokenKind::StateIcon => (status_width / glyph).ceil() as usize,
+        TokenKind::Tag(text, _) => tag_glyphs(text),
         TokenKind::GitStatus { ahead, behind } => {
             let count = |n: &usize| format!("{n}").chars().count() + 1;
             usize::from(*ahead > 0) * count(ahead)
@@ -80,8 +86,15 @@ fn fixed_glyphs(kind: &TokenKind, glyph: f32, status_width: f32) -> usize {
     }
 }
 
-/// Fixed token widths preserve GPUI's text truncation during layout.
-fn token_line(row: &[ResolvedToken], look: TokenLook, width: f32, cx: &RowContext<'_>) -> Div {
+/// Fixed token widths preserve GPUI's text truncation during layout. The
+/// line answers to `selector`, and a tag on it to `selector` plus `-tag`.
+fn token_line(
+    row: &[ResolvedToken],
+    look: TokenLook,
+    width: f32,
+    selector: &str,
+    cx: &RowContext<'_>,
+) -> Div {
     let status = look.status;
     let (font, theme) = (cx.font, cx.theme);
     let glyph = glyph_width(font);
@@ -146,6 +159,19 @@ fn token_line(row: &[ResolvedToken], look: TokenLook, width: f32, cx: &RowContex
                             .child(label_text(&format!("{arrow}{count}")))
                     }),
             ),
+            TokenKind::Tag(text, _) => cell
+                .debug_selector(|| format!("{selector}-tag"))
+                .h(px(line_height(font)))
+                .flex()
+                .items_center()
+                .when(last_text.is_some_and(|last| last < index), |cell| {
+                    cell.justify_end()
+                })
+                .whitespace_nowrap()
+                .text_size(px(font.size * TAG_SCALE))
+                .font_weight(weight)
+                .text_color(rgb(color))
+                .child(shared_label_text(text.clone())),
             // Only text the budget cuts short truncates. An emoji's font is wider
             // than two estimated glyphs, so a label that fits by its display
             // width may overhang its cell slightly rather than collapse to "…".
@@ -162,7 +188,8 @@ fn token_line(row: &[ResolvedToken], look: TokenLook, width: f32, cx: &RowContex
         };
         (gap, advance, cell)
     });
-    place_line(parts, width, font, theme.muted)
+    let selector = selector.to_owned();
+    place_line(parts, width, font, theme.muted).debug_selector(move || selector.clone())
 }
 
 /// The `state_icon` leading a configured row's first line. It takes the row's
@@ -226,10 +253,13 @@ pub(in crate::sidebar) fn token_column(
     lines.iter().enumerate().fold(
         div().w(px(width)).flex_none().flex().flex_col(),
         |column, (index, line)| {
-            column.child(
-                token_line(line_tokens(index, line), look, width, cx)
-                    .debug_selector(|| line_selector(key, index)),
-            )
+            column.child(token_line(
+                line_tokens(index, line),
+                look,
+                width,
+                &line_selector(key, index),
+                cx,
+            ))
         },
     )
 }
@@ -248,10 +278,11 @@ pub(super) fn configured_lines(
         RowKind::Agent(icon) => Some(icon),
         RowKind::Workspace => None,
     };
-    let agent_at = lines.iter().position(|line| {
-        line.iter()
-            .any(|token| matches!(token.kind, TokenKind::Text(_, TextRole::Agent)))
-    });
+    let names_agent = |token: &ResolvedToken| token.kind.role() == Some(TextRole::Agent);
+    let agent_at = lines
+        .iter()
+        .position(|line| line.iter().any(names_agent))
+        .or(look.icon_line);
     let (agent_size, agent_reserve) = agent_icon_size(font);
     let workspace_reserve = if matches!(workspace_icon, RowIcon::None) {
         0.
@@ -266,7 +297,7 @@ pub(super) fn configured_lines(
         let selector = line_selector(key, index);
         let icon_color = line
             .iter()
-            .find(|token| matches!(token.kind, TokenKind::Text(_, TextRole::Agent)))
+            .find(|token| names_agent(token))
             .map(|token| styled(token_appearance(&token.kind, look, cx), token.style, theme).0)
             .unwrap_or(theme.muted);
         let mut text = div().relative().w(px(label_width)).h(px(line_height(font)));
@@ -281,8 +312,7 @@ pub(super) fn configured_lines(
             ));
         }
         text = text.child(
-            token_line(line_tokens(index, line), look, text_width, cx)
-                .debug_selector(|| selector.clone())
+            token_line(line_tokens(index, line), look, text_width, &selector, cx)
                 .ml(px(reserve.min(label_width))),
         );
         column = column.child(text);
@@ -319,6 +349,7 @@ mod tests {
             status: AgentStatus::Idle,
             focused: false,
             teleported: false,
+            icon_line: None,
         };
         let away = TokenLook {
             teleported: true,

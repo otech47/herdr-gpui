@@ -197,3 +197,26 @@ fn budgets_give_wide_state_labels_their_display_width() {
     ];
     assert_eq!(budgets(&row, |_| 0, 30), [Some(2), Some(1)]);
 }
+
+#[test]
+fn tags_keep_their_small_width_a_space_apart_while_text_gives_way() {
+    let icon = ResolvedToken::unstyled(TokenKind::StateIcon);
+    let title = ResolvedToken::unstyled(TokenKind::Text(
+        "deployment-safety-net".into(),
+        TextRole::Workspace,
+    ));
+    let tag = ResolvedToken::unstyled(TokenKind::Tag("Local".into(), TextRole::Muted));
+    assert_eq!(separator(&icon, &tag), " ");
+    assert_eq!(separator(&title, &tag), " ");
+    assert_eq!(separator(&tag, &title), " ");
+    let fixed = |kind: &TokenKind| match kind {
+        TokenKind::StateIcon => 1,
+        TokenKind::Tag(text, _) => text.len() - 1,
+        _ => 0,
+    };
+    let row = [icon, title, tag];
+    // icon(1) + " " + title(21) + " " + Local(4) = 28
+    assert_eq!(budgets(&row, fixed, 30), [Some(1), Some(21), Some(4)]);
+    assert_eq!(budgets(&row, fixed, 20), [Some(1), Some(13), Some(4)]);
+    assert_eq!(budgets(&row, fixed, 7), [Some(1), None, Some(4)]);
+}

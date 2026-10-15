@@ -189,6 +189,7 @@ fn cells_hand_their_state_and_data_to_the_layout() {
             place: None,
             status_text: None,
             lines: vec![],
+            icon_line: None,
         }),
         &cx,
     )

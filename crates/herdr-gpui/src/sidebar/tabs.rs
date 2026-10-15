@@ -177,6 +177,7 @@ impl HerdrWindow {
                     place: None,
                     status_text: None,
                     lines: tab_lines(name, position + 1, device),
+                    icon_line: Some(0),
                 }),
                 &tab_cx,
             )
@@ -334,37 +335,43 @@ fn agent_title(agent: &ClientShellAgent) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// A tab's one sidebar line. The position takes the agent role so the row
-/// draws its agent's icon beside it; the title stays in the name color
-/// without the bold an agent row would give it. A device name, in the view
-/// listing every device's tabs together, sits muted before the title.
+/// A tab's one sidebar line: the position cmd-`number` counts, in the agent
+/// role beside the agent's icon, then the title in the name color without an
+/// agent row's bold. Listing every device's tabs together, the device's name
+/// takes the number's place, small at the line's end so the titles line up.
 pub(super) fn tab_lines(
     title: &str,
     number: impl ToString,
     device: Option<&str>,
 ) -> Vec<Vec<ResolvedToken>> {
-    let mut line = vec![
-        ResolvedToken {
-            kind: TokenKind::StateIcon,
-            style: TokenStyle::default(),
-        },
-        ResolvedToken {
-            kind: TokenKind::Text(SharedString::from(number.to_string()), TextRole::Agent),
-            style: TokenStyle::default(),
-        },
-    ];
-    if let Some(device) = device {
-        line.push(ResolvedToken {
-            kind: TokenKind::Text(SharedString::from(device.to_owned()), TextRole::Muted),
-            style: TokenStyle::default(),
-        });
-    }
-    line.push(ResolvedToken {
+    let plain = |kind| ResolvedToken {
+        kind,
+        style: TokenStyle::default(),
+    };
+    let title = ResolvedToken {
         kind: TokenKind::Text(SharedString::from(title.to_owned()), TextRole::Workspace),
         style: TokenStyle {
             bold: Some(false),
             ..TokenStyle::default()
         },
-    });
+    };
+    let line = match device {
+        Some(device) => vec![
+            plain(TokenKind::StateIcon),
+            title,
+            plain(TokenKind::Tag(
+                SharedString::from(device.to_owned()),
+                TextRole::Muted,
+            )),
+        ],
+        None => vec![
+            plain(TokenKind::StateIcon),
+            plain(TokenKind::Text(
+                SharedString::from(number.to_string()),
+                TextRole::Agent,
+            )),
+            title,
+        ],
+    };
     vec![line]
 }

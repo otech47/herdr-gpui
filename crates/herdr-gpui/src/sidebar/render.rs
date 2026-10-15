@@ -676,6 +676,7 @@ impl HerdrWindow {
                                 .shows_status_text(agent.agent.as_deref())
                                 .then(|| state_label(agent, status_text(agent.agent_status))),
                             lines,
+                            icon_line: None,
                         }),
                         &row_cx,
                     )

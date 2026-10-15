@@ -20,7 +20,13 @@ pub(super) struct ResolvedToken {
 pub(super) enum TokenKind {
     StateIcon,
     Text(SharedString, TextRole),
-    GitStatus { ahead: usize, behind: usize },
+    /// A short word drawn small at a fixed width. After the last text it sits
+    /// at the line's end, as the line's slack goes to its text.
+    Tag(SharedString, TextRole),
+    GitStatus {
+        ahead: usize,
+        behind: usize,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,9 +39,17 @@ pub(super) enum TextRole {
 }
 
 impl TokenKind {
+    /// Text that shares the line's width with the other text tokens.
     pub(super) fn text(&self) -> Option<&SharedString> {
         match self {
             Self::Text(text, _) => Some(text),
+            _ => None,
+        }
+    }
+
+    pub(super) fn role(&self) -> Option<TextRole> {
+        match self {
+            Self::Text(_, role) | Self::Tag(_, role) => Some(*role),
             _ => None,
         }
     }
@@ -178,10 +192,13 @@ pub(super) fn space_rows(
 }
 
 /// Upstream joins tokens with a middle dot, except after the state icon and
-/// before the git counters, which sit a single space apart.
+/// before the git counters, which sit a single space apart. A tag does too.
 pub(super) fn separator(previous: &ResolvedToken, current: &ResolvedToken) -> &'static str {
-    if matches!(previous.kind, TokenKind::StateIcon)
-        || matches!(current.kind, TokenKind::GitStatus { .. })
+    if matches!(previous.kind, TokenKind::StateIcon | TokenKind::Tag(..))
+        || matches!(
+            current.kind,
+            TokenKind::GitStatus { .. } | TokenKind::Tag(..)
+        )
     {
         " "
     } else {
@@ -190,10 +207,10 @@ pub(super) fn separator(previous: &ResolvedToken, current: &ResolvedToken) -> &'
 }
 
 /// Glyph budget for each token of a row that must fit `available` glyphs,
-/// or `None` for a token dropped entirely. Fixed-width tokens (the icon and
-/// the git counters) always stay. When even one glyph per text token does not
-/// fit, text tokens are dropped from the left until the rest fit, then the
-/// survivors grow a glyph at a time in turn, as upstream shares a line.
+/// or `None` for a token dropped entirely. Fixed-width tokens (the icon, the
+/// tags and the git counters) always stay. When even one glyph per text token
+/// does not fit, text tokens are dropped from the left until the rest fit,
+/// then the survivors grow a glyph at a time in turn, as upstream shares a line.
 pub(super) fn budgets(
     row: &[ResolvedToken],
     fixed_width: impl Fn(&TokenKind) -> usize,

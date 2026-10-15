@@ -291,6 +291,8 @@ pub(super) fn row(
     // color so a status reads at a glance, not only by hue.
     status_text: Option<&str>,
     lines: &[Vec<ResolvedToken>],
+    // Where the agent's icon goes when no line names the agent.
+    icon_line: Option<usize>,
     cx: &RowContext<'_>,
 ) -> Div {
     let (font, theme, look, width) = (cx.font, cx.theme, cx.look, cx.width);
@@ -490,6 +492,7 @@ pub(super) fn row(
                                 status,
                                 focused,
                                 teleported,
+                                icon_line,
                             },
                             label_width,
                             workspace_icon,

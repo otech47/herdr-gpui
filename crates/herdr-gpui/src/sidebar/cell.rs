@@ -105,6 +105,9 @@ pub(super) struct AgentRow<'a> {
     pub(super) status_text: Option<Cow<'a, str>>,
     /// Daemon token rows, painted in the layout's own frame. Empty keeps its native lines.
     pub(super) lines: Vec<Vec<super::tokens::ResolvedToken>>,
+    /// The line the agent's icon sits on when none of `lines` names the
+    /// agent, as a tab row's title line does not.
+    pub(super) icon_line: Option<usize>,
 }
 
 /// What a row shows.

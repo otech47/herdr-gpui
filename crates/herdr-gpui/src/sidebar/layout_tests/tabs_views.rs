@@ -78,9 +78,11 @@ fn the_all_view_lists_every_devices_tabs_and_a_click_moves_there(cx: &mut gpui::
     assert!(cx.debug_bounds("tabs-group-local").is_none());
     cx.update(|_, cx| {
         let probes = &cx.global::<TextProbes>().0;
-        for text in ["Local", "Mini", "3", "4", "remote r0"] {
+        for text in ["Local", "Mini", "remote r0"] {
             assert!(probes.contains_key(text), "{text} not painted");
         }
+        // The device's name takes the number's place.
+        assert!(!probes.contains_key("3"));
     });
     click(cx, "row-tab-ssh:test-r0");
     view.read_with(cx, |view, _| {
