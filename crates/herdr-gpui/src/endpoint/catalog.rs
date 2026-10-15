@@ -17,13 +17,15 @@ pub(crate) struct Catalog {
     pub(super) desired: Option<String>,
     pub(super) initialized: bool,
     pub(super) restore_pending: bool,
+    /// Opened for a space of its own, so the shared last chosen device never moves it.
+    pinned: bool,
     pub(super) queued_write: Option<Option<String>>,
     writing: Option<mpsc::Receiver<Result<()>>>,
 }
 
 pub(super) struct CatalogUpdate {
     pub(super) hosts: Vec<SavedHost>,
-    selection: Option<Option<String>>,
+    pub(super) selection: Option<Option<String>>,
 }
 
 impl Catalog {
@@ -39,9 +41,15 @@ impl Catalog {
             desired: None,
             initialized: false,
             restore_pending: false,
+            pinned: false,
             queued_write: None,
             writing: None,
         }
+    }
+
+    pub(crate) fn pin(&mut self) {
+        self.pinned = true;
+        self.restore_pending = false;
     }
 
     pub(super) fn poll(&mut self) -> Option<Result<CatalogUpdate>> {
@@ -85,7 +93,7 @@ impl Catalog {
     pub(super) fn accept(&mut self, update: &CatalogUpdate) {
         if !self.initialized {
             self.desired = update.selection.clone().flatten();
-            self.restore_pending = self.desired.is_some();
+            self.restore_pending = self.desired.is_some() && !self.pinned;
             self.initialized = true;
         }
         if self.desired.as_ref().is_some_and(|id| {

@@ -29,6 +29,7 @@ mod prompts;
 mod reconnect_backoff;
 mod sounds;
 mod split_drag;
+mod startup_pin;
 mod toast_handoff;
 mod toast_navigation;
 mod window_notices;

@@ -7,6 +7,12 @@ use gpui::{Context, Window};
 use herdr_client::protocol::ClientShellSnapshot;
 
 impl HerdrWindow {
+    /// A window opened for a space stays off the shared last chosen device.
+    pub(crate) fn open_for(&mut self, startup: Startup) {
+        self.startup = Some(startup);
+        self.catalog.pin();
+    }
+
     /// Applies the startup request once the surface is ready, and notes the
     /// space the window shows so it reopens there.
     pub(crate) fn settle_startup(&mut self, window: &mut Window, cx: &mut Context<Self>) {

@@ -2,6 +2,8 @@
 use super::*;
 use crate::endpoint::tests::host;
 
+mod pinned;
+
 #[test]
 fn explicit_socket_never_reads_shared_catalog() {
     let mut catalog = Catalog::new(&ConnectTarget::Socket("/unused.sock".into()));

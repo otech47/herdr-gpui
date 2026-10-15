@@ -2024,6 +2024,7 @@ Windows setup) nothing is saved and the window says so.
   ENDPOINT`, which raises the window showing that device's workspace, or
   opens one for it under `new_space_in_window`. A window remembers the device
   of the space it shows and reopens on it, once the catalog lists the device.
+  A window opened for a space stays off the last chosen device.
 - Cmd-B toggles sidebar visibility locally without changing daemon state.
   Cmd-, opens Settings; Cmd-/ opens the grouped native shortcut reference.
   Native shortcut labels and keycaps come from the shared `controls::COMMANDS`

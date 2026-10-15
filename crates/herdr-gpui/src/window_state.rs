@@ -230,6 +230,7 @@ impl WindowState {
             // A bounds observation names no space; the noted one stays.
             let geometry = Geometry {
                 workspace: old.workspace.clone(),
+                device: old.device.clone(),
                 ..geometry
             };
             if *old == geometry {
@@ -443,6 +444,37 @@ mod tests {
         let saved = read(&path).unwrap();
         assert_eq!(saved[0].workspace.as_deref(), Some("w_3"));
         assert_eq!(saved[0].device, None);
+    }
+
+    #[test]
+    fn a_move_keeps_the_noted_space_and_its_device() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("windows.json");
+        let mut state = WindowState {
+            restored: VecDeque::new(),
+            live: Vec::new(),
+            writer: Some(Writer::start("window-state", path.clone()).unwrap()),
+            quitting: false,
+        };
+        let id = WindowId::from(1);
+        state.update(id, geometry(0.));
+        state.set_workspace(
+            id,
+            Some(Shown {
+                workspace: "w_3".into(),
+                device: Some("ssh:0123456789abcdef0123456789abcdef".into()),
+            }),
+        );
+        state.update(id, geometry(300.));
+        let writer = state.shutdown().unwrap();
+        writer.finish();
+        let saved = read(&path).unwrap();
+        assert_eq!(saved[0].x, 300.);
+        assert_eq!(saved[0].workspace.as_deref(), Some("w_3"));
+        assert_eq!(
+            saved[0].device.as_deref(),
+            Some("ssh:0123456789abcdef0123456789abcdef")
+        );
     }
 
     #[test]

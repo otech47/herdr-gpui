@@ -118,11 +118,13 @@ pub(crate) fn open_window(
                     fixture,
                 );
                 view.updater = updater;
-                view.startup = shown.map(|shown| crate::window::Startup::Show {
-                    workspace: shown.workspace,
-                    tab: None,
-                    device: shown.device,
-                });
+                if let Some(shown) = shown {
+                    view.open_for(crate::window::Startup::Show {
+                        workspace: shown.workspace,
+                        tab: None,
+                        device: shown.device,
+                    });
+                }
                 crate::window_state::WindowState::observe(window, cx);
                 view
             })
@@ -152,8 +154,8 @@ pub(crate) fn open_window_for(
         match opened {
             Ok(handle) => {
                 let _ = handle.update(cx, |view, window, _| {
-                    if startup.is_some() {
-                        view.startup = startup;
+                    if let Some(startup) = startup {
+                        view.open_for(startup);
                     }
                     view.sound = crate::sound::Service::new();
                     window.activate_window();
