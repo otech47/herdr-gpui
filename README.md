@@ -104,6 +104,17 @@ On macOS both build a local bundle identified as `so.pen.herdr-gpui.dev`, so
 it never shares a Dock tile or icon cache with an installed release.
 Without `just`: `cargo run --locked --release -p herdr-gpui --features qa-menu`.
 
+The local bundle is signed with a self-signed certificate that the first build
+on a Mac creates, in its own keychain at
+`~/Library/Keychains/herdr-local-signing.keychain-db` with the keychain
+password beside it. macOS ties privacy grants such as App Management and Full
+Disk Access to that certificate, so they survive every rebuild. Nothing is
+shared between Macs or checked in. Deleting the keychain and its `.password`
+file makes the next build create a new identity, after which macOS asks for
+the grants once more.
+`scripts/sign-local.sh` does the work and takes `HERDR_LOCAL_SIGNING_NAME` and
+`HERDR_LOCAL_SIGNING_KEYCHAIN` to use another name or file.
+
 Install the Herdr daemon separately. The app starts an already-installed local
 `herdr server` when the target session is absent, but never installs or upgrades
 a daemon. Explicitly confirming session deletion stops that named session first;

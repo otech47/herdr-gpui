@@ -115,9 +115,10 @@ bundle profile="release" features="":
     plutil -lint "$app/Contents/Info.plist"
     # The linker's ad-hoc signature names the bare executable and binds no
     # Info.plist, so services that trust the bundle ID refuse the app:
-    # notification authorization fails without a prompt. Ad-hoc sign the
-    # assembled bundle so its identity is so.pen.herdr-gpui.dev.
-    codesign --force --sign - "$app"
+    # notification authorization fails without a prompt. Sign the assembled
+    # bundle so its identity is so.pen.herdr-gpui.dev, with this Mac's own
+    # certificate so privacy grants outlive the build.
+    bash scripts/sign-local.sh "$app"
 
 # Link the actual optimized application and exercise its CLI without a desktop.
 test-build: build-release

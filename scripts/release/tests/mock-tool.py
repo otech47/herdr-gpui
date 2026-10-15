@@ -24,8 +24,21 @@ if tool == "security":
         Path(args[-1]).touch()
     elif args[0] == "delete-keychain":
         Path(args[-1]).unlink()
+    elif args[0] == "import":
+        with open(args[1], "rb") as identity, open(args[args.index("-k") + 1], "ab") as keychain:
+            keychain.write(identity.read())
+    elif args[0] == "find-identity":
+        keychain = Path(args[-1])
+        if keychain.is_file() and b"mock identity" in keychain.read_bytes():
+            print('  1) 0000000000000000000000000000000000000000 "Herdr local signing"')
 elif tool == "openssl":
-    print("dummy-temporary-password")
+    if args[0] == "req":
+        for flag in ("-keyout", "-out"):
+            Path(args[args.index(flag) + 1]).write_text("mock pem")
+    elif args[0] == "pkcs12":
+        Path(args[args.index("-out") + 1]).write_bytes(b"mock identity")
+    else:
+        print("dummy-temporary-password")
 elif tool == "base64":
     assert args == ["-D"], args
     sys.stdout.buffer.write(base64.b64decode(sys.stdin.buffer.read(), validate=True))
@@ -50,7 +63,7 @@ elif tool == "xcrun" and args[:2] == ["stapler", "staple"] and Path(args[-1]).is
     (Path(args[-1]) / "Contents/CodeResources").write_bytes(b"mock stapled ticket")
 elif tool == "codesign" and args[0] == "--force" and Path(args[-1]).is_dir():
     signature = Path(args[-1]) / "Contents/_CodeSignature"
-    signature.mkdir()
+    signature.mkdir(exist_ok=True)
     (signature / "CodeResources").write_bytes(b"mock code signature")
 elif tool == "hdiutil":
     image = Path(args[args.index("-srcfolder") + 1])

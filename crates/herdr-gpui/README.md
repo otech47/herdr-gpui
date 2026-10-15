@@ -1537,7 +1537,8 @@ while the GUI runs: a click cannot reopen a closed window.
 - **macOS** uses `UNUserNotificationCenter`, which works only from an app bundle
   with a bundle identifier: the release `Herdr.app` (`so.pen.herdr-gpui`) or the
   `just run`/`just run-debug` bundles (`so.pen.herdr-gpui.dev`), which the
-  recipe ad-hoc signs so the signature carries that identifier. A bare
+  recipe signs with the Mac's own local certificate so the signature carries
+  that identifier. A bare
   `target/*/herdr-gpui` binary logs that notifications are disabled and posts
   nothing. The first notification asks for permission, and macOS shows that
   prompt instead of the notification itself. macOS remembers the
