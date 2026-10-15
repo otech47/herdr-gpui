@@ -48,7 +48,8 @@ show_tab_strip = true
 # "all" adds every other device's space of the same name in one list, each
 # row naming its device, and "by device" groups them under a line per device.
 # Cmd-1 to cmd-9 count the rows as listed, so they reach the other device's
-# tabs too. Only the selected device's tabs close or reorder from the list.
+# tabs too. Only the selected device's tabs close from the list. A row drags
+# among its own device's rows.
 show_sidebar_tabs = false
 # Open each new space in a window of its own, and open a window for a space
 # that `herdr-gpui workspace focus` asks for when no window shows it.

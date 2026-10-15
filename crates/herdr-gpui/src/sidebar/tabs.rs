@@ -7,6 +7,7 @@ use super::{
     agent_name,
     cell::{AgentRow, Cell, RowContext, RowData, RowLayout},
     label_text,
+    tab_reorder::{device_rows, row_key},
     tokens::{ResolvedToken, TextRole, TokenKind},
     trailing::Trailing,
 };
@@ -15,7 +16,7 @@ use crate::{
 };
 use gpui::{prelude::*, *};
 use herdr_client::protocol::{ClientShellAgent, ClientShellSnapshot, ClientShellTab};
-use std::time::Instant;
+use std::{ops::Range, time::Instant};
 
 mod views;
 pub(crate) use views::{ListedTab, workspace_label_by_id};
@@ -26,21 +27,11 @@ pub(super) type DropRows = Vec<(usize, usize, Pixels)>;
 /// The tabs list's rows, and what a drag among them needs from this frame.
 pub(super) struct TabRows {
     pub(super) rows: Vec<AnyElement>,
-    /// While a drag previews, the rows and the carried row's index.
-    pub(super) drop: Option<(DropRows, usize)>,
+    /// While a drag previews, the rows, the carried row's index and the
+    /// positions of its device's rows, which bound where it may land.
+    pub(super) drop: Option<(DropRows, usize, Range<usize>)>,
     /// Whether a row is still sliding, so the next frame is drawn.
     pub(super) sliding: bool,
-}
-
-/// The selected device's listed tabs: the focused space's, in the daemon's
-/// order.
-pub(super) fn shown_tabs(snapshot: &ClientShellSnapshot) -> Vec<&ClientShellTab> {
-    let focused = snapshot.focused_workspace_id.as_deref();
-    snapshot
-        .tabs
-        .iter()
-        .filter(|tab| Some(tab.workspace_id.as_str()) == focused)
-        .collect()
 }
 
 impl HerdrWindow {
@@ -74,31 +65,47 @@ impl HerdrWindow {
         }
         let multi = self.endpoints.len() > 1;
         let view = self.sidebar_tabs_view;
+        let grouped = view == TabsView::ByDevice && multi;
         let scroll = &self.sidebar_scroll[2];
-        // A reorder is a position within one space, so the views across devices do not drag.
-        let drag = self
-            .tab_row_drag
-            .as_ref()
-            .filter(|_| view == TabsView::Device)
-            .filter(|drag| drag.previewing(listed.iter().map(|(row, _)| row.tab.tab_id.as_str())))
-            .and_then(|drag| {
-                let dragged = listed
-                    .iter()
-                    .position(|(row, _)| row.tab.tab_id == drag.key)?;
-                Some((drag, dragged))
-            });
-        let floating = drag.is_some_and(|(drag, _)| drag.floating());
+        let keys: Vec<String> = listed
+            .iter()
+            .map(|(row, _)| row_key(&self.endpoints[row.endpoint].id, &row.tab.tab_id))
+            .collect();
+        let endpoints: Vec<usize> = listed.iter().map(|(row, _)| row.endpoint).collect();
+        // Each row's child index in the list, past the device lines above it.
+        let children: Vec<usize> = {
+            let (mut group, mut next) = (None, 0);
+            endpoints
+                .iter()
+                .map(|&endpoint| {
+                    if grouped && group != Some(endpoint) {
+                        group = Some(endpoint);
+                        next += 1;
+                    }
+                    next += 1;
+                    next - 1
+                })
+                .collect()
+        };
+        let drag = self.tab_row_drag.as_ref().and_then(|drag| {
+            let dragged = keys.iter().position(|key| *key == drag.key)?;
+            let device = device_rows(&endpoints, dragged);
+            drag.previewing(keys[device.clone()].iter().map(String::as_str))
+                .then_some((drag, dragged, device))
+        });
+        let floating = drag.as_ref().is_some_and(|(drag, ..)| drag.floating());
         // Each row's shift for the drop in preview, from the heights the last
         // frame laid out: shifting moves rows, never resizes them.
-        let shifts = drag.map_or_else(Vec::new, |(drag, dragged)| {
-            let heights: Vec<f32> = (0..listed.len())
-                .map(|row| {
+        let shifts = drag.as_ref().map_or_else(Vec::new, |(drag, dragged, _)| {
+            let heights: Vec<f32> = children
+                .iter()
+                .map(|&child| {
                     scroll
-                        .bounds_for_item(row)
+                        .bounds_for_item(child)
                         .map_or(0., |bounds| f32::from(bounds.size.height))
                 })
                 .collect();
-            preview(&heights, dragged, drag.target.unwrap_or(dragged))
+            preview(&heights, *dragged, drag.target.unwrap_or(*dragged))
         });
         let now = Instant::now();
         let mut sliding = false;
@@ -110,7 +117,7 @@ impl HerdrWindow {
         for (position, (row, name)) in listed.iter().enumerate() {
             let endpoint = &self.endpoints[row.endpoint];
             let own = row.endpoint == self.selected_endpoint;
-            if view == TabsView::ByDevice && multi && group != Some(row.endpoint) {
+            if grouped && group != Some(row.endpoint) {
                 group = Some(row.endpoint);
                 elements.push(tab_group_line(
                     &endpoint.id,
@@ -130,22 +137,26 @@ impl HerdrWindow {
             let context_id = id.clone();
             let close_id = id.clone();
             let press_id = id.clone();
+            let press_endpoint = row.endpoint;
             let navigate_endpoint = endpoint_id.clone();
-            let carried = floating && drag.is_some_and(|(_, dragged)| dragged == position);
-            let shift = match drag {
-                Some((drag, _)) if carried => {
-                    drag.pin(&id, f32::from(drag.offset()), now);
+            let carried = floating
+                && drag
+                    .as_ref()
+                    .is_some_and(|(_, dragged, _)| *dragged == position);
+            let shift = match &drag {
+                Some((drag, ..)) if carried => {
+                    drag.pin(&keys[position], f32::from(drag.offset()), now);
                     drag.offset()
                 }
-                Some((drag, _)) => {
-                    let (at, moving) = drag.slide(&id, shifts[position], now);
+                Some((drag, ..)) => {
+                    let (at, moving) = drag.slide(&keys[position], shifts[position], now);
                     sliding |= moving;
                     px(at)
                 }
                 None => px(0.),
             };
             if drag.is_some() {
-                drop.push((position, position, shift));
+                drop.push((position, children[position], shift));
             }
             let element = Cell::new(
                 rows,
@@ -190,16 +201,14 @@ impl HerdrWindow {
                 this.navigate_endpoint(&navigate_endpoint, NavigationTarget::Tab(&id), cx);
                 window.focus(&this.focus, cx);
             }))
-            .when(own && view == TabsView::Device, |row| {
-                row.on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                        if event.click_count == 1 {
-                            this.press_tab_row(&press_id, event.position, cx);
-                        }
-                    }),
-                )
-            })
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                    if event.click_count == 1 {
+                        this.press_tab_row(press_endpoint, &press_id, event.position, cx);
+                    }
+                }),
+            )
             .when(carried, |row| row.cursor_grabbing())
             .when(shift != px(0.), |row| row.top(shift))
             .into_any_element();
@@ -213,7 +222,7 @@ impl HerdrWindow {
         }
         TabRows {
             rows: elements,
-            drop: drag.map(|(_, dragged)| (drop, dragged)),
+            drop: drag.map(|(_, dragged, device)| (drop, dragged, device)),
             sliding,
         }
     }

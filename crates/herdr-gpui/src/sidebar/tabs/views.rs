@@ -1,7 +1,7 @@
 //! Which tabs the list shows: the selected device's shown space alone, or
 //! with that space's namesakes on the other devices.
 
-use crate::{HerdrWindow, preferences::TabsView};
+use crate::{HerdrWindow, preferences::TabsView, state::LiveState};
 use herdr_client::protocol::{ClientShellSnapshot, ClientShellTab};
 
 /// A listed tab, with the device and snapshot it belongs to.
@@ -13,6 +13,15 @@ pub(crate) struct ListedTab<'a> {
 }
 
 impl HerdrWindow {
+    /// A device's live state: the window's own copy for the selected device.
+    pub(crate) fn live_of(&self, endpoint: usize) -> &LiveState {
+        if endpoint == self.selected_endpoint {
+            &self.live
+        } else {
+            &self.endpoints[endpoint].live
+        }
+    }
+
     /// The listed tabs in numbering order: the selected device's shown space,
     /// then in the views across devices each other device's space of that name.
     pub(crate) fn listed_tabs(&self) -> Vec<ListedTab<'_>> {

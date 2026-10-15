@@ -55,6 +55,8 @@ mod status_ports;
 #[cfg(test)]
 mod tabs_views;
 #[cfg(test)]
+mod tabs_views_reorder;
+#[cfg(test)]
 mod text_width;
 #[cfg(test)]
 mod update_panel;

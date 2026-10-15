@@ -927,8 +927,10 @@ impl HerdrWindow {
                                             event.position,
                                             held,
                                             |lift| {
-                                                let (rows, dragged) = tab_drop.as_ref()?;
-                                                tab_reorder::resolve(rows, *dragged, &scroll, lift)
+                                                let (rows, dragged, device) = tab_drop.as_ref()?;
+                                                tab_reorder::resolve(
+                                                    rows, *dragged, device, &scroll, lift,
+                                                )
                                             },
                                             cx,
                                         )

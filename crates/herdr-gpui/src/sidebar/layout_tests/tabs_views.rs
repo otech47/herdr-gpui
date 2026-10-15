@@ -7,7 +7,7 @@ use gpui::MouseButton;
 
 /// A window on the local "herdr" space, with a saved device whose second
 /// space is also called "herdr" and holds the tabs r0 and r1.
-fn two_devices(
+pub(super) fn two_devices(
     cx: &mut gpui::TestAppContext,
 ) -> (Entity<HerdrWindow>, &mut gpui::VisualTestContext) {
     let (view, cx) = cx.add_window_view(|window, cx| {
@@ -42,7 +42,7 @@ fn two_devices(
     (view, cx)
 }
 
-fn draw(cx: &mut gpui::VisualTestContext) {
+pub(super) fn draw(cx: &mut gpui::VisualTestContext) {
     cx.update(|window, cx| {
         cx.default_global::<TextProbes>().0.clear();
         full_draw(window, cx).clear(cx);
