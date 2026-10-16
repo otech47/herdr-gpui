@@ -197,3 +197,9 @@ just test-perf
   check that did not run.
 - Keep user-facing docs and public API examples synchronized with behavior changes. Do not copy another repository's release, issue-tracker, or mandatory-push workflow into this one.
 - Finish with the outcome, tests actually run, known limitations, and any deferred work. Never claim unrun checks passed.
+
+## Oscar's checkouts
+
+This fork runs on Oscar's two Macs. `.agents/operating.md` says what runs where, what a change needs before it takes effect, and how an agent offers and performs an app relaunch. Read it before changing anything on those machines.
+
+@.agents/operating.md
