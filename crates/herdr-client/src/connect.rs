@@ -9,7 +9,7 @@ use crate::{
     limits::{COMMAND_CAPACITY, EVENT_CAPACITY},
     options::{ConnectOptions, validate_options},
     queue,
-    session::{Signals, run_connection},
+    session::{Pace, Signals, run_connection},
     ssh,
     transport::Stream,
 };
@@ -89,6 +89,7 @@ pub fn connect_with_connector(
                     Signals {
                         stop: &worker_stop,
                         liveness: &worker_liveness,
+                        pace: Pace::default(),
                     },
                 )
                 // The child guard is dropped before delivering a disconnect event.
