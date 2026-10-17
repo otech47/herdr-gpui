@@ -205,6 +205,7 @@ impl HerdrWindow {
                                         .id(SharedString::from(format!(
                                             "collapse-host-{endpoint_id}"
                                         )))
+                                        .debug_selector(|| format!("collapse-host-{endpoint_id}"))
                                         .w(px(HOST_ARROW_WIDTH))
                                         .flex_none()
                                         .child(label_text(if endpoint.collapsed {

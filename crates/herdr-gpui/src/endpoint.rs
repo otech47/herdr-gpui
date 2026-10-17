@@ -132,6 +132,8 @@ pub(super) struct Endpoint {
     /// may have been picked in the sessions list since, so a catalog change can
     /// only be told from such a pick by remembering what the catalog said.
     saved_host: Option<SavedHost>,
+    /// Folded to its header in the spaces list. Never saved, so every host
+    /// starts folded on every launch.
     pub collapsed: bool,
     pub collapsed_repos: HashSet<String>,
     pub live: LiveState,
@@ -183,7 +185,7 @@ impl Endpoint {
             connection: ConnectionBridge::new(target),
             enabled,
             saved_host: None,
-            collapsed: false,
+            collapsed: true,
             collapsed_repos: HashSet::new(),
             live: LiveState::default(),
             generation: 0,

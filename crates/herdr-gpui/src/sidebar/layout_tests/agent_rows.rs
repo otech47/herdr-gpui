@@ -405,6 +405,8 @@ fn hiding_agents_preserves_scrolled_multi_endpoint_lists(cx: &mut gpui::TestAppC
         for agent in &mut Arc::make_mut(remote.live.snapshot.as_mut().unwrap()).agents {
             agent.display_agent = Some("Remote Agent".into());
         }
+        remote.collapsed = false;
+        view.endpoints[0].collapsed = false;
         view.endpoints.push(remote);
         view
     });

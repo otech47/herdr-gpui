@@ -25,6 +25,8 @@ mod configured_rows;
 #[cfg(test)]
 mod device_footer;
 #[cfg(test)]
+mod host_fold;
+#[cfg(test)]
 mod host_groups;
 #[cfg(test)]
 mod layouts;
