@@ -55,6 +55,8 @@ pub enum Error {
     ClipboardImageWriteTimeout,
     #[error("clipboard image uploads require a transport with bounded writes")]
     ClipboardImageUnsupported,
+    #[error("terminal input write timed out; reconnect required")]
+    InputWriteTimeout,
     #[error("semantic input fallback requires a pane or popup target")]
     ClipboardImageInputTarget,
     #[error("clipboard image preparation timed out; reservation skipped")]
