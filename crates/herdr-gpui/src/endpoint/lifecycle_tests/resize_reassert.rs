@@ -8,10 +8,10 @@ fn successful_resize_reassert_waits_for_the_next_retry_interval(cx: &mut gpui::T
     });
     let view = fixture.read_with(cx, |fixture, _| fixture.0.clone());
     let start = Instant::now();
-    view.update(cx, |view, cx| {
+    view.update(cx, |view, _| {
         view.endpoints = vec![endpoint];
         view.options = ConnectOptions::default();
-        view.reset_selected(cx);
+        view.reset_selected();
         view.options.surface_size.cols += 1;
         view.last_queued_options = Some(view.options);
         view.pending_resize = None;

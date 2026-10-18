@@ -4,6 +4,9 @@ use herdr_client::{
 };
 use std::sync::Arc;
 
+mod projection;
+
+
 pub(crate) type DialogResponse = Result<serde_json::Value, Arc<crate::Error>>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -57,12 +60,15 @@ pub struct LiveState {
     pub(crate) sound_cancel: Arc<std::sync::atomic::AtomicBool>,
     pub(crate) sound_connection_cancel: Arc<std::sync::atomic::AtomicBool>,
     pub snapshot: Option<Arc<ClientShellSnapshot>>,
+    /// One newer metadata projection, waiting for its matching cells.
+    pub(crate) pending_snapshot: Option<Arc<ClientShellSnapshot>>,
     /// The pane focused before the current one, in any workspace or tab of
     /// this daemon boot, for Herdr's `last_pane`.
     pub(crate) previous_pane: Option<String>,
     pub surface: Option<Arc<PaneSurfaceFrame>>,
     /// Pixels for the images the connection's surfaces place, by asset key.
     pub(crate) surface_images: Arc<SurfaceImages>,
+    pub(crate) pending_surface_images: Option<Arc<SurfaceImages>>,
     pub status: ConnectionStatus,
     pub error: Option<String>,
     /// Why `ssh` refused the bridge, when that is how the connection ended.
@@ -165,9 +171,11 @@ impl Default for LiveState {
             sound_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             sound_connection_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             snapshot: None,
+            pending_snapshot: None,
             previous_pane: None,
             surface: None,
             surface_images: Default::default(),
+            pending_surface_images: None,
             status: ConnectionStatus::Connecting,
             error: None,
             ssh_failure: None,
@@ -215,9 +223,11 @@ impl LiveState {
             sound_cancel,
             sound_connection_cancel,
             snapshot,
+            pending_snapshot: _,
             previous_pane,
             surface: _,
             surface_images: _,
+            pending_surface_images: _,
             status,
             error,
             ssh_failure,
@@ -438,64 +448,9 @@ impl LiveState {
                 self.status = ConnectionStatus::AwaitingSnapshot;
                 self.error = None;
             }
-            ClientEvent::Snapshot(snapshot) => {
-                if self
-                    .snapshot
-                    .as_ref()
-                    .is_some_and(|old| old.boot_id != snapshot.boot_id)
-                {
-                    self.notifications.clear();
-                    self.cancel_sounds();
-                    self.sound_cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
-                    // A restarted daemon pushes its own title; the old one's
-                    // must not outlive it.
-                    self.bells = 0;
-                    self.window_title = None;
-                }
-                if let Some(activation) = &mut self.activation
-                    && activation.boot != snapshot.boot_id
-                {
-                    activation.failed = true;
-                }
-                self.missing_installation = false;
-                if self
-                    .surface
-                    .as_ref()
-                    .is_some_and(|s| !coherent(&snapshot, s))
-                {
-                    self.surface = None;
-                }
-                // Once the daemon drops or replaces the announcement there is
-                // nothing left to hide.
-                if self
-                    .announcement_dismissal
-                    .as_ref()
-                    .is_some_and(|dismissal| !dismissal.covers(&snapshot))
-                {
-                    self.announcement_dismissal = None;
-                }
-                self.status = ConnectionStatus::Connected;
-                // Pane IDs are only meaningful within one daemon boot.
-                self.previous_pane = match &self.snapshot {
-                    Some(old) if old.boot_id == snapshot.boot_id => old
-                        .focused_pane_id
-                        .clone()
-                        .filter(|old| Some(old) != snapshot.focused_pane_id.as_ref())
-                        .or_else(|| self.previous_pane.take()),
-                    _ => None,
-                };
-                self.snapshot = Some(snapshot);
-            }
-            ClientEvent::Surface(surface) => {
-                if self
-                    .snapshot
-                    .as_ref()
-                    .is_some_and(|s| coherent(s, &surface))
-                {
-                    self.surface = Some(surface);
-                }
-            }
-            ClientEvent::SurfaceImages(images) => self.surface_images = images,
+            ClientEvent::Snapshot(snapshot) => self.receive_snapshot(snapshot),
+            ClientEvent::Surface(surface) => self.receive_surface(surface),
+            ClientEvent::SurfaceImages(images) => self.receive_surface_images(images),
             // The `Disconnected` that follows carries the reason text.
             ClientEvent::VersionMismatch(mismatch) => self.version_mismatch = Some(mismatch),
             ClientEvent::Disconnected { reason, ssh } => {
@@ -509,6 +464,8 @@ impl LiveState {
                 self.status = ConnectionStatus::Disconnected;
                 self.error = Some(reason);
                 self.snapshot = None;
+                self.pending_snapshot = None;
+                self.pending_surface_images = None;
                 self.surface = None;
                 self.announcement_dismissal = None;
                 self.surface_images = Default::default();

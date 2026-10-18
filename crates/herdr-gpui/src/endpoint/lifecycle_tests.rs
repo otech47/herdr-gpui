@@ -16,6 +16,7 @@ use std::{
     sync::atomic::AtomicU64,
 };
 
+mod atomic_projection;
 mod close_pane;
 mod endpoint_switch;
 mod focus_fences;
@@ -25,12 +26,14 @@ mod input_gap;
 mod keyboard;
 mod mouse_gestures;
 mod mouse_targets;
+mod popup_projection;
 mod prompts;
 mod reconnect_backoff;
 mod remote_drop;
 mod resize_reassert;
 mod sounds;
 mod split_drag;
+mod staged_release;
 mod startup_pin;
 mod toast_handoff;
 mod toast_navigation;
@@ -299,6 +302,10 @@ fn prepare_mouse(view: &mut HerdrWindow, endpoint: Endpoint) {
         point(px(100.), px(50.)),
         size(px(800.), px(24. * view.config.terminal.line_height())),
     );
+    // The reducer owns the same coherent fixture the window hit tests.
+    let mut inbox = view.endpoints[1].connection.inbox.lock().unwrap();
+    inbox.snapshot = view.live.snapshot.clone();
+    inbox.surface = view.live.surface.clone();
     assert!(view.input_ready());
 }
 

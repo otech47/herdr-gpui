@@ -3,6 +3,7 @@ use herdr_client::protocol::FrameData;
 
 mod agent_status;
 mod announcements;
+mod atomic_projection;
 mod connection_status;
 mod daemon_messages;
 mod focus_acks;

@@ -1,10 +1,8 @@
-//! Keyboard input typed while a newer snapshot waits for its matching surface.
+//! Keyboard input held while an input-changing projection waits for its surface.
 //!
-//! The daemon publishes a snapshot before the surface of the same projection
-//! revision, and an agent's title spinner bumps that revision several times a
-//! second. Without a coherent surface the popup target is unknown, so input
-//! waits here instead of being discarded, and leaves only for the target that
-//! was focused when the gap opened.
+//! Metadata-only updates retain a coherent displayed pair and send input
+//! immediately. Other projection gaps may temporarily remove that pair, so
+//! held input leaves only for the target that was focused when the gap opened.
 
 use super::{Flash, HerdrWindow};
 use crate::{connection::ConnectionBridge, terminal::InputTarget};

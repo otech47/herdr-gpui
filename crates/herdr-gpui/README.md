@@ -2149,9 +2149,11 @@ Windows setup) nothing is saved and the window says so.
 
 Socket I/O belongs to `herdr-client`'s worker. A separate event thread drains all
 ordered events into a bounded latest-state cache. The UI samples changed state
-at most once per 16 ms without blocking. Snapshots invalidate surfaces with a
-different boot/projection revision; input waits for a coherent surface. Reconnect
-replaces the cache, so late events from an old connection cannot affect the UI.
+at most once per 16 ms without blocking. A metadata-only snapshot is staged
+while the displayed snapshot and surface stay coherent, so input keeps flowing;
+a boot, focus, pane-layout, zoom, keybinding, or command change invalidates the
+surface, and input waits for a coherent one. Reconnect replaces the cache, so
+late events from an old connection cannot affect the UI.
 
 ### Scrolling Semantics
 

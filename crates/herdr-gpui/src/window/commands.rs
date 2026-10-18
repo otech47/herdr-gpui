@@ -159,7 +159,7 @@ impl HerdrWindow {
                 focus,
                 active: true,
             });
-            state.surface = None;
+            state.invalidate_surface();
             state.dirty = true;
             self.live = state.clone();
             self.activation_deadline = Some(
