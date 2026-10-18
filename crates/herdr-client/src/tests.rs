@@ -33,7 +33,12 @@ mod handshake;
 mod health;
 mod host_themes;
 mod idle_wait;
+mod input_pane;
 mod liveness;
+#[cfg(unix)]
+mod partial_input;
+#[cfg(windows)]
+mod partial_input_windows;
 mod session_state;
 mod surface_encoding;
 mod surfaces;
