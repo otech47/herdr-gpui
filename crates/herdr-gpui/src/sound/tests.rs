@@ -473,3 +473,4 @@ fn worker_drops_cancelled_and_expired_jobs_without_playing_them() {
 }
 
 mod repeats;
+mod staged_metadata;
