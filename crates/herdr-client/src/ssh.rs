@@ -51,6 +51,9 @@ const PROBE_CANDIDATE: &str = "herdr-probe:candidate";
 const PROBE_DONE: &str = "herdr-probe:done";
 #[cfg(unix)]
 const PROBE_TIMEOUT: Duration = Duration::from_secs(30);
+/// `ssh -G` only reads configuration, but a cold start on a busy machine
+/// has taken over five seconds.
+const RESOLVE_TIMEOUT: Duration = Duration::from_secs(15);
 #[cfg(unix)]
 const PROBE_OUTPUT_LIMIT: u64 = 64 * 1024;
 
@@ -232,7 +235,7 @@ pub fn resolve_destination(target: &str) -> Result<Destination> {
     validate_target(target)?;
     let mut command = crate::environment::command("ssh");
     command.args(["-G", "--", target]);
-    let (status, output) = run(&mut command, Duration::from_secs(5), || false)?;
+    let (status, output) = run(&mut command, RESOLVE_TIMEOUT, || false)?;
     if !status.success() {
         return Err(Error::RemoteCommand(status));
     }
