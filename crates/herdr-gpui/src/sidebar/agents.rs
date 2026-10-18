@@ -7,9 +7,62 @@ use crate::{
     HerdrWindow,
     config::{FontConfig, Theme},
     herdr_settings::{IndicatorStyle, Settings},
+    usage::Host,
 };
 use gpui::{prelude::*, *};
 use herdr_client::protocol::{AgentStatus, ClientShellAgent, ClientShellSnapshot};
+
+/// The daemon's status, or that the agent's plan is used up, which the daemon
+/// cannot see and this client reads from the host's usage.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Mark {
+    Status(AgentStatus),
+    Limited,
+}
+
+impl From<AgentStatus> for Mark {
+    fn from(status: AgentStatus) -> Self {
+        Self::Status(status)
+    }
+}
+
+impl Mark {
+    fn index(self) -> usize {
+        match self {
+            Self::Status(AgentStatus::Unknown) => 0,
+            Self::Status(AgentStatus::Idle) => 1,
+            Self::Status(AgentStatus::Working) => 2,
+            Self::Status(AgentStatus::Done) => 3,
+            Self::Status(AgentStatus::Blocked) => 4,
+            Self::Limited => 5,
+        }
+    }
+}
+
+impl HerdrWindow {
+    /// Limited once a window of the agent's provider on its host is used up,
+    /// unless the agent is blocked, which still needs an answer.
+    pub(crate) fn mark(
+        &self,
+        endpoint: usize,
+        agent: Option<&ClientShellAgent>,
+        status: AgentStatus,
+    ) -> Mark {
+        let limited = status != AgentStatus::Blocked
+            && agent
+                .and_then(|agent| agent.agent.as_deref())
+                .zip(self.endpoints.get(endpoint))
+                .is_some_and(|(agent, endpoint)| {
+                    self.usage
+                        .limited(&Host::from(&endpoint.connection.target), agent)
+                });
+        if limited {
+            Mark::Limited
+        } else {
+            Mark::Status(status)
+        }
+    }
+}
 
 pub(super) fn agents_sort(window: &HerdrWindow, cx: &mut Context<HerdrWindow>) -> Stateful<Div> {
     let theme = &window.theme;
@@ -153,7 +206,7 @@ pub(super) fn agent_labels<'a>(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Indicators {
     pub(super) style: IndicatorStyle,
-    colors: [u32; 5],
+    colors: [u32; 6],
 }
 
 impl Indicators {
@@ -161,29 +214,24 @@ impl Indicators {
         Self {
             style: settings.map_or(IndicatorStyle::Dots, |settings| settings.indicators),
             colors: [
-                AgentStatus::Unknown,
-                AgentStatus::Idle,
-                AgentStatus::Working,
-                AgentStatus::Done,
-                AgentStatus::Blocked,
+                Mark::Status(AgentStatus::Unknown),
+                Mark::Status(AgentStatus::Idle),
+                Mark::Status(AgentStatus::Working),
+                Mark::Status(AgentStatus::Done),
+                Mark::Status(AgentStatus::Blocked),
+                Mark::Limited,
             ]
-            .map(|status| {
+            .map(|mark| {
                 settings.map_or_else(
-                    || status_style(status, theme).2,
-                    |settings| theme.ink(settings.status_color(status, light)),
+                    || status_style(mark, theme).2,
+                    |settings| theme.ink(settings.mark_color(mark, light)),
                 )
             }),
         }
     }
 
-    pub(super) fn color(self, status: AgentStatus) -> u32 {
-        self.colors[match status {
-            AgentStatus::Unknown => 0,
-            AgentStatus::Idle => 1,
-            AgentStatus::Working => 2,
-            AgentStatus::Done => 3,
-            AgentStatus::Blocked => 4,
-        }]
+    pub(super) fn color(self, mark: impl Into<Mark>) -> u32 {
+        self.colors[mark.into().index()]
     }
 
     pub(crate) fn width(self, font: &FontConfig) -> f32 {
@@ -194,36 +242,39 @@ impl Indicators {
     }
 }
 
-pub(super) fn status_symbol(status: AgentStatus) -> &'static str {
-    match status {
-        AgentStatus::Working => "\u{25d0}",
-        AgentStatus::Blocked => "\u{d7}",
-        AgentStatus::Done => "\u{2713}",
-        AgentStatus::Idle => "\u{25cb}",
-        AgentStatus::Unknown => "\u{b7}",
+pub(super) fn status_symbol(mark: impl Into<Mark>) -> &'static str {
+    match mark.into() {
+        Mark::Status(AgentStatus::Working) => "\u{25d0}",
+        Mark::Status(AgentStatus::Blocked) => "\u{d7}",
+        Mark::Status(AgentStatus::Done) => "\u{2713}",
+        Mark::Status(AgentStatus::Idle) => "\u{25cb}",
+        Mark::Status(AgentStatus::Unknown) => "\u{b7}",
+        Mark::Limited => "\u{2298}",
     }
 }
 
 pub(crate) fn status_indicator(
-    status: AgentStatus,
+    mark: impl Into<Mark>,
     font: &FontConfig,
     indicators: Indicators,
 ) -> Div {
-    status_mark(status, font, indicators, indicators.color(status), false)
+    let mark = mark.into();
+    status_mark(mark, font, indicators, indicators.color(mark), false)
 }
 
 /// Configured tokens can override color and weight without changing indicator style.
 pub(super) fn status_mark(
-    status: AgentStatus,
+    mark: impl Into<Mark>,
     font: &FontConfig,
     indicators: Indicators,
     color: u32,
     bold: bool,
 ) -> Div {
+    let mark = mark.into();
     // Upstream dots: working/blocked/done filled, idle hollow, unknown a small dot.
-    let (diameter, filled) = match status {
-        AgentStatus::Unknown => (STATUS_DOT_UNKNOWN, true),
-        AgentStatus::Idle => (STATUS_WIDTH, false),
+    let (diameter, filled) = match mark {
+        Mark::Status(AgentStatus::Unknown) => (STATUS_DOT_UNKNOWN, true),
+        Mark::Status(AgentStatus::Idle) => (STATUS_WIDTH, false),
         _ => (STATUS_WIDTH, true),
     };
     let symbol = indicators.style == IndicatorStyle::Symbols;
@@ -246,7 +297,7 @@ pub(super) fn status_mark(
                 .line_height(px(line_height(font)))
                 .text_color(rgb(color))
                 .when(bold, |slot| slot.font_weight(FontWeight::BOLD))
-                .child(status_symbol(status))
+                .child(status_symbol(mark))
         })
         .when(!symbol, |slot| {
             slot.child(
@@ -264,13 +315,14 @@ pub(super) fn status_mark(
 /// The word the daemon's `state_text` token shows for a status when its
 /// sidebar config asks for it. Lowercase, matching the daemon's status names
 /// and what the terminal client prints.
-pub(super) fn status_text(status: AgentStatus) -> &'static str {
-    match status {
-        AgentStatus::Working => "working",
-        AgentStatus::Blocked => "blocked",
-        AgentStatus::Done => "done",
-        AgentStatus::Idle => "idle",
-        AgentStatus::Unknown => "unknown",
+pub(super) fn status_text(mark: impl Into<Mark>) -> &'static str {
+    match mark.into() {
+        Mark::Status(AgentStatus::Working) => "working",
+        Mark::Status(AgentStatus::Blocked) => "blocked",
+        Mark::Status(AgentStatus::Done) => "done",
+        Mark::Status(AgentStatus::Idle) => "idle",
+        Mark::Status(AgentStatus::Unknown) => "unknown",
+        Mark::Limited => "limited",
     }
 }
 
@@ -304,20 +356,22 @@ pub(crate) fn state_label<'a>(
 /// dot the same color in both clients whatever terminal theme is loaded, where
 /// ANSI slots would drift: Xcode Dark paints its cyan purple. Mocha's pastels
 /// vanish on light chrome, so [`Theme::ink`] darkens them there, keeping hue.
-pub(super) fn status_style(status: AgentStatus, theme: &Theme) -> (f32, bool, u32) {
-    let (diameter, filled, color) = match status {
-        AgentStatus::Working => (STATUS_WIDTH, true, 0xf9e2af),
-        AgentStatus::Blocked => (STATUS_WIDTH, true, 0xf38ba8),
-        AgentStatus::Done => (STATUS_WIDTH, true, 0x94e2d5),
-        AgentStatus::Idle => (STATUS_WIDTH, false, 0xa6e3a1),
-        AgentStatus::Unknown => (STATUS_DOT_UNKNOWN, true, 0x6c7086),
+/// Limited takes Mocha's mauve, the one accent no status uses.
+pub(super) fn status_style(mark: impl Into<Mark>, theme: &Theme) -> (f32, bool, u32) {
+    let (diameter, filled, color) = match mark.into() {
+        Mark::Status(AgentStatus::Working) => (STATUS_WIDTH, true, 0xf9e2af),
+        Mark::Status(AgentStatus::Blocked) => (STATUS_WIDTH, true, 0xf38ba8),
+        Mark::Status(AgentStatus::Done) => (STATUS_WIDTH, true, 0x94e2d5),
+        Mark::Status(AgentStatus::Idle) => (STATUS_WIDTH, false, 0xa6e3a1),
+        Mark::Status(AgentStatus::Unknown) => (STATUS_DOT_UNKNOWN, true, 0x6c7086),
+        Mark::Limited => (STATUS_WIDTH, true, 0xcba6f7),
     };
     (diameter, filled, theme.ink(color))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Indicators, sorted_agents, state_label, status_indicator};
+    use super::{Indicators, Mark, sorted_agents, state_label, status_indicator};
     use crate::{config::FontConfig, herdr_settings::IndicatorStyle};
     use gpui::{Styled, rgb};
     use herdr_client::protocol::AgentStatus;
@@ -337,20 +391,21 @@ mod tests {
                 let indicators = Indicators::new(Some(&settings), light, &theme);
                 assert_eq!(indicators, Indicators::new(Some(&settings), light, &theme));
                 assert_eq!(indicators.style, IndicatorStyle::Symbols);
-                for status in [
-                    AgentStatus::Unknown,
-                    AgentStatus::Idle,
-                    AgentStatus::Working,
-                    AgentStatus::Done,
-                    AgentStatus::Blocked,
+                for mark in [
+                    Mark::Status(AgentStatus::Unknown),
+                    Mark::Status(AgentStatus::Idle),
+                    Mark::Status(AgentStatus::Working),
+                    Mark::Status(AgentStatus::Done),
+                    Mark::Status(AgentStatus::Blocked),
+                    Mark::Limited,
                 ] {
                     assert_eq!(
-                        indicators.color(status),
-                        theme.ink(settings.status_color(status, light))
+                        indicators.color(mark),
+                        theme.ink(settings.mark_color(mark, light))
                     );
                     for background in [theme.background, theme.surface, theme.active] {
                         assert!(
-                            crate::contrast::ratio(indicators.color(status), background)
+                            crate::contrast::ratio(indicators.color(mark), background)
                                 >= Contrast::High.mark_ratio()
                         );
                     }
@@ -370,18 +425,19 @@ mod tests {
         for style in [IndicatorStyle::Dots, IndicatorStyle::Symbols] {
             let indicators = Indicators {
                 style,
-                colors: [0x112233, 0x223344, 0x334455, 0x445566, 0x556677],
+                colors: [0x112233, 0x223344, 0x334455, 0x445566, 0x556677, 0x667788],
             };
-            for (status, expected) in [
-                (AgentStatus::Unknown, 0x112233),
-                (AgentStatus::Idle, 0x223344),
-                (AgentStatus::Working, 0x334455),
-                (AgentStatus::Done, 0x445566),
-                (AgentStatus::Blocked, 0x556677),
+            for (mark, expected) in [
+                (Mark::Status(AgentStatus::Unknown), 0x112233),
+                (Mark::Status(AgentStatus::Idle), 0x223344),
+                (Mark::Status(AgentStatus::Working), 0x334455),
+                (Mark::Status(AgentStatus::Done), 0x445566),
+                (Mark::Status(AgentStatus::Blocked), 0x556677),
+                (Mark::Limited, 0x667788),
             ] {
-                assert_eq!(indicators.color(status), expected);
+                assert_eq!(indicators.color(mark), expected);
                 if style == IndicatorStyle::Symbols {
-                    let mut slot = status_indicator(status, &font, indicators);
+                    let mut slot = status_indicator(mark, &font, indicators);
                     assert_eq!(slot.text_style().color, Some(rgb(expected).into()));
                 }
             }

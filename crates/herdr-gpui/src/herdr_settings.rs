@@ -576,7 +576,11 @@ impl Settings {
     }
 
     pub(crate) fn status_color(&self, status: AgentStatus, light: bool) -> u32 {
-        self.colors(light).status(status)
+        self.mark_color(status.into(), light)
+    }
+
+    pub(crate) fn mark_color(&self, mark: crate::sidebar::Mark, light: bool) -> u32 {
+        self.colors(light).mark(mark)
     }
 }
 

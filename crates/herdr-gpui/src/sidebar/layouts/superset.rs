@@ -6,7 +6,7 @@
 
 use super::{
     super::{
-        agents::{status_mark, status_style},
+        agents::{Mark, status_mark, status_style},
         cell::{AgentRow, RowContext, RowLayout, RowState, WorkspaceRow},
         line_height,
         row::{
@@ -90,7 +90,7 @@ fn shell(key: &str, state: RowState, indent: f32, line: Line<'_>, cx: &RowContex
 fn slot(
     key: &str,
     glyph: impl IntoElement,
-    (status, dot): (AgentStatus, Option<(u32, bool)>),
+    (status, dot): (Mark, Option<(u32, bool)>),
     m: &Metrics,
     cx: &RowContext<'_>,
 ) -> Div {
@@ -135,10 +135,10 @@ fn slot(
 /// it; styled as that leading `state_icon` asks.
 fn dot(
     lines: &[Vec<ResolvedToken>],
-    status: AgentStatus,
+    status: Mark,
     cx: &RowContext<'_>,
-) -> (AgentStatus, Option<(u32, bool)>) {
-    let dot = if status == AgentStatus::Unknown {
+) -> (Mark, Option<(u32, bool)>) {
+    let dot = if status == Mark::Status(AgentStatus::Unknown) {
         None
     } else if lines.is_empty() {
         Some((cx.indicators.color(status), false))
@@ -331,7 +331,7 @@ impl RowLayout for Superset {
 mod tests {
     use super::{
         super::super::{
-            agents::Indicators,
+            agents::{Indicators, Mark},
             cell::RowContext,
             layout,
             tokens::{ResolvedToken, TextRole, TokenKind},
@@ -358,7 +358,7 @@ mod tests {
             width: 232.,
             host: None,
         };
-        let working = AgentStatus::Working;
+        let working = Mark::Status(AgentStatus::Working);
         let native = indicators.color(working);
         let icon = |style| ResolvedToken {
             kind: TokenKind::StateIcon,
@@ -389,8 +389,8 @@ mod tests {
         // No leading status, or nothing to report, draws no dot.
         assert_eq!(dot(&[vec![name.clone()]], working, &cx), (working, None));
         assert_eq!(
-            dot(&[vec![icon(red), name]], AgentStatus::Unknown, &cx),
-            (AgentStatus::Unknown, None)
+            dot(&[vec![icon(red), name]], AgentStatus::Unknown.into(), &cx),
+            (Mark::Status(AgentStatus::Unknown), None)
         );
     }
 }

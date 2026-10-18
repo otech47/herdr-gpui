@@ -13,13 +13,13 @@ use super::{
 };
 use crate::config::{FontConfig, Theme};
 use gpui::{prelude::*, *};
-use herdr_client::protocol::AgentStatus;
 use std::sync::Arc;
 use unicode_width::UnicodeWidthStr;
 
 mod badge;
 mod configured;
 
+use super::agents::Mark;
 pub(crate) use badge::compact;
 pub(super) use badge::{PrBadge, RowBadge, Upstream};
 use configured::configured_lines;
@@ -276,7 +276,7 @@ pub(super) fn row(
     name: &[(&str, bool)],
     detail: &str,
     kind: RowKind,
-    status: AgentStatus,
+    status: Mark,
     indicators: Indicators,
     removing: bool,
     state: RowState,

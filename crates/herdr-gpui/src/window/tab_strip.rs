@@ -254,9 +254,17 @@ impl HerdrWindow {
                                 .items_center()
                                 .gap(px(DOT_GAP))
                                 .when(Lead::of(tab.agent_status) == Lead::Status, |title| {
+                                    let agent = snapshot
+                                        .agents
+                                        .iter()
+                                        .find(|agent| agent.tab_id == tab.tab_id);
                                     title.child(
                                         status_indicator(
-                                            tab.agent_status,
+                                            self.mark(
+                                                self.selected_endpoint,
+                                                agent,
+                                                tab.agent_status,
+                                            ),
                                             &self.config.tabs,
                                             indicators,
                                         )

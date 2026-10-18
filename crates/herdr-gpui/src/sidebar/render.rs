@@ -4,7 +4,7 @@
 
 use super::{
     HOST_ARROW_WIDTH, HOST_GAP, STATUS_WIDTH, SidebarDrag, agent_name,
-    agents::{Indicators, agent_place, state_label, status_text},
+    agents::{Indicators, Mark, agent_place, state_label, status_text},
     agents_sort,
     cell::{AgentRow, Cell, Fold, RowContext, RowData, RowState, WorkspaceRow, layout_for},
     label_text, layout, line_height,
@@ -661,6 +661,7 @@ impl HerdrWindow {
                 agent_count += 1;
                 let id = agent.pane_id.clone();
                 let navigate_endpoint = endpoint_id.clone();
+                let mark = self.mark(endpoint_index, Some(agent), agent.agent_status);
                 agents = agents.child(
                     Cell::new(
                         rows,
@@ -668,14 +669,17 @@ impl HerdrWindow {
                             key: format!("agent-{id}"),
                             name: agent_name(agent),
                             icon: crate::icons::AgentIcon::from_identity(agent.agent.as_deref()),
-                            status: agent.agent_status,
+                            status: mark,
                             place: agent_place(agent, snapshot),
                             status_text: self
                                 .config
                                 .sidebar_layout
                                 .agents
                                 .shows_status_text(agent.agent.as_deref())
-                                .then(|| state_label(agent, status_text(agent.agent_status))),
+                                .then(|| match mark {
+                                    Mark::Limited => status_text(mark).into(),
+                                    Mark::Status(status) => state_label(agent, status_text(status)),
+                                }),
                             lines,
                             icon_line: None,
                         }),

@@ -6,6 +6,7 @@
 
 use super::{
     super::{
+        agents::Mark,
         cell::{AgentRow, RowContext, RowLayout, RowState, WorkspaceRow},
         line_height,
         row::{RowKind, RowTree, TokenLook, left_behind, token_column},
@@ -15,7 +16,6 @@ use super::{
 };
 use crate::config::Theme;
 use gpui::{prelude::*, *};
-use herdr_client::protocol::AgentStatus;
 
 pub(in super::super) struct Orca;
 
@@ -69,7 +69,7 @@ fn status_width(cx: &RowContext<'_>) -> f32 {
 /// room its absence returns to the text.
 fn configured_status(
     lines: &[Vec<ResolvedToken>],
-    status: AgentStatus,
+    status: Mark,
     removing: bool,
     cx: &RowContext<'_>,
 ) -> (Option<Div>, f32) {

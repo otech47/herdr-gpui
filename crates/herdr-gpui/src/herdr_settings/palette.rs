@@ -1,6 +1,7 @@
 //! Herdr UI palettes, adapted from src/app/state.rs at the revision credited in
 //! the parent module. These are UI tokens, not upstream terminal ANSI palettes.
 use super::THEME_NAMES;
+use crate::sidebar::Mark;
 use herdr_client::protocol::AgentStatus;
 use serde::Deserialize;
 
@@ -219,14 +220,15 @@ impl Palette {
         }
     }
 
-    pub(super) fn status(&self, status: AgentStatus) -> u32 {
+    pub(super) fn mark(&self, mark: Mark) -> u32 {
         self.rgb(
-            match status {
-                AgentStatus::Working => 13,
-                AgentStatus::Blocked => 14,
-                AgentStatus::Done => 16,
-                AgentStatus::Idle => 12,
-                AgentStatus::Unknown => 7,
+            match mark {
+                Mark::Status(AgentStatus::Working) => 13,
+                Mark::Status(AgentStatus::Blocked) => 14,
+                Mark::Status(AgentStatus::Done) => 16,
+                Mark::Status(AgentStatus::Idle) => 12,
+                Mark::Status(AgentStatus::Unknown) => 7,
+                Mark::Limited => 11,
             },
             0xd8dee9,
         )

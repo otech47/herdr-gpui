@@ -217,6 +217,19 @@ impl Usage {
             .collect();
     }
 
+    /// Whether a window of `agent`'s provider on `host` is used up, by the
+    /// last reading that answered.
+    pub fn limited(&self, host: &Host, agent: &str) -> bool {
+        self.entries.get(host).is_some_and(|entry| {
+            entry
+                .readings
+                .iter()
+                .filter(|reading| reading.provider.id() == agent)
+                .filter_map(|reading| reading.report.as_ref())
+                .any(|report| report.windows.iter().any(|window| window.left() == 0))
+        })
+    }
+
     /// Whether the tracked host is being read right now.
     pub fn busy(&self) -> bool {
         self.host.is_some() && self.busy == self.host

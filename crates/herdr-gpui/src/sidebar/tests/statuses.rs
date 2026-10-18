@@ -36,6 +36,34 @@ fn status_colors_keep_upstream_literals_where_they_already_read() {
 }
 
 #[test]
+fn a_limited_agent_takes_mauve_from_every_palette() {
+    for name in ["Default", "Nord", "Dracula", "Catppuccin Mocha"] {
+        let mut theme = Theme::builtin(name).unwrap();
+        let (diameter, filled, color) = status_style(Mark::Limited, &theme);
+        assert_eq!(
+            (diameter, filled, color),
+            (STATUS_WIDTH, true, 0xcba6f7),
+            "{name}"
+        );
+        theme.palette.fill(0x123456);
+        assert_eq!(
+            Indicators::new(None, false, &theme).color(Mark::Limited),
+            0xcba6f7
+        );
+        for status in STATUSES {
+            assert_ne!(status_style(status, &theme).2, color, "{name} {status:?}");
+        }
+    }
+    assert_eq!(status_symbol(Mark::Limited), "\u{2298}");
+    assert_eq!(status_text(Mark::Limited), "limited");
+    let settings = Settings::parse_text("[theme]\nname = 'catppuccin'\n").unwrap();
+    assert_eq!(settings.mark_color(Mark::Limited, false), 0xcba6f7);
+    assert_eq!(settings.mark_color(Mark::Limited, true), 0xcba6f7);
+    let settings = Settings::parse_text("[theme.custom]\nmauve = '#345678'\n").unwrap();
+    assert_eq!(settings.mark_color(Mark::Limited, false), 0x345678);
+}
+
+#[test]
 fn status_symbols_match_upstream_without_changing_status_colors() {
     let mut indicators = Indicators::new(None, false, &Theme::default());
     indicators.style = IndicatorStyle::Symbols;
@@ -120,7 +148,7 @@ fn symbol_rows_keep_layout_density_and_expand_child_indent() {
                     &[("child", true)],
                     "branch",
                     kind,
-                    AgentStatus::Working,
+                    AgentStatus::Working.into(),
                     indicators,
                     false,
                     super::super::cell::RowState::default(),
@@ -171,13 +199,13 @@ fn status_colors_reach_the_contrast_setting_on_every_builtin_theme() {
     for name in Theme::BUILTIN_NAMES {
         for contrast in [Contrast::Standard, Contrast::High] {
             let theme = Theme::builtin(name).unwrap().with_contrast(contrast);
-            for status in STATUSES {
-                let color = status_style(status, &theme).2;
+            for mark in STATUSES.map(Mark::from).into_iter().chain([Mark::Limited]) {
+                let color = status_style(mark, &theme).2;
                 for background in [theme.background, theme.surface, theme.active] {
                     let ratio = crate::contrast::ratio(color, background);
                     assert!(
                         ratio >= contrast.mark_ratio(),
-                        "{name} {contrast:?} {status:?} on {background:06x}: {ratio}"
+                        "{name} {contrast:?} {mark:?} on {background:06x}: {ratio}"
                     );
                 }
             }
@@ -186,11 +214,8 @@ fn status_colors_reach_the_contrast_setting_on_every_builtin_theme() {
     // Light chrome darkens the pastels rather than keeping upstream's literals.
     let latte = Theme::builtin("Catppuccin Latte").unwrap();
     let mocha = Theme::builtin("Catppuccin Mocha").unwrap();
-    for status in STATUSES {
-        assert_ne!(
-            status_style(status, &latte).2,
-            status_style(status, &mocha).2
-        );
+    for mark in STATUSES.map(Mark::from).into_iter().chain([Mark::Limited]) {
+        assert_ne!(status_style(mark, &latte).2, status_style(mark, &mocha).2);
     }
 }
 

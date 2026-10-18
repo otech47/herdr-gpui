@@ -12,6 +12,7 @@
 //! state: a layout costs one virtual call per row.
 
 use super::{
+    agents::Mark,
     layout::SidebarLook,
     row::{RowBadge, RowIcon, RowLift, RowTree, Upstream},
 };
@@ -85,8 +86,8 @@ impl<'a> WorkspaceRow<'a> {
         Upstream::new(self.workspace.git_ahead_behind)
     }
 
-    pub(super) fn status(&self) -> AgentStatus {
-        self.status
+    pub(super) fn status(&self) -> Mark {
+        self.status.into()
     }
 }
 
@@ -95,7 +96,7 @@ pub(super) struct AgentRow<'a> {
     pub(super) key: String,
     pub(super) name: &'a str,
     pub(super) icon: AgentIcon,
-    pub(super) status: AgentStatus,
+    pub(super) status: Mark,
     /// Its workspace and, when that earns a place, its tab. Missing once the
     /// workspace has gone.
     pub(super) place: Option<(&'a str, Option<&'a str>)>,

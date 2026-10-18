@@ -9,21 +9,20 @@ use crate::{
     config::Theme,
     sidebar::{
         ICON_RESERVE,
-        agents::status_mark,
+        agents::{Mark, status_mark},
         cell::RowContext,
         glyph_width, line_height,
         tokens::{ResolvedToken, TextRole, TokenKind, budgets, separator},
     },
 };
 use gpui::{prelude::*, *};
-use herdr_client::protocol::AgentStatus;
 use unicode_width::UnicodeWidthStr;
 
 /// What colors a configured row's tokens: the row they paint and its state.
 #[derive(Clone, Copy)]
 pub(in crate::sidebar) struct TokenLook {
     pub(in crate::sidebar) kind: RowKind,
-    pub(in crate::sidebar) status: AgentStatus,
+    pub(in crate::sidebar) status: Mark,
     pub(in crate::sidebar) focused: bool,
     /// A teleported checkout fades its name, as the native rows do.
     pub(in crate::sidebar) teleported: bool,
@@ -204,7 +203,7 @@ pub(in crate::sidebar) fn leading_status(lines: &[Vec<ResolvedToken>]) -> Option
 /// The color, and whether bold, a leading `state_icon` paints the status in.
 pub(in crate::sidebar) fn configured_status_style(
     token: &ResolvedToken,
-    status: AgentStatus,
+    status: Mark,
     cx: &RowContext<'_>,
 ) -> (u32, bool) {
     let (color, weight) = styled(
@@ -218,7 +217,7 @@ pub(in crate::sidebar) fn configured_status_style(
 /// The status mark a leading `state_icon` styles, offset onto the first line.
 pub(in crate::sidebar) fn configured_status(
     token: &ResolvedToken,
-    status: AgentStatus,
+    status: Mark,
     cx: &RowContext<'_>,
 ) -> Div {
     let (color, bold) = configured_status_style(token, status, cx);
@@ -346,7 +345,7 @@ mod tests {
         };
         let here = TokenLook {
             kind: RowKind::Workspace,
-            status: AgentStatus::Idle,
+            status: AgentStatus::Idle.into(),
             focused: false,
             teleported: false,
             icon_line: None,

@@ -32,7 +32,7 @@ pub(crate) mod layout_tests;
 pub(crate) mod native_tests;
 
 pub(crate) use {
-    agents::{Indicators, agent_name, state_label, status_indicator},
+    agents::{Indicators, Mark, agent_name, state_label, status_indicator},
     hover::{HoverMenu, HoverRest},
     metrics::{ARROW_RESERVE, HOST_ARROW_WIDTH, HOST_GAP, ICON_RESERVE, LABEL_GAP, STATUS_WIDTH},
     ports::PortsMenu,

@@ -185,7 +185,7 @@ fn cells_hand_their_state_and_data_to_the_layout() {
             key: "agent-p0".into(),
             name: "Claude Code",
             icon: crate::icons::AgentIcon::Generic,
-            status: AgentStatus::Working,
+            status: AgentStatus::Working.into(),
             place: None,
             status_text: None,
             lines: vec![],

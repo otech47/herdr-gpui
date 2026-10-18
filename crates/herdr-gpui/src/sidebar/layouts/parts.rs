@@ -8,6 +8,7 @@
 //! with an explicit width, so nothing can push past the row's edge.
 
 use super::super::{
+    agents::Mark,
     cell::{RowContext, RowState},
     glyph_width, label_text, line_height,
     row::{self, PrBadge, RowLift, removing_dot},
@@ -16,7 +17,6 @@ use super::super::{
 };
 use crate::config::{FontConfig, Theme};
 use gpui::{prelude::*, *};
-use herdr_client::protocol::AgentStatus;
 use std::borrow::Cow;
 
 /// How a piece claims its width.
@@ -250,7 +250,7 @@ pub(super) fn icon(path: impl Into<SharedString>, size: f32, color: u32) -> Svg 
 
 /// The status dot, or the pulse that replaces it while a checkout is deleted.
 /// Unlike the Herdr row's, it carries no offset: a line centers it.
-pub(super) fn status(status: AgentStatus, removing: bool, cx: &RowContext<'_>) -> Div {
+pub(super) fn status(status: Mark, removing: bool, cx: &RowContext<'_>) -> Div {
     if removing {
         div()
             .w(px(cx.indicators.width(cx.font)))
@@ -268,7 +268,7 @@ pub(super) fn status(status: AgentStatus, removing: bool, cx: &RowContext<'_>) -
 /// line, so the slot suits a line whose pieces align to its top.
 pub(super) fn configured_status(
     lines: &[Vec<ResolvedToken>],
-    status: AgentStatus,
+    status: Mark,
     removing: bool,
     cx: &RowContext<'_>,
 ) -> Option<Div> {

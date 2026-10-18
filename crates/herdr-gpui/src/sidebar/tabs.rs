@@ -173,7 +173,7 @@ impl HerdrWindow {
                         }
                         None => crate::icons::AgentIcon::Generic,
                     },
-                    status: row.tab.agent_status,
+                    status: self.mark(row.endpoint, agent, row.tab.agent_status),
                     place: None,
                     status_text: None,
                     lines: tab_lines(name, position + 1, device),

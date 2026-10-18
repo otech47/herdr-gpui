@@ -208,7 +208,7 @@ impl Preview {
                         key: format!("preview-agent-{index}"),
                         name,
                         icon,
-                        status,
+                        status: status.into(),
                         place: Some((&self.workspaces[index % 3].label, None)),
                         status_text: None,
                         lines: Vec::new(),
