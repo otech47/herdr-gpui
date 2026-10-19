@@ -259,8 +259,9 @@ impl RowLayout for Orca {
         } else {
             theme.subtext()
         };
+        let mark = agent.icon.color(color, theme);
         if !agent.lines.is_empty() {
-            let (mark, room) = configured_status(&agent.lines, agent.status, false, cx);
+            let (status, room) = configured_status(&agent.lines, agent.status, false, cx);
             let column = token_column(
                 key,
                 &agent.lines,
@@ -274,11 +275,11 @@ impl RowLayout for Orca {
                 inner(cx, 0.) - icon - GAP + room,
                 cx,
             );
-            let icon = parts::first_line(icon, parts::icon(agent.icon.path(), icon, color), cx);
+            let icon = parts::first_line(icon, parts::icon(agent.icon.path(), icon, mark), cx);
             return card(key, state, 0., 4., theme)
                 .py(px(4.))
                 .items_start()
-                .children(mark)
+                .children(status)
                 .child(icon)
                 .child(column);
         }
@@ -312,7 +313,7 @@ impl RowLayout for Orca {
             .h(px(line + 8.))
             .items_center()
             .child(status_column(parts::status(agent.status, false, cx), cx))
-            .child(parts::icon(agent.icon.path(), icon, color))
+            .child(parts::icon(agent.icon.path(), icon, mark))
             .child(text.into_div())
     }
 }

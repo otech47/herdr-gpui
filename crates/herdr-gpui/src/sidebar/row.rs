@@ -322,12 +322,16 @@ pub(super) fn row(
         } else {
             layout.child_details()
         };
-    let (name_color, weight, detail_color) = row_text(kind, focused, theme);
-    let name_color = if teleported {
-        left_behind(name_color, theme)
-    } else {
-        name_color
+    let (text, weight, detail_color) = row_text(kind, focused, theme);
+    let fade = |color| {
+        if teleported {
+            left_behind(color, theme)
+        } else {
+            color
+        }
     };
+    let name_color = fade(text);
+    let tint = |icon: crate::icons::AgentIcon, text| fade(icon.color(text, theme));
     let icon_reserve = match workspace_icon {
         RowIcon::None => 0.,
         _ => ICON_RESERVE,
@@ -506,7 +510,13 @@ pub(super) fn row(
                                 .w(px(label_width))
                                 .h(px(line_height(font)))
                                 .when_some(agent_first, |line, icon| {
-                                    line.child(agent_mark(key, icon, agent_size, name_color, font))
+                                    line.child(agent_mark(
+                                        key,
+                                        icon,
+                                        agent_size,
+                                        tint(icon, text),
+                                        font,
+                                    ))
                                 })
                                 .when(!matches!(workspace_icon, RowIcon::None), |title| {
                                     title.child(workspace_icon.slot(key, font, muted))
@@ -548,7 +558,7 @@ pub(super) fn row(
                                             key,
                                             icon,
                                             agent_size,
-                                            detail_color,
+                                            tint(icon, detail_color),
                                             font,
                                         ))
                                     })

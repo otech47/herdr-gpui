@@ -271,7 +271,11 @@ impl RowLayout for Superset {
         let m = Metrics::new(cx);
         let key = agent.key.as_str();
         let color = text_color(state, theme);
-        let glyph = parts::icon(agent.icon.path(), m.icon * 0.7, color);
+        let glyph = parts::icon(
+            agent.icon.path(),
+            m.icon * 0.7,
+            agent.icon.color(color, theme),
+        );
         let slot_dot = dot(&agent.lines, agent.status, cx);
         let line = Line::new(cx.look.content_width(cx.width), m.gap)
             .fixed(m.icon, slot(key, glyph, slot_dot, &m, cx));

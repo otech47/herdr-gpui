@@ -294,14 +294,18 @@ pub(super) fn configured_lines(
             + if agent_here { agent_reserve } else { 0. };
         let text_width = (label_width - reserve).max(0.);
         let selector = line_selector(key, index);
-        let icon_color = line
-            .iter()
-            .find(|token| names_agent(token))
+        let naming = line.iter().find(|token| names_agent(token));
+        let icon_color = naming
             .map(|token| styled(token_appearance(&token.kind, look, cx), token.style, theme).0)
             .unwrap_or(theme.muted);
         let mut text = div().relative().w(px(label_width)).h(px(line_height(font)));
         if agent_here && let Some(icon) = agent_icon {
-            text = text.child(agent_mark(key, icon, agent_size, icon_color, font));
+            let color = if naming.is_some_and(|token| token.style.fg.is_some()) {
+                icon_color
+            } else {
+                icon.color(icon_color, theme)
+            };
+            text = text.child(agent_mark(key, icon, agent_size, color, font));
         }
         if index == 0 && !matches!(workspace_icon, RowIcon::None) {
             text = text.child(std::mem::replace(&mut workspace_icon, RowIcon::None).slot(

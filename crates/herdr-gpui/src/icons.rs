@@ -71,6 +71,22 @@ agent_icons! {
     Muse => "muse",
 }
 
+impl AgentIcon {
+    pub(crate) fn hue(self) -> Option<u32> {
+        match self {
+            Self::Claude => Some(0xd97757),
+            Self::Codex => Some(0x10a37f),
+            Self::Kimi => Some(0x4c8dff),
+            Self::Cursor => Some(0x9d8cff),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn color(self, text: u32, theme: &crate::config::Theme) -> u32 {
+        self.hue().map_or(text, |hue| theme.ink(hue))
+    }
+}
+
 /// Shared working-tree marker, distinct from the daemon's activity dots.
 pub(super) fn uncommitted(theme: &crate::config::Theme, size: f32) -> gpui::Div {
     use gpui::{div, prelude::*, px, rgb, rgba, svg};
@@ -303,6 +319,44 @@ mod tests {
         // No marks for labels Herdr does not emit, beyond the fallback.
         assert_eq!(AgentIcon::ALL.len(), HERDR_AGENT_LABELS.len() + 1);
         assert_eq!(listed.len(), AgentIcon::ALL.len());
+    }
+
+    #[test]
+    fn colored_marks_stay_distinct_and_readable_on_every_builtin_theme() {
+        use crate::{config::Theme, contrast::Contrast};
+        let hued: Vec<AgentIcon> = AgentIcon::ALL
+            .iter()
+            .copied()
+            .filter(|icon| icon.hue().is_some())
+            .collect();
+        assert!(hued.len() >= 3);
+        for name in Theme::BUILTIN_NAMES {
+            for contrast in [Contrast::Standard, Contrast::High] {
+                let theme = Theme::builtin(name).unwrap().with_contrast(contrast);
+                let colors: Vec<u32> = hued
+                    .iter()
+                    .map(|icon| icon.color(theme.muted, &theme))
+                    .collect();
+                for (index, color) in colors.iter().enumerate() {
+                    // high contrast can push several hues to the same pole on
+                    // mid-gray chrome
+                    assert!(
+                        contrast == Contrast::High || !colors[..index].contains(color),
+                        "{name} {:?}",
+                        hued[index]
+                    );
+                    for chrome in [theme.background, theme.surface, theme.active] {
+                        assert!(
+                            crate::contrast::ratio(*color, chrome) >= contrast.mark_ratio() - 0.01,
+                            "{name} {contrast:?} {:?} on {chrome:06x}",
+                            hued[index]
+                        );
+                    }
+                }
+                assert_eq!(AgentIcon::Generic.color(theme.muted, &theme), theme.muted);
+                assert_eq!(AgentIcon::Gemini.color(0x123456, &theme), 0x123456);
+            }
+        }
     }
 
     #[test]
