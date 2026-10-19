@@ -20,6 +20,7 @@ mod atomic_projection;
 mod close_pane;
 mod endpoint_switch;
 mod focus_fences;
+mod focus_pipeline;
 mod image_paste;
 mod image_paste_native;
 mod input_gap;
@@ -152,6 +153,10 @@ fn wait_until(mut ready: impl FnMut() -> bool) {
 }
 
 fn connected_endpoint(id: &str) -> (Endpoint, Server) {
+    connected_endpoint_reporting(id, None)
+}
+
+fn connected_endpoint_reporting(id: &str, server_version: Option<&str>) -> (Endpoint, Server) {
     static SERIAL: AtomicU64 = AtomicU64::new(0);
     let path = std::env::temp_dir().join(format!(
         "hg-{}-{}.sock",
@@ -193,6 +198,9 @@ fn connected_endpoint(id: &str) -> (Endpoint, Server) {
         "../../../herdr-protocol/tests/fixtures/endpoint-welcome-v1.json"
     ))
     .unwrap();
+    if let Some(version) = server_version {
+        welcome.server_version = version.into();
+    }
     welcome.capabilities.extend([
         "surface_interest".into(),
         "presentation_effects_fence".into(),
