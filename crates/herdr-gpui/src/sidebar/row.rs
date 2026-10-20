@@ -6,7 +6,7 @@
 use super::layout_tests;
 use super::{
     ARROW_RESERVE, ICON_RESERVE, STATUS_WIDTH,
-    agents::{Indicators, status_indicator},
+    agents::{Indicators, icon_tint, status_indicator},
     cell::{RowContext, RowState},
     glyph_width, line_height, segment_budgets,
     tokens::ResolvedToken,
@@ -331,7 +331,9 @@ pub(super) fn row(
         }
     };
     let name_color = fade(text);
-    let tint = |icon: crate::icons::AgentIcon, text| fade(icon.color(text, theme));
+    let tint = |icon: crate::icons::AgentIcon, text| {
+        fade(icon_tint(icon, text, status, indicators, theme))
+    };
     let icon_reserve = match workspace_icon {
         RowIcon::None => 0.,
         _ => ICON_RESERVE,

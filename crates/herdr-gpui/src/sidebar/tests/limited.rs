@@ -45,3 +45,27 @@ fn a_used_up_plan_marks_its_agents_limited_on_its_own_host(cx: &mut gpui::TestAp
         );
     });
 }
+
+#[test]
+fn a_limited_agent_icon_takes_the_limited_gray_over_its_own_hue() {
+    use crate::sidebar::agents::icon_tint;
+    let theme = Theme::builtin("Catppuccin Mocha").unwrap();
+    let indicators = Indicators::new(None, false, &theme);
+    let text = theme.foreground;
+    for icon in crate::icons::AgentIcon::ALL.iter().copied() {
+        assert_eq!(
+            icon_tint(icon, text, Mark::Limited, indicators, &theme),
+            indicators.color(Mark::Limited)
+        );
+        for status in [
+            AgentStatus::Working,
+            AgentStatus::Idle,
+            AgentStatus::Blocked,
+        ] {
+            assert_eq!(
+                icon_tint(icon, text, Mark::Status(status), indicators, &theme),
+                icon.color(text, &theme)
+            );
+        }
+    }
+}

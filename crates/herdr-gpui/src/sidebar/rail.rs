@@ -5,7 +5,9 @@
 
 use super::{
     agent_name,
-    agents::{Indicators, agent_place, state_label, status_indicator, status_text},
+    agents::{
+        Indicators, Mark, agent_place, icon_tint, state_label, status_indicator, status_text,
+    },
     cell::RowState,
     label_text,
     layout::{self, SidebarLook},
@@ -246,7 +248,7 @@ impl HerdrWindow {
                             }))
                             .child(label_text(&workspace.number.to_string())),
                     )
-                    .child(indicator(workspace.agent_status, font, indicators))
+                    .child(indicator(workspace.agent_status.into(), font, indicators))
                     .id(SharedString::from(key.clone()))
                     .debug_selector(|| key)
                     .cursor_pointer()
@@ -289,6 +291,7 @@ impl HerdrWindow {
                 let key = format!("rail-agent-{endpoint_id}-{id}");
                 let navigate_endpoint = endpoint_id.clone();
                 let focused = selected && agent.focused;
+                let mark = self.mark(endpoint_index, Some(agent), agent.agent_status);
                 let place = agent_place(agent, snapshot);
                 let place = place.map(|(workspace, tab)| match tab {
                     Some(tab) => format!("{workspace} / {tab}"),
@@ -328,9 +331,9 @@ impl HerdrWindow {
                             .path(icon.path())
                             .size(px(AGENT_ICON.min(font.size + 1.)))
                             .flex_none()
-                            .text_color(rgb(icon.color(text, theme)))
+                            .text_color(rgb(icon_tint(icon, text, mark, indicators, theme)))
                     })
-                    .child(indicator(agent.agent_status, font, indicators))
+                    .child(indicator(mark, font, indicators))
                     .id(SharedString::from(key.clone()))
                     .debug_selector(|| key)
                     .cursor_pointer()
@@ -338,7 +341,7 @@ impl HerdrWindow {
                         host,
                         agent_name(agent),
                         place.as_deref(),
-                        agent_status_word(agent).as_deref(),
+                        agent_status_word(agent, mark).as_deref(),
                     )))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.navigate_endpoint(&navigate_endpoint, NavigationTarget::Pane(&id), cx);
@@ -449,11 +452,11 @@ fn rail_button(
 }
 
 /// The indicator centered on its line, whichever style draws it.
-fn indicator(status: AgentStatus, font: &FontConfig, indicators: Indicators) -> Div {
+fn indicator(mark: Mark, font: &FontConfig, indicators: Indicators) -> Div {
     div()
         .flex_none()
         .h(px(line_height(font)))
-        .child(status_indicator(status, font, indicators))
+        .child(status_indicator(mark, font, indicators))
 }
 
 /// The host's initial, as Herdr marks a machine in its rail.
@@ -466,13 +469,18 @@ pub(super) fn host_initial(label: &str) -> String {
 }
 
 /// The status word a tooltip names, none for an unknown status.
-fn status_word(status: AgentStatus) -> Option<&'static str> {
-    (status != AgentStatus::Unknown).then(|| status_text(status))
+fn status_word(mark: impl Into<Mark>) -> Option<&'static str> {
+    let mark = mark.into();
+    (mark != Mark::Status(AgentStatus::Unknown)).then(|| status_text(mark))
 }
 
 /// An agent's status word: its integration's state label when it set one.
-fn agent_status_word(agent: &ClientShellAgent) -> Option<Cow<'static, str>> {
-    let word = state_label(agent, status_word(agent.agent_status).unwrap_or(""));
+/// A used-up plan always says limited.
+fn agent_status_word(agent: &ClientShellAgent, mark: Mark) -> Option<Cow<'static, str>> {
+    if mark == Mark::Limited {
+        return Some(Cow::Borrowed(status_text(mark)));
+    }
+    let word = state_label(agent, status_word(mark).unwrap_or(""));
     (!word.is_empty()).then_some(word)
 }
 

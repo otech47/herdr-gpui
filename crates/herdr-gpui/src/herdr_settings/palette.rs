@@ -228,7 +228,7 @@ impl Palette {
                 Mark::Status(AgentStatus::Done) => 16,
                 Mark::Status(AgentStatus::Idle) => 12,
                 Mark::Status(AgentStatus::Unknown) => 7,
-                Mark::Limited => 11,
+                Mark::Limited => 8,
             },
             0xd8dee9,
         )

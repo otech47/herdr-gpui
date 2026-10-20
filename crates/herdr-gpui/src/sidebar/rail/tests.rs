@@ -250,16 +250,28 @@ fn tooltips_name_host_place_and_status() {
     );
     let mut snapshot = snapshot(1);
     let agent = &mut snapshot.agents[0];
-    assert_eq!(agent_status_word(agent).as_deref(), Some("working"));
+    let working = Mark::Status(AgentStatus::Working);
+    assert_eq!(
+        agent_status_word(agent, working).as_deref(),
+        Some("working")
+    );
     agent.state_labels = vec![("working".into(), "deep in the mines".into())];
     assert_eq!(
-        agent_status_word(agent).as_deref(),
+        agent_status_word(agent, working).as_deref(),
         Some("deep in the mines")
     );
+    assert_eq!(
+        agent_status_word(agent, Mark::Limited).as_deref(),
+        Some("limited")
+    );
     agent.agent_status = AgentStatus::Unknown;
-    assert_eq!(agent_status_word(agent), None);
+    let unknown = Mark::Status(AgentStatus::Unknown);
+    assert_eq!(agent_status_word(agent, unknown), None);
     agent.state_labels = vec![("unknown".into(), "resting".into())];
-    assert_eq!(agent_status_word(agent).as_deref(), Some("resting"));
+    assert_eq!(
+        agent_status_word(agent, unknown).as_deref(),
+        Some("resting")
+    );
     assert_eq!(host_initial("  ssh box"), "S");
     assert_eq!(host_initial(""), "?");
     assert_eq!(host_initial("éclair"), "É");

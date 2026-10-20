@@ -6,7 +6,7 @@
 
 use super::{
     super::{
-        agents::Mark,
+        agents::{Mark, icon_tint},
         cell::{AgentRow, RowContext, RowLayout, RowState, WorkspaceRow},
         line_height,
         row::{RowKind, RowTree, TokenLook, left_behind, token_column},
@@ -259,7 +259,7 @@ impl RowLayout for Orca {
         } else {
             theme.subtext()
         };
-        let mark = agent.icon.color(color, theme);
+        let mark = icon_tint(agent.icon, color, agent.status, cx.indicators, theme);
         if !agent.lines.is_empty() {
             let (status, room) = configured_status(&agent.lines, agent.status, false, cx);
             let column = token_column(

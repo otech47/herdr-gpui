@@ -6,7 +6,7 @@
 
 use super::{
     super::{
-        agents::{Mark, status_mark, status_style},
+        agents::{Mark, icon_tint, status_mark, status_style},
         cell::{AgentRow, RowContext, RowLayout, RowState, WorkspaceRow},
         line_height,
         row::{
@@ -274,7 +274,7 @@ impl RowLayout for Superset {
         let glyph = parts::icon(
             agent.icon.path(),
             m.icon * 0.7,
-            agent.icon.color(color, theme),
+            icon_tint(agent.icon, color, agent.status, cx.indicators, theme),
         );
         let slot_dot = dot(&agent.lines, agent.status, cx);
         let line = Line::new(cx.look.content_width(cx.width), m.gap)

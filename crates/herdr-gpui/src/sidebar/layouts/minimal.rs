@@ -6,6 +6,7 @@
 use super::{
     super::{
         ARROW_RESERVE,
+        agents::icon_tint,
         cell::{AgentRow, RowContext, RowLayout, RowState, WorkspaceRow},
         line_height,
         row::{RowKind, RowTree, TokenLook, left_behind, row_text, token_column},
@@ -146,7 +147,7 @@ impl RowLayout for Minimal {
         let gap = cx.look.density.gap();
         let kind = RowKind::Agent(agent.icon);
         let (color, _, _) = row_text(kind, state.selected, theme);
-        let mark = agent.icon.color(color, theme);
+        let mark = icon_tint(agent.icon, color, agent.status, cx.indicators, theme);
         let icon = line_height(font).min(12.);
         let line = Line::new(cx.look.content_width(cx.width), gap);
         if !agent.lines.is_empty() {

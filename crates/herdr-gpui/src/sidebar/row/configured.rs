@@ -9,7 +9,7 @@ use crate::{
     config::Theme,
     sidebar::{
         ICON_RESERVE,
-        agents::{Mark, status_mark},
+        agents::{Mark, icon_tint, status_mark},
         cell::RowContext,
         glyph_width, line_height,
         tokens::{ResolvedToken, TextRole, TokenKind, budgets, separator},
@@ -300,10 +300,12 @@ pub(super) fn configured_lines(
             .unwrap_or(theme.muted);
         let mut text = div().relative().w(px(label_width)).h(px(line_height(font)));
         if agent_here && let Some(icon) = agent_icon {
-            let color = if naming.is_some_and(|token| token.style.fg.is_some()) {
+            let color = if naming.is_some_and(|token| token.style.fg.is_some())
+                && look.status != Mark::Limited
+            {
                 icon_color
             } else {
-                icon.color(icon_color, theme)
+                icon_tint(icon, icon_color, look.status, cx.indicators, theme)
             };
             text = text.child(agent_mark(key, icon, agent_size, color, font));
         }

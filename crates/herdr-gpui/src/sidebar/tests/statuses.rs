@@ -36,19 +36,24 @@ fn status_colors_keep_upstream_literals_where_they_already_read() {
 }
 
 #[test]
-fn a_limited_agent_takes_mauve_from_every_palette() {
+fn a_limited_agent_takes_overlay_gray_from_every_palette() {
+    assert_eq!(
+        status_style(Mark::Limited, &Theme::builtin("Catppuccin Mocha").unwrap()).2,
+        0x7f849c
+    );
     for name in ["Default", "Nord", "Dracula", "Catppuccin Mocha"] {
         let mut theme = Theme::builtin(name).unwrap();
         let (diameter, filled, color) = status_style(Mark::Limited, &theme);
+        // a gray sits close to dark chrome, so some themes lift it for contrast
         assert_eq!(
             (diameter, filled, color),
-            (STATUS_WIDTH, true, 0xcba6f7),
+            (STATUS_WIDTH, true, theme.ink(0x7f849c)),
             "{name}"
         );
         theme.palette.fill(0x123456);
         assert_eq!(
             Indicators::new(None, false, &theme).color(Mark::Limited),
-            0xcba6f7
+            color
         );
         for status in STATUSES {
             assert_ne!(status_style(status, &theme).2, color, "{name} {status:?}");
@@ -57,9 +62,9 @@ fn a_limited_agent_takes_mauve_from_every_palette() {
     assert_eq!(status_symbol(Mark::Limited), "\u{2298}");
     assert_eq!(status_text(Mark::Limited), "limited");
     let settings = Settings::parse_text("[theme]\nname = 'catppuccin'\n").unwrap();
-    assert_eq!(settings.mark_color(Mark::Limited, false), 0xcba6f7);
-    assert_eq!(settings.mark_color(Mark::Limited, true), 0xcba6f7);
-    let settings = Settings::parse_text("[theme.custom]\nmauve = '#345678'\n").unwrap();
+    assert_eq!(settings.mark_color(Mark::Limited, false), 0x7f849c);
+    assert_eq!(settings.mark_color(Mark::Limited, true), 0x7f849c);
+    let settings = Settings::parse_text("[theme.custom]\noverlay1 = '#345678'\n").unwrap();
     assert_eq!(settings.mark_color(Mark::Limited, false), 0x345678);
 }
 

@@ -356,7 +356,7 @@ pub(crate) fn state_label<'a>(
 /// dot the same color in both clients whatever terminal theme is loaded, where
 /// ANSI slots would drift: Xcode Dark paints its cyan purple. Mocha's pastels
 /// vanish on light chrome, so [`Theme::ink`] darkens them there, keeping hue.
-/// Limited takes Mocha's mauve, the one accent no status uses.
+/// Limited takes Mocha's overlay1 gray.
 pub(super) fn status_style(mark: impl Into<Mark>, theme: &Theme) -> (f32, bool, u32) {
     let (diameter, filled, color) = match mark.into() {
         Mark::Status(AgentStatus::Working) => (STATUS_WIDTH, true, 0xf9e2af),
@@ -364,9 +364,24 @@ pub(super) fn status_style(mark: impl Into<Mark>, theme: &Theme) -> (f32, bool, 
         Mark::Status(AgentStatus::Done) => (STATUS_WIDTH, true, 0x94e2d5),
         Mark::Status(AgentStatus::Idle) => (STATUS_WIDTH, false, 0xa6e3a1),
         Mark::Status(AgentStatus::Unknown) => (STATUS_DOT_UNKNOWN, true, 0x6c7086),
-        Mark::Limited => (STATUS_WIDTH, true, 0xcba6f7),
+        Mark::Limited => (STATUS_WIDTH, true, 0x7f849c),
     };
     (diameter, filled, theme.ink(color))
+}
+
+/// The agent's icon color: its own hue, or the limited gray once its plan is used up.
+pub(super) fn icon_tint(
+    icon: crate::icons::AgentIcon,
+    text: u32,
+    mark: Mark,
+    indicators: Indicators,
+    theme: &Theme,
+) -> u32 {
+    if mark == Mark::Limited {
+        indicators.color(mark)
+    } else {
+        icon.color(text, theme)
+    }
 }
 
 #[cfg(test)]

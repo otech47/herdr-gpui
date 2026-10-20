@@ -15,7 +15,7 @@ macro_rules! agent_icons {
         }
 
         impl AgentIcon {
-            const ALL: &[Self] = &[$(Self::$variant,)+ Self::Generic];
+            pub(crate) const ALL: &[Self] = &[$(Self::$variant,)+ Self::Generic];
 
             pub(crate) fn from_identity(identity: Option<&str>) -> Self {
                 match identity {
