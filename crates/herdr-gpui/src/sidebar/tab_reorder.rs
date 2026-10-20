@@ -68,6 +68,10 @@ impl HerdrWindow {
         if !live.status.is_connected() || !live.supports_tab_move {
             return;
         }
+        // A sorted list is not the daemon's order, so a drop has no slot in it.
+        if self.sidebar_tabs_sort == crate::preferences::TabsSort::Attention {
+            return;
+        }
         let rows = self
             .listed_tabs()
             .iter()

@@ -49,6 +49,7 @@ impl HerdrWindow {
                 collapsed: self.sidebar_collapsed,
                 spaces_height: self.sidebar_spaces_height,
                 tabs_view: self.sidebar_tabs_view,
+                tabs_sort: self.sidebar_tabs_sort,
             });
         }
     }

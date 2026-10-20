@@ -1,5 +1,6 @@
 //! The window chrome an endpoint remembers between runs: sidebar width and
-//! split, folded sections, the tabs view, the agents sort, and panel widths,
+//! split, folded sections, the tabs view and sort, the agents sort, and panel
+//! widths,
 //! read and written off the UI thread.
 use std::env;
 use std::fs::{self, OpenOptions};
@@ -172,6 +173,43 @@ impl TabsView {
     }
 }
 
+/// How the tabs list orders its rows: as the daemon keeps them, or the tabs
+/// that want attention first.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TabsSort {
+    /// The daemon's order, which dragging a row changes.
+    #[default]
+    Manual,
+    /// Blocked tabs first, then a used-up plan, working, done, idle, unknown,
+    /// each group in the daemon's order.
+    Attention,
+}
+
+impl TabsSort {
+    /// The header's label, and the stored spelling.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Manual => "manual",
+            Self::Attention => "attention",
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Manual => Self::Attention,
+            Self::Attention => Self::Manual,
+        }
+    }
+
+    fn parse(value: Option<&serde_json::Value>) -> Option<Self> {
+        match value.and_then(serde_json::Value::as_str)? {
+            "manual" => Some(Self::Manual),
+            "attention" => Some(Self::Attention),
+            _ => None,
+        }
+    }
+}
+
 /// The window chrome this endpoint remembers between runs.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Chrome {
@@ -191,6 +229,8 @@ pub struct Chrome {
     pub spaces_height: Option<f32>,
     /// Which tabs the tabs list shows.
     pub tabs_view: TabsView,
+    /// How the tabs list orders them.
+    pub tabs_sort: TabsSort,
 }
 
 /// Asynchronous, endpoint-local preferences. Dropping lets the worker drain queued
@@ -372,6 +412,7 @@ fn read_chrome(path: &Path) -> crate::Result<Chrome> {
         collapsed: Collapsed::parse(object.get("sidebar_collapsed")),
         spaces_height,
         tabs_view: TabsView::parse(object.get("sidebar_tabs_view")).unwrap_or_default(),
+        tabs_sort: TabsSort::parse(object.get("sidebar_tabs_sort")).unwrap_or_default(),
     })
 }
 
@@ -416,6 +457,7 @@ fn write_chrome(path: &Path, chrome: Chrome) -> crate::Result<()> {
                     .spaces_height
                     .filter(|height| height.is_finite() && *height > 0.0),
                 "sidebar_tabs_view": chrome.tabs_view.name(),
+                "sidebar_tabs_sort": chrome.tabs_sort.name(),
             }),
         )?;
         file.write_all(b"\n")?;

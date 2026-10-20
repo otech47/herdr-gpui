@@ -822,7 +822,7 @@ impl HerdrWindow {
                         .overflow_hidden()
                         .child(self.section_header(
                             Section::Tabs,
-                            self.tabs_view_toggle(cx),
+                            self.tabs_header_controls(cx),
                             font,
                             theme,
                             look,

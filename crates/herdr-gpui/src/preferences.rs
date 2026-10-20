@@ -575,7 +575,7 @@ impl HerdrWindow {
 
 mod chrome;
 pub(crate) use chrome::state_dir;
-pub use chrome::{AgentSort, Chrome, Collapsed, Preferences, Section, TabsView};
+pub use chrome::{AgentSort, Chrome, Collapsed, Preferences, Section, TabsSort, TabsView};
 
 #[cfg(test)]
 mod tests;

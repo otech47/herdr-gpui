@@ -222,10 +222,11 @@ pub(crate) struct HerdrWindow {
     pub(crate) sidebar_split: Option<f32>,
     pub(crate) sidebar_split_modified: bool,
     /// Sections folded to their headers, the spaces list's dragged height,
-    /// and which tabs the tabs list shows.
+    /// and which tabs the tabs list shows, in which order.
     pub(crate) sidebar_collapsed: preferences::Collapsed,
     pub(crate) sidebar_spaces_height: Option<f32>,
     pub(crate) sidebar_tabs_view: preferences::TabsView,
+    pub(crate) sidebar_tabs_sort: preferences::TabsSort,
     pub(crate) sidebar_sections_modified: bool,
     pub(crate) sidebar_preferences: Option<preferences::Preferences>,
     pub(crate) sidebar_modified: bool,
@@ -352,6 +353,7 @@ impl HerdrWindow {
             self.sidebar_collapsed = chrome.collapsed;
             self.sidebar_spaces_height = chrome.spaces_height;
             self.sidebar_tabs_view = chrome.tabs_view;
+            self.sidebar_tabs_sort = chrome.tabs_sort;
         }
         if self.notes_width.chosen().is_none() {
             self.notes_width.restore(chrome.notes_width);
@@ -803,6 +805,7 @@ impl HerdrWindow {
             sidebar_collapsed: Default::default(),
             sidebar_spaces_height: None,
             sidebar_tabs_view: Default::default(),
+            sidebar_tabs_sort: Default::default(),
             sidebar_sections_modified: false,
             sidebar_preferences: None,
             sidebar_modified: false,

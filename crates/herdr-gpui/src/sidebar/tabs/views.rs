@@ -1,8 +1,14 @@
 //! Which tabs the list shows: the selected device's shown space alone, or
-//! with that space's namesakes on the other devices.
+//! with that space's namesakes on the other devices. And in which order: the
+//! daemon's, or the tabs that want attention first.
 
-use crate::{HerdrWindow, preferences::TabsView, state::LiveState};
-use herdr_client::protocol::{ClientShellSnapshot, ClientShellTab};
+use crate::{
+    HerdrWindow,
+    preferences::{TabsSort, TabsView},
+    sidebar::agents::Mark,
+    state::LiveState,
+};
+use herdr_client::protocol::{AgentStatus, ClientShellSnapshot, ClientShellTab};
 
 /// A listed tab, with the device and snapshot it belongs to.
 pub(crate) struct ListedTab<'a> {
@@ -24,6 +30,9 @@ impl HerdrWindow {
 
     /// The listed tabs in numbering order: the selected device's shown space,
     /// then in the views across devices each other device's space of that name.
+    /// The attention sort reorders them by their mark, keeping the daemon's
+    /// order within a rank, and keeps each device's rows together when the
+    /// view groups them.
     pub(crate) fn listed_tabs(&self) -> Vec<ListedTab<'_>> {
         let Some(shown) = self.live.snapshot.as_deref() else {
             return Vec::new();
@@ -70,13 +79,33 @@ impl HerdrWindow {
                     }),
             );
         }
+        if self.sidebar_tabs_sort == TabsSort::Attention {
+            let grouped = self.sidebar_tabs_view == TabsView::ByDevice;
+            listed.sort_by_key(|row| {
+                let agent = row
+                    .snapshot
+                    .agents
+                    .iter()
+                    .find(|agent| agent.tab_id == row.tab.tab_id);
+                let rank = attention_rank(self.mark(row.endpoint, agent, row.tab.agent_status));
+                (grouped.then_some(row.endpoint), rank)
+            });
+        }
         listed
     }
 
-    /// The device and tab that cmd-`number` reaches while the list counts
-    /// across devices.
+    /// Whether the list's numbers are its own rather than the daemon's: it
+    /// counts across devices, or it is sorted.
+    pub(crate) fn numbers_listed_tabs(&self) -> bool {
+        self.config.show_sidebar_tabs
+            && (self.sidebar_tabs_view != TabsView::Device
+                || self.sidebar_tabs_sort == TabsSort::Attention)
+    }
+
+    /// The device and tab that cmd-`number` reaches while the list numbers
+    /// its own rows.
     pub(crate) fn listed_tab(&self, number: u8) -> Option<(String, String)> {
-        if !self.config.show_sidebar_tabs || self.sidebar_tabs_view == TabsView::Device {
+        if !self.numbers_listed_tabs() {
             return None;
         }
         let row = self
@@ -87,6 +116,20 @@ impl HerdrWindow {
             self.endpoints[row.endpoint].id.clone(),
             row.tab.tab_id.clone(),
         ))
+    }
+}
+
+/// Where a mark sorts under the attention sort, the lowest first: a tab
+/// waiting on an answer, then one whose plan is used up, then still working,
+/// finished, idle, and unknown.
+pub(crate) fn attention_rank(mark: Mark) -> u8 {
+    match mark {
+        Mark::Status(AgentStatus::Blocked) => 0,
+        Mark::Limited => 1,
+        Mark::Status(AgentStatus::Working) => 2,
+        Mark::Status(AgentStatus::Done) => 3,
+        Mark::Status(AgentStatus::Idle) => 4,
+        Mark::Status(AgentStatus::Unknown) => 5,
     }
 }
 

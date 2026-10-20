@@ -1,12 +1,13 @@
 //! A sidebar fixture that stays open for looking at natively: two devices
 //! sharing a space, the tabs list in one of its views. `--sidebar-test`
-//! with `HERDR_TEST_SIDEBAR_HOLD` set to `all`, `by-device` or `device`.
+//! with `HERDR_TEST_SIDEBAR_HOLD` set to `all`, `by-device` or `device`,
+//! and `HERDR_TEST_SIDEBAR_SORT` set to `attention` for the sorted list.
 
 use super::*;
 use crate::{
     config::{Density, LayoutMode, Style},
     endpoint::Endpoint,
-    preferences::TabsView,
+    preferences::{TabsSort, TabsView},
 };
 
 pub(super) fn held_view() -> Option<TabsView> {
@@ -52,6 +53,9 @@ fn populate(this: &mut HerdrWindow, view: TabsView) -> Result<()> {
     this.config.show_agents = false;
     this.sidebar_width = Some(314.);
     this.sidebar_tabs_view = view;
+    if std::env::var("HERDR_TEST_SIDEBAR_SORT").is_ok_and(|sort| sort == "attention") {
+        this.sidebar_tabs_sort = TabsSort::Attention;
+    }
 
     let mut local = sidebar::layout_tests::snapshot(2);
     local.workspaces[0].label = "fedi".into();
@@ -64,11 +68,11 @@ fn populate(this: &mut HerdrWindow, view: TabsView) -> Result<()> {
             ("deployment-safety-net", Some("claude"), "working"),
             ("action-items", Some("claude"), "idle"),
             ("pr 12382 review", Some("codex"), "working"),
-            ("manifold mg seats", Some("claude"), "idle"),
+            ("manifold mg seats", Some("claude"), "blocked"),
             ("fedi", None, "idle"),
             ("nix develop", None, "idle"),
             ("cargo nextest fedimint-server", Some("claude"), "working"),
-            ("worktree cleanup", Some("kimi"), "idle"),
+            ("worktree cleanup", Some("kimi"), "done"),
         ],
     )?;
     this.live.status = ConnectionStatus::Connected;

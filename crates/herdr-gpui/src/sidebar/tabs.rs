@@ -1,7 +1,7 @@
 //! The tabs list's rows, one line each: a tab's state, the number cmd-1 to
 //! cmd-9 count it by, then its title, with a close button at the end on the
 //! selected device's own tabs. The view in the header chooses which tabs
-//! are listed.
+//! are listed and the sort beside it their order.
 
 use super::{
     agent_name,
@@ -12,7 +12,10 @@ use super::{
     trailing::Trailing,
 };
 use crate::{
-    HerdrWindow, NavigationTarget, config::TokenStyle, preferences::TabsView, reorder::preview,
+    HerdrWindow, NavigationTarget,
+    config::TokenStyle,
+    preferences::{TabsSort, TabsView},
+    reorder::preview,
 };
 use gpui::{prelude::*, *};
 use herdr_client::protocol::{ClientShellAgent, ClientShellSnapshot, ClientShellTab};
@@ -228,8 +231,60 @@ impl HerdrWindow {
         }
     }
 
+    /// The tabs header's controls: the sort label, and with more than one
+    /// device the view label after a dot.
+    pub(super) fn tabs_header_controls(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let view = self.tabs_view_toggle(cx);
+        Some(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .min_w_0()
+                .child(self.tabs_sort_toggle(cx))
+                .when_some(view, |controls, view| {
+                    controls
+                        .child(
+                            div()
+                                .flex_none()
+                                .text_color(rgb(self.theme.muted))
+                                .child(label_text("\u{00b7}")),
+                        )
+                        .child(view)
+                })
+                .into_any_element(),
+        )
+    }
+
+    /// The tabs header's sort label. A click flips it, and the choice is
+    /// remembered with the view.
+    fn tabs_sort_toggle(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+        let theme = &self.theme;
+        div()
+            .id("tabs-sort")
+            .debug_selector(|| "tabs-sort".into())
+            .flex_none()
+            .min_w_0()
+            .truncate()
+            .text_color(rgb(if self.sidebar_tabs_sort == TabsSort::Attention {
+                theme.foreground
+            } else {
+                theme.muted
+            }))
+            .cursor_pointer()
+            .hover(|style| style.text_color(rgb(theme.foreground)))
+            .on_click(cx.listener(|this, _, _, cx| {
+                cx.stop_propagation();
+                this.sidebar_tabs_sort = this.sidebar_tabs_sort.next();
+                this.sidebar_sections_modified = true;
+                this.save_chrome();
+                cx.notify();
+            }))
+            .child(label_text(self.sidebar_tabs_sort.name()))
+    }
+
     /// The tabs header's view label, absent with one device alone.
-    pub(super) fn tabs_view_toggle(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    fn tabs_view_toggle(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         if self.endpoints.len() < 2 {
             return None;
         }
