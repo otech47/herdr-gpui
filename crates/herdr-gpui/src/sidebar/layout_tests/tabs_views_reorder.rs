@@ -3,10 +3,12 @@
 
 use super::tabs_views::{draw, two_devices};
 use super::*;
-use crate::{preferences::TabsView, reorder::LIFT_DELAY, state::ConnectionStatus};
+use crate::{
+    preferences::TabsView, reorder::LIFT_DELAY, sidebar::tab_reorder::Hold, state::ConnectionStatus,
+};
 use gpui::{MouseButton, Point, point};
 
-fn lift(cx: &mut gpui::VisualTestContext, at: Point<Pixels>) {
+pub(super) fn lift(cx: &mut gpui::VisualTestContext, at: Point<Pixels>) {
     cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::default());
     cx.executor().advance_clock(LIFT_DELAY);
     cx.run_until_parked();
@@ -39,9 +41,11 @@ fn in_the_all_view_a_row_stays_among_its_devices_rows(cx: &mut gpui::TestAppCont
         let moved = view.tab_move(&drag.key, &drag.boot, 2).unwrap();
         assert_eq!(
             (moved.endpoint, moved.tab.as_str(), moved.insert),
-            (0, "t0", 2)
+            (0, "t0", Some(2))
         );
-        assert_eq!(moved.order, ["local/t0", "local/t1"]);
+        assert!(
+            matches!(moved.hold, Hold::Daemon(ref order) if order == &["local/t0", "local/t1"])
+        );
     });
     assert_eq!(cx.debug_bounds("row-tab-t1").unwrap().top(), first.top());
     assert_eq!(
@@ -86,9 +90,9 @@ fn a_saved_devices_row_drags_among_that_devices_rows(cx: &mut gpui::TestAppConte
         let moved = view.tab_move(&drag.key, &drag.boot, 2).unwrap();
         assert_eq!(
             (moved.endpoint, moved.tab.as_str(), moved.insert),
-            (1, "r1", 0)
+            (1, "r1", Some(0))
         );
-        assert_eq!(moved.order, ["ssh:test/r0", "ssh:test/r1"]);
+        assert!(matches!(moved.hold, Hold::Daemon(ref order) if order == &["ssh:test/r0", "ssh:test/r1"]));
     });
     assert_eq!(cx.debug_bounds("row-tab-t0").unwrap(), first);
     assert_eq!(

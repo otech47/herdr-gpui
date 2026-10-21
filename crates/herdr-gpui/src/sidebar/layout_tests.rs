@@ -57,6 +57,8 @@ mod status_ports;
 #[cfg(test)]
 mod tabs_attention;
 #[cfg(test)]
+mod tabs_attention_reorder;
+#[cfg(test)]
 mod tabs_sort;
 #[cfg(test)]
 mod tabs_views;

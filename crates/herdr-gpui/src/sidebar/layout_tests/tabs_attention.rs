@@ -14,7 +14,9 @@ use herdr_client::protocol::AgentStatus;
 
 /// One device whose shown space holds five tabs: t0 working, t1 and t2 done,
 /// t3 and t4 idle, with t0 focused and the attention sort settled once.
-fn five_tabs(cx: &mut gpui::TestAppContext) -> (Entity<HerdrWindow>, &mut gpui::VisualTestContext) {
+pub(super) fn five_tabs(
+    cx: &mut gpui::TestAppContext,
+) -> (Entity<HerdrWindow>, &mut gpui::VisualTestContext) {
     let (view, cx) = cx.add_window_view(|window, cx| {
         let mut view = fixture_window(window, cx);
         view.config.show_sidebar_tabs = true;
@@ -51,7 +53,7 @@ fn five_tabs(cx: &mut gpui::TestAppContext) -> (Entity<HerdrWindow>, &mut gpui::
     (view, cx)
 }
 
-fn listed(view: &HerdrWindow) -> Vec<String> {
+pub(super) fn listed(view: &HerdrWindow) -> Vec<String> {
     view.listed_tabs()
         .into_iter()
         .map(|row| row.tab.tab_id.clone())

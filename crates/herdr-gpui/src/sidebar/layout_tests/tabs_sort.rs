@@ -1,11 +1,11 @@
 //! The tabs list's attention sort: the tabs that want an answer first, then
-//! the rest by how much they need one, each group in the daemon's order.
+//! the rest by how much they need one, each group in the daemon's order
+//! until a row is dragged within it.
 
 use super::tabs_views::{draw, two_devices};
 use super::*;
 use crate::{
     preferences::{TabsSort, TabsView},
-    state::ConnectionStatus,
     usage::Host,
 };
 use gpui::MouseButton;
@@ -121,26 +121,6 @@ fn the_header_toggle_flips_the_sort_and_remembers_it(cx: &mut gpui::TestAppConte
         let first = cx.debug_bounds("row-tab-t0").unwrap().top();
         let blocked = cx.debug_bounds("row-tab-t2").unwrap().top();
         assert_eq!(blocked < first, expected == TabsSort::Attention);
-    }
-}
-
-#[gpui::test]
-fn a_sorted_list_arms_no_row_drag(cx: &mut gpui::TestAppContext) {
-    let (view, cx) = six_tabs(cx);
-    view.update(cx, |view, _| {
-        view.live.status = ConnectionStatus::Connected;
-        view.live.supports_tab_move = true;
-    });
-    for (sort, armed) in [(TabsSort::Manual, true), (TabsSort::Attention, false)] {
-        view.update(cx, |view, _| view.sidebar_tabs_sort = sort);
-        draw(cx);
-        let row = cx.debug_bounds("row-tab-t1").unwrap().center();
-        cx.simulate_mouse_down(row, MouseButton::Left, Modifiers::default());
-        view.read_with(cx, |view, _| {
-            assert_eq!(view.tab_row_drag.is_some(), armed, "{sort:?}");
-        });
-        cx.simulate_mouse_up(row, MouseButton::Left, Modifiers::default());
-        draw(cx);
     }
 }
 

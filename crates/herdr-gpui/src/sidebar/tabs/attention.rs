@@ -1,7 +1,8 @@
 //! Where each tab sits under the attention sort: its mark's rank, and within
-//! a rank the tab that reached it last first. The focused tab keeps its row
-//! until focus leaves it, so the list never moves under the row the user is
-//! on.
+//! a rank the tab that reached it last first, unless a row was dragged
+//! within its rank, which holds the rank in the dropped order. The focused
+//! tab keeps its row until focus leaves it, so the list never moves under
+//! the row the user is on.
 
 use crate::{HerdrWindow, sidebar::agents::Mark};
 use herdr_client::protocol::AgentStatus;
@@ -71,6 +72,22 @@ impl AttentionLedger {
                 .insert(sighting.tab, place);
         }
         self.places = places;
+    }
+
+    /// Places the rows of one rank, by device id and tab id, in the order
+    /// they were dropped in. The order holds until one of them changes rank.
+    pub(crate) fn reorder(&mut self, rank: u8, tabs: impl IntoIterator<Item = (String, String)>) {
+        let tabs: Vec<(String, String)> = tabs.into_iter().collect();
+        for (device, tab) in tabs.into_iter().rev() {
+            self.clock += 1;
+            self.places.entry(device).or_default().insert(
+                tab,
+                Place {
+                    rank,
+                    since: self.clock,
+                },
+            );
+        }
     }
 }
 

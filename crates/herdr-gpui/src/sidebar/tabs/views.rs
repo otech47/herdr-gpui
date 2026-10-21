@@ -83,12 +83,7 @@ impl HerdrWindow {
         if self.sidebar_tabs_sort == TabsSort::Attention {
             let grouped = self.sidebar_tabs_view == TabsView::ByDevice;
             listed.sort_by_key(|row| {
-                let agent = row
-                    .snapshot
-                    .agents
-                    .iter()
-                    .find(|agent| agent.tab_id == row.tab.tab_id);
-                let rank = attention_rank(self.mark(row.endpoint, agent, row.tab.agent_status));
+                let rank = self.listed_rank(row);
                 let place =
                     self.attention
                         .place(&self.endpoints[row.endpoint].id, &row.tab.tab_id, rank);
@@ -100,6 +95,16 @@ impl HerdrWindow {
             });
         }
         listed
+    }
+
+    /// Where a listed tab's mark sorts under the attention sort.
+    pub(crate) fn listed_rank(&self, row: &ListedTab<'_>) -> u8 {
+        let agent = row
+            .snapshot
+            .agents
+            .iter()
+            .find(|agent| agent.tab_id == row.tab.tab_id);
+        attention_rank(self.mark(row.endpoint, agent, row.tab.agent_status))
     }
 
     /// Whether the list's numbers are its own rather than the daemon's: it

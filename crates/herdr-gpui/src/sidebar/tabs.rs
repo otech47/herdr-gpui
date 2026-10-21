@@ -7,7 +7,7 @@ use super::{
     agent_name,
     cell::{AgentRow, Cell, RowContext, RowData, RowLayout},
     label_text,
-    tab_reorder::{device_rows, row_key},
+    tab_reorder::row_key,
     tokens::{ResolvedToken, TextRole, TokenKind},
     trailing::Trailing,
 };
@@ -32,7 +32,7 @@ pub(super) type DropRows = Vec<(usize, usize, Pixels)>;
 pub(super) struct TabRows {
     pub(super) rows: Vec<AnyElement>,
     /// While a drag previews, the rows, the carried row's index and the
-    /// positions of its device's rows, which bound where it may land.
+    /// positions of the rows it may land among.
     pub(super) drop: Option<(DropRows, usize, Range<usize>)>,
     /// Whether a row is still sliding, so the next frame is drawn.
     pub(super) sliding: bool,
@@ -46,13 +46,10 @@ impl HerdrWindow {
         content_x: f32,
         cx: &mut Context<Self>,
     ) -> TabRows {
-        let listed: Vec<(ListedTab<'_>, String)> = self
-            .listed_tabs()
-            .into_iter()
-            .map(|row| {
-                let name = tab_title(row.tab, row.snapshot);
-                (row, name)
-            })
+        let listed = self.listed_tabs();
+        let names: Vec<String> = listed
+            .iter()
+            .map(|row| tab_title(row.tab, row.snapshot))
             .collect();
         if listed.is_empty() {
             return TabRows {
@@ -73,9 +70,9 @@ impl HerdrWindow {
         let scroll = &self.sidebar_scroll[2];
         let keys: Vec<String> = listed
             .iter()
-            .map(|(row, _)| row_key(&self.endpoints[row.endpoint].id, &row.tab.tab_id))
+            .map(|row| row_key(&self.endpoints[row.endpoint].id, &row.tab.tab_id))
             .collect();
-        let endpoints: Vec<usize> = listed.iter().map(|(row, _)| row.endpoint).collect();
+        let endpoints: Vec<usize> = listed.iter().map(|row| row.endpoint).collect();
         // Each row's child index in the list, past the device lines above it.
         let children: Vec<usize> = {
             let (mut group, mut next) = (None, 0);
@@ -93,9 +90,9 @@ impl HerdrWindow {
         };
         let drag = self.tab_row_drag.as_ref().and_then(|drag| {
             let dragged = keys.iter().position(|key| *key == drag.key)?;
-            let device = device_rows(&endpoints, dragged);
-            drag.previewing(keys[device.clone()].iter().map(String::as_str))
-                .then_some((drag, dragged, device))
+            let among = self.drag_rows(&listed, dragged);
+            drag.previewing(keys[among.clone()].iter().map(String::as_str))
+                .then_some((drag, dragged, among))
         });
         let floating = drag.as_ref().is_some_and(|(drag, ..)| drag.floating());
         // Each row's shift for the drop in preview, from the heights the last
@@ -118,7 +115,7 @@ impl HerdrWindow {
         let tab_cx = trailing.context(row_cx);
         let mut elements = Vec::with_capacity(listed.len());
         let mut group = None;
-        for (position, (row, name)) in listed.iter().enumerate() {
+        for (position, (row, name)) in listed.iter().zip(&names).enumerate() {
             let endpoint = &self.endpoints[row.endpoint];
             let own = row.endpoint == self.selected_endpoint;
             if grouped && group != Some(row.endpoint) {
@@ -227,7 +224,7 @@ impl HerdrWindow {
         }
         TabRows {
             rows: elements,
-            drop: drag.map(|(_, dragged, device)| (drop, dragged, device)),
+            drop: drag.map(|(_, dragged, among)| (drop, dragged, among)),
             sliding,
         }
     }

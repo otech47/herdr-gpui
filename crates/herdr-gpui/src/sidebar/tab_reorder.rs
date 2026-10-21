@@ -5,10 +5,18 @@
 //! The daemon owns the order, so the preview holds until the next snapshot
 //! reorders the list. In the views across devices a row stays among its own
 //! device's rows: a space's order belongs to one daemon.
+//!
+//! Under the attention sort a row stays among the rows of its rank, so a
+//! drag never undoes the sort. The drop places the rank in the ledger, which
+//! owns that order, and asks the daemon to put the tab beside its nearest
+//! neighbor of its own device, so the daemon's order follows as far as it
+//! can.
 
 use crate::{
     HerdrWindow,
-    reorder::{Drag, LIFT_DELAY, SETTLE_TIMEOUT, resting_spans, slot_for},
+    preferences::{TabsSort, TabsView},
+    reorder::{Beside, Drag, LIFT_DELAY, SETTLE_TIMEOUT, resting_spans, slot_for},
+    sidebar::tabs::ListedTab,
 };
 use gpui::{Context, Pixels, Point, ScrollHandle};
 use herdr_client::Method;
@@ -23,9 +31,19 @@ pub(crate) type TabRowDrag = Drag<usize>;
 pub(in crate::sidebar) struct TabMove {
     pub(in crate::sidebar) endpoint: usize,
     pub(in crate::sidebar) tab: String,
-    pub(in crate::sidebar) insert: usize,
-    /// The device's rows as listed, to hold the preview against.
-    pub(in crate::sidebar) order: Vec<String>,
+    /// The daemon's gap, None when its order has nothing to change.
+    pub(in crate::sidebar) insert: Option<usize>,
+    pub(in crate::sidebar) hold: Hold,
+}
+
+/// How the list keeps the dropped order.
+pub(in crate::sidebar) enum Hold {
+    /// The device's rows as listed, to hold the preview against until the
+    /// daemon's order differs.
+    Daemon(Vec<String>),
+    /// A rank's rows in their new order, by device id and tab id, placed in
+    /// the ledger at once.
+    Ledger(u8, Vec<(String, String)>),
 }
 
 /// A listed row's name in a drag: its device and tab together, as two
@@ -34,22 +52,49 @@ pub(super) fn row_key(endpoint_id: &str, tab_id: &str) -> String {
     format!("{endpoint_id}/{tab_id}")
 }
 
-/// The positions of the rows on the device of the row at `position`, given
-/// every row's device: a contiguous run, as the list goes device by device.
-pub(super) fn device_rows(endpoints: &[usize], position: usize) -> Range<usize> {
-    let device = endpoints[position];
-    let start = endpoints[..position]
+/// The positions of the rows grouped with the one at `position`: a
+/// contiguous run of equal groups.
+fn run<G: PartialEq>(groups: &[G], position: usize) -> Range<usize> {
+    let group = &groups[position];
+    let start = groups[..position]
         .iter()
-        .rposition(|endpoint| *endpoint != device)
+        .rposition(|candidate| candidate != group)
         .map_or(0, |before| before + 1);
-    let end = endpoints[position..]
+    let end = groups[position..]
         .iter()
-        .position(|endpoint| *endpoint != device)
-        .map_or(endpoints.len(), |after| position + after);
+        .position(|candidate| candidate != group)
+        .map_or(groups.len(), |after| position + after);
     start..end
 }
 
+/// A tab's index among its space's tabs in the daemon's order.
+fn daemon_index(row: &ListedTab<'_>) -> Option<usize> {
+    row.snapshot
+        .tabs
+        .iter()
+        .filter(|tab| tab.workspace_id == row.tab.workspace_id)
+        .position(|tab| tab.tab_id == row.tab.tab_id)
+}
+
 impl HerdrWindow {
+    /// The positions of the rows the row at `position` may land among. In
+    /// the daemon's order those are its device's rows, as the list goes
+    /// device by device. Under the attention sort they are the rows of its
+    /// rank, of its device alone where the view groups by device.
+    pub(super) fn drag_rows(&self, listed: &[ListedTab<'_>], position: usize) -> Range<usize> {
+        if self.sidebar_tabs_sort == TabsSort::Attention {
+            let grouped = self.sidebar_tabs_view == TabsView::ByDevice;
+            let groups: Vec<(Option<usize>, u8)> = listed
+                .iter()
+                .map(|row| (grouped.then_some(row.endpoint), self.listed_rank(row)))
+                .collect();
+            run(&groups, position)
+        } else {
+            let endpoints: Vec<usize> = listed.iter().map(|row| row.endpoint).collect();
+            run(&endpoints, position)
+        }
+    }
+
     /// Arms a reorder for a left press on the row of `tab` on `endpoint`.
     pub(super) fn press_tab_row(
         &mut self,
@@ -68,16 +113,14 @@ impl HerdrWindow {
         if !live.status.is_connected() || !live.supports_tab_move {
             return;
         }
-        // A sorted list is not the daemon's order, so a drop has no slot in it.
-        if self.sidebar_tabs_sort == crate::preferences::TabsSort::Attention {
-            return;
-        }
-        let rows = self
-            .listed_tabs()
+        let listed = self.listed_tabs();
+        let Some(pressed) = listed
             .iter()
-            .filter(|row| row.endpoint == endpoint)
-            .count();
-        if rows < 2 {
+            .position(|row| row.endpoint == endpoint && row.tab.tab_id == tab)
+        else {
+            return;
+        };
+        if self.drag_rows(&listed, pressed).len() < 2 {
             return;
         }
         let boot = snapshot.boot_id.clone();
@@ -142,21 +185,29 @@ impl HerdrWindow {
         let Some(moved) = self.tab_move(&drag.key, &drag.boot, slot) else {
             return true;
         };
+        if let Hold::Ledger(rank, tabs) = &moved.hold {
+            self.attention.reorder(*rank, tabs.iter().cloned());
+        }
+        let Some(insert) = moved.insert else {
+            return true;
+        };
         let Some(handle) = &self.endpoints[moved.endpoint].connection.handle else {
             return true;
         };
-        let params = serde_json::json!({ "tab_id": moved.tab, "insert_index": moved.insert });
+        let params = serde_json::json!({ "tab_id": moved.tab, "insert_index": insert });
         match handle.request(&drag.boot, Method::TabMove, params) {
             Ok(_) => {
-                let settle = cx.spawn(async move |this, cx| {
-                    cx.background_executor().timer(SETTLE_TIMEOUT).await;
-                    let _ = this.update(cx, |this, cx| {
-                        this.tab_row_drag = None;
-                        cx.notify();
+                if let Hold::Daemon(order) = moved.hold {
+                    let settle = cx.spawn(async move |this, cx| {
+                        cx.background_executor().timer(SETTLE_TIMEOUT).await;
+                        let _ = this.update(cx, |this, cx| {
+                            this.tab_row_drag = None;
+                            cx.notify();
+                        });
                     });
-                });
-                drag.drop(moved.order, settle);
-                self.tab_row_drag = Some(drag);
+                    drag.drop(order, settle);
+                    self.tab_row_drag = Some(drag);
+                }
             }
             Err(error) => self.local_error = Some(format!("Tab move not sent: {error}")),
         }
@@ -181,13 +232,59 @@ impl HerdrWindow {
         if row.snapshot.boot_id != boot {
             return None;
         }
-        let endpoints: Vec<usize> = listed.iter().map(|row| row.endpoint).collect();
-        let rows = device_rows(&endpoints, dragged);
+        let rows = self.drag_rows(&listed, dragged);
+        if self.sidebar_tabs_sort != TabsSort::Attention {
+            return Some(TabMove {
+                endpoint: row.endpoint,
+                tab: row.tab.tab_id.clone(),
+                insert: Some(slot.saturating_sub(rows.start)),
+                hold: Hold::Daemon(keys[rows].to_vec()),
+            });
+        }
+        // The rank in its new order: the carried row at its gap, counted
+        // without the row itself.
+        let mut order: Vec<usize> = rows
+            .clone()
+            .filter(|&position| position != dragged)
+            .collect();
+        let at = slot
+            .saturating_sub(rows.start)
+            .saturating_sub(usize::from(slot > dragged))
+            .min(order.len());
+        order.insert(at, dragged);
+        let own = |position: &&usize| listed[**position].endpoint == row.endpoint;
+        let neighbor = order[..at]
+            .iter()
+            .rev()
+            .find(own)
+            .map(|&position| Beside::After(position))
+            .or_else(|| {
+                order[at + 1..]
+                    .iter()
+                    .find(own)
+                    .map(|&position| Beside::Before(position))
+            });
+        let insert = neighbor
+            .and_then(|beside| beside.and_then(|position| daemon_index(&listed[position])))
+            .map(|beside| match beside {
+                Beside::Before(index) => index,
+                Beside::After(index) => index + 1,
+            });
+        let settled = order
+            .iter()
+            .map(|&position| {
+                let row = &listed[position];
+                (
+                    self.endpoints[row.endpoint].id.clone(),
+                    row.tab.tab_id.clone(),
+                )
+            })
+            .collect();
         Some(TabMove {
             endpoint: row.endpoint,
             tab: row.tab.tab_id.clone(),
-            insert: slot.saturating_sub(rows.start),
-            order: keys[rows].to_vec(),
+            insert,
+            hold: Hold::Ledger(self.listed_rank(row), settled),
         })
     }
 
@@ -203,19 +300,18 @@ impl HerdrWindow {
 }
 
 /// Resolves the pointer to the gap the carried row would land in, from each
-/// listed row's child index and painted shift, kept among the rows of its
-/// device. `None` over the row's own place, which moves nothing.
+/// listed row's child index and painted shift, kept among the rows it may
+/// land among. `None` over the row's own place, which moves nothing.
 pub(super) fn resolve(
     rows: &[(usize, usize, Pixels)],
     dragged: usize,
-    device: &Range<usize>,
+    among: &Range<usize>,
     scroll: &ScrollHandle,
     lift: Pixels,
 ) -> Option<usize> {
     let spans = resting_spans(rows, rows.len(), scroll);
     let (top, bottom) = (*spans.get(dragged)?)?;
     let lift = f32::from(lift);
-    let slot =
-        slot_for(&spans, dragged, (top + lift, bottom + lift)).clamp(device.start, device.end);
+    let slot = slot_for(&spans, dragged, (top + lift, bottom + lift)).clamp(among.start, among.end);
     (slot != dragged && slot != dragged + 1).then_some(slot)
 }
