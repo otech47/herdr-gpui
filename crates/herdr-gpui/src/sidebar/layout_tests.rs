@@ -55,6 +55,8 @@ mod status_bar;
 #[cfg(test)]
 mod status_ports;
 #[cfg(test)]
+mod tabs_attention;
+#[cfg(test)]
 mod tabs_sort;
 #[cfg(test)]
 mod tabs_views;
@@ -535,6 +537,7 @@ pub(crate) fn fixture_window(window: &mut Window, cx: &mut Context<HerdrWindow>)
         sidebar_spaces_height: None,
         sidebar_tabs_view: Default::default(),
         sidebar_tabs_sort: Default::default(),
+        attention: Default::default(),
         sidebar_sections_modified: false,
         sidebar_preferences: None,
         sidebar_modified: false,

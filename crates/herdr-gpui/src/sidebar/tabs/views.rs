@@ -2,13 +2,14 @@
 //! with that space's namesakes on the other devices. And in which order: the
 //! daemon's, or the tabs that want attention first.
 
+use super::attention::attention_rank;
 use crate::{
     HerdrWindow,
     preferences::{TabsSort, TabsView},
-    sidebar::agents::Mark,
     state::LiveState,
 };
-use herdr_client::protocol::{AgentStatus, ClientShellSnapshot, ClientShellTab};
+use herdr_client::protocol::{ClientShellSnapshot, ClientShellTab};
+use std::cmp::Reverse;
 
 /// A listed tab, with the device and snapshot it belongs to.
 pub(crate) struct ListedTab<'a> {
@@ -30,8 +31,8 @@ impl HerdrWindow {
 
     /// The listed tabs in numbering order: the selected device's shown space,
     /// then in the views across devices each other device's space of that name.
-    /// The attention sort reorders them by their mark, keeping the daemon's
-    /// order within a rank, and keeps each device's rows together when the
+    /// The attention sort reorders them by their settled place, the daemon's
+    /// order breaking ties, and keeps each device's rows together when the
     /// view groups them.
     pub(crate) fn listed_tabs(&self) -> Vec<ListedTab<'_>> {
         let Some(shown) = self.live.snapshot.as_deref() else {
@@ -88,7 +89,14 @@ impl HerdrWindow {
                     .iter()
                     .find(|agent| agent.tab_id == row.tab.tab_id);
                 let rank = attention_rank(self.mark(row.endpoint, agent, row.tab.agent_status));
-                (grouped.then_some(row.endpoint), rank)
+                let place =
+                    self.attention
+                        .place(&self.endpoints[row.endpoint].id, &row.tab.tab_id, rank);
+                (
+                    grouped.then_some(row.endpoint),
+                    place.rank,
+                    Reverse(place.since),
+                )
             });
         }
         listed
@@ -112,24 +120,30 @@ impl HerdrWindow {
             .listed_tabs()
             .into_iter()
             .nth(usize::from(number).checked_sub(1)?)?;
-        Some((
+        Some(self.listed_ids(&row))
+    }
+
+    /// The device and tab that the next or previous tab command reaches
+    /// while the list numbers its own rows: the focused tab's neighbor in the
+    /// list, wrapping at either end.
+    pub(crate) fn listed_tab_step(&self, forward: bool) -> Option<(String, String)> {
+        if !self.numbers_listed_tabs() {
+            return None;
+        }
+        let focused = self.live.snapshot.as_deref()?.focused_tab_id.as_deref()?;
+        let listed = self.listed_tabs();
+        let index = listed
+            .iter()
+            .position(|row| row.endpoint == self.selected_endpoint && row.tab.tab_id == focused)?;
+        let step = if forward { 1 } else { listed.len() - 1 };
+        Some(self.listed_ids(&listed[(index + step) % listed.len()]))
+    }
+
+    fn listed_ids(&self, row: &ListedTab<'_>) -> (String, String) {
+        (
             self.endpoints[row.endpoint].id.clone(),
             row.tab.tab_id.clone(),
-        ))
-    }
-}
-
-/// Where a mark sorts under the attention sort, the lowest first: a tab
-/// waiting on an answer, then one whose plan is used up, then still working,
-/// finished, idle, and unknown.
-pub(crate) fn attention_rank(mark: Mark) -> u8 {
-    match mark {
-        Mark::Status(AgentStatus::Blocked) => 0,
-        Mark::Limited => 1,
-        Mark::Status(AgentStatus::Working) => 2,
-        Mark::Status(AgentStatus::Done) => 3,
-        Mark::Status(AgentStatus::Idle) => 4,
-        Mark::Status(AgentStatus::Unknown) => 5,
+        )
     }
 }
 

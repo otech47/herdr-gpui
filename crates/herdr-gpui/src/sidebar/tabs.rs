@@ -21,6 +21,7 @@ use gpui::{prelude::*, *};
 use herdr_client::protocol::{ClientShellAgent, ClientShellSnapshot, ClientShellTab};
 use std::{ops::Range, time::Instant};
 
+pub(super) mod attention;
 mod views;
 pub(crate) use views::{ListedTab, workspace_label_by_id};
 

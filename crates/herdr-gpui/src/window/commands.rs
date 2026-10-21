@@ -398,6 +398,16 @@ impl HerdrWindow {
                 window.focus(&self.focus, cx);
                 return;
             }
+            // The sidebar's neighbor, when its list has an order of its own.
+            Command::NextTab | Command::PreviousTab
+                if self.listed_tab_step(command == Command::NextTab).is_some() =>
+            {
+                if let Some((endpoint, tab)) = self.listed_tab_step(command == Command::NextTab) {
+                    self.navigate_endpoint(&endpoint, NavigationTarget::Tab(&tab), cx);
+                }
+                window.focus(&self.focus, cx);
+                return;
+            }
             Command::MoveTabPrevious | Command::MoveTabNext if !self.live.supports_tab_move => {
                 self.local_error = Some("Moving tabs needs a newer Herdr daemon.".into());
                 cx.notify();

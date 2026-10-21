@@ -56,6 +56,7 @@ impl HerdrWindow {
 impl Render for HerdrWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.restore_menu_focus(window, cx);
+        self.settle_attention();
         self.viewport_width = f32::from(window.viewport_size().width);
         let font = self.config.terminal.font();
         // Parked groups paint with the same face as the window's terminal.

@@ -151,6 +151,7 @@ fn across_devices_the_sort_mixes_rows_unless_the_view_groups_them(cx: &mut gpui:
         view.sidebar_tabs_sort = TabsSort::Attention;
         let remote = Arc::make_mut(view.endpoints[1].live.snapshot.as_mut().unwrap());
         remote.tabs[1].agent_status = AgentStatus::Blocked;
+        view.settle_attention();
     });
     for (tabs_view, expected) in [
         (TabsView::Device, vec!["t0", "t1"]),

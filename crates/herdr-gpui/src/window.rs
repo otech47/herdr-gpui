@@ -227,6 +227,8 @@ pub(crate) struct HerdrWindow {
     pub(crate) sidebar_spaces_height: Option<f32>,
     pub(crate) sidebar_tabs_view: preferences::TabsView,
     pub(crate) sidebar_tabs_sort: preferences::TabsSort,
+    /// Where each tab sits under the attention sort, settled every frame.
+    pub(crate) attention: sidebar::AttentionLedger,
     pub(crate) sidebar_sections_modified: bool,
     pub(crate) sidebar_preferences: Option<preferences::Preferences>,
     pub(crate) sidebar_modified: bool,
@@ -806,6 +808,7 @@ impl HerdrWindow {
             sidebar_spaces_height: None,
             sidebar_tabs_view: Default::default(),
             sidebar_tabs_sort: Default::default(),
+            attention: Default::default(),
             sidebar_sections_modified: false,
             sidebar_preferences: None,
             sidebar_modified: false,
