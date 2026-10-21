@@ -7,17 +7,20 @@ use crate::{
     HerdrWindow,
     config::{FontConfig, Theme},
     herdr_settings::{IndicatorStyle, Settings},
+    listening_ports::Daemon,
     usage::Host,
 };
 use gpui::{prelude::*, *};
 use herdr_client::protocol::{AgentStatus, ClientShellAgent, ClientShellSnapshot};
 
-/// The daemon's status, or that the agent's plan is used up, which the daemon
-/// cannot see and this client reads from the host's usage.
+/// The daemon's status, or what the daemon cannot see: that the agent's plan
+/// is used up, which this client reads from the host's usage, or that an
+/// idle agent left a shell running, which it reads from the host's processes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Mark {
     Status(AgentStatus),
     Limited,
+    Monitoring,
 }
 
 impl From<AgentStatus> for Mark {
@@ -35,29 +38,36 @@ impl Mark {
             Self::Status(AgentStatus::Done) => 3,
             Self::Status(AgentStatus::Blocked) => 4,
             Self::Limited => 5,
+            Self::Monitoring => 6,
         }
     }
 }
 
 impl HerdrWindow {
     /// Limited once a window of the agent's provider on its host is used up,
-    /// unless the agent is blocked, which still needs an answer.
+    /// unless the agent is blocked, which still needs an answer. Monitoring
+    /// while an idle agent has a shell running under it.
     pub(crate) fn mark(
         &self,
         endpoint: usize,
         agent: Option<&ClientShellAgent>,
         status: AgentStatus,
     ) -> Mark {
-        let limited = status != AgentStatus::Blocked
-            && agent
-                .and_then(|agent| agent.agent.as_deref())
-                .zip(self.endpoints.get(endpoint))
-                .is_some_and(|(agent, endpoint)| {
-                    self.usage
-                        .limited(&Host::from(&endpoint.connection.target), agent)
-                });
-        if limited {
+        let Some((agent, endpoint)) = agent.zip(self.endpoints.get(endpoint)) else {
+            return Mark::Status(status);
+        };
+        let Some(label) = agent.agent.as_deref() else {
+            return Mark::Status(status);
+        };
+        let target = &endpoint.connection.target;
+        if status != AgentStatus::Blocked && self.usage.limited(&Host::from(target), label) {
             Mark::Limited
+        } else if status == AgentStatus::Idle
+            && self
+                .monitoring
+                .watching(&Daemon::from(target), &agent.tab_id, label)
+        {
+            Mark::Monitoring
         } else {
             Mark::Status(status)
         }
@@ -206,7 +216,7 @@ pub(super) fn agent_labels<'a>(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Indicators {
     pub(super) style: IndicatorStyle,
-    colors: [u32; 6],
+    colors: [u32; 7],
 }
 
 impl Indicators {
@@ -220,6 +230,7 @@ impl Indicators {
                 Mark::Status(AgentStatus::Done),
                 Mark::Status(AgentStatus::Blocked),
                 Mark::Limited,
+                Mark::Monitoring,
             ]
             .map(|mark| {
                 settings.map_or_else(
@@ -250,6 +261,7 @@ pub(super) fn status_symbol(mark: impl Into<Mark>) -> &'static str {
         Mark::Status(AgentStatus::Idle) => "\u{25cb}",
         Mark::Status(AgentStatus::Unknown) => "\u{b7}",
         Mark::Limited => "\u{2298}",
+        Mark::Monitoring => "\u{25ce}",
     }
 }
 
@@ -274,7 +286,7 @@ pub(super) fn status_mark(
     // Upstream dots: working/blocked/done filled, idle hollow, unknown a small dot.
     let (diameter, filled) = match mark {
         Mark::Status(AgentStatus::Unknown) => (STATUS_DOT_UNKNOWN, true),
-        Mark::Status(AgentStatus::Idle) => (STATUS_WIDTH, false),
+        Mark::Status(AgentStatus::Idle) | Mark::Monitoring => (STATUS_WIDTH, false),
         _ => (STATUS_WIDTH, true),
     };
     let symbol = indicators.style == IndicatorStyle::Symbols;
@@ -323,6 +335,7 @@ pub(super) fn status_text(mark: impl Into<Mark>) -> &'static str {
         Mark::Status(AgentStatus::Idle) => "idle",
         Mark::Status(AgentStatus::Unknown) => "unknown",
         Mark::Limited => "limited",
+        Mark::Monitoring => "monitoring",
     }
 }
 
@@ -365,6 +378,7 @@ pub(super) fn status_style(mark: impl Into<Mark>, theme: &Theme) -> (f32, bool, 
         Mark::Status(AgentStatus::Idle) => (STATUS_WIDTH, false, 0xa6e3a1),
         Mark::Status(AgentStatus::Unknown) => (STATUS_DOT_UNKNOWN, true, 0x6c7086),
         Mark::Limited => (STATUS_WIDTH, true, 0x7f849c),
+        Mark::Monitoring => (STATUS_WIDTH, false, 0x89b4fa),
     };
     (diameter, filled, theme.ink(color))
 }
@@ -440,7 +454,9 @@ mod tests {
         for style in [IndicatorStyle::Dots, IndicatorStyle::Symbols] {
             let indicators = Indicators {
                 style,
-                colors: [0x112233, 0x223344, 0x334455, 0x445566, 0x556677, 0x667788],
+                colors: [
+                    0x112233, 0x223344, 0x334455, 0x445566, 0x556677, 0x667788, 0x778899,
+                ],
             };
             for (mark, expected) in [
                 (Mark::Status(AgentStatus::Unknown), 0x112233),
@@ -449,6 +465,7 @@ mod tests {
                 (Mark::Status(AgentStatus::Done), 0x445566),
                 (Mark::Status(AgentStatus::Blocked), 0x556677),
                 (Mark::Limited, 0x667788),
+                (Mark::Monitoring, 0x778899),
             ] {
                 assert_eq!(indicators.color(mark), expected);
                 if style == IndicatorStyle::Symbols {

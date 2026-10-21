@@ -199,6 +199,8 @@ pub(crate) struct HerdrWindow {
     /// Remote ports forwarded to this machine; they end with the window.
     pub(crate) port_forwards: crate::port_forward::PortForwards,
     pub(crate) listening_ports: crate::listening_ports::ListeningPorts,
+    /// Tabs whose agent left a shell running while it waits.
+    pub(crate) monitoring: crate::monitoring::Monitoring,
     /// SSH tunnels to remote ports that listen on their host's loopback only.
     pub(crate) tunnels: crate::listening_ports::Tunnels,
     pub(crate) install_warning_shown: bool,
@@ -488,6 +490,9 @@ impl HerdrWindow {
         self.update_checkpoints(cx);
         self.update_port_forwards(cx);
         if self.update_listening_ports() {
+            cx.notify();
+        }
+        if self.monitoring.poll(self.watched_hosts()) {
             cx.notify();
         }
         if self.live.missing_installation && !self.install_warning_shown {
@@ -790,6 +795,7 @@ impl HerdrWindow {
             checkpoints: Default::default(),
             port_forwards: Default::default(),
             listening_ports: Default::default(),
+            monitoring: Default::default(),
             tunnels: Default::default(),
             install_warning_shown: false,
             collapsed_repos: Default::default(),

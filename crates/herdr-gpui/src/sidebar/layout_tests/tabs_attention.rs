@@ -1,10 +1,15 @@
 //! The attention sort's places: a tab that changes group takes the top of
-//! its new group, the focused row holds until focus leaves it, and the next
-//! and previous tab commands step through the list as drawn.
+//! its new group, the focused row holds until focus leaves it, a tab whose
+//! agent left a shell running sorts above the idle ones, and the next and
+//! previous tab commands step through the list as drawn.
 
 use super::tabs_views::two_devices;
 use super::*;
-use crate::preferences::{TabsSort, TabsView};
+use crate::{
+    monitoring::{Tab, Watched, Watchers},
+    preferences::{TabsSort, TabsView},
+    usage::Host,
+};
 use herdr_client::protocol::AgentStatus;
 
 /// One device whose shown space holds five tabs: t0 working, t1 and t2 done,
@@ -182,5 +187,42 @@ fn a_tab_the_daemon_drops_leaves_the_ledger(cx: &mut gpui::TestAppContext) {
         view.settle_attention();
         assert_eq!(view.attention.place("local", "t4", 9).since, 0);
         assert_eq!(view.attention.place("local", "t4", 9).rank, 9);
+    });
+}
+
+#[gpui::test]
+fn a_tab_whose_agent_left_a_shell_running_sorts_above_the_idle_ones(cx: &mut gpui::TestAppContext) {
+    let (view, cx) = five_tabs(cx);
+    view.update(cx, |view, _| {
+        let mut agent = snapshot(1).agents[0].clone();
+        agent.tab_id = "t4".into();
+        Arc::make_mut(view.live.snapshot.as_mut().unwrap())
+            .agents
+            .push(agent);
+        view.monitoring.seed(
+            Host::Local,
+            Watchers::from([(
+                Tab {
+                    id: "t4".into(),
+                    socket: String::new(),
+                },
+                Watched {
+                    under: vec!["claude".into()],
+                    disowned: false,
+                },
+            )]),
+        );
+        view.settle_attention();
+    });
+    view.read_with(cx, |view, _| {
+        assert_eq!(listed(view), ["t0", "t1", "t2", "t4", "t3"]);
+    });
+    view.update(cx, |view, _| {
+        view.monitoring.seed(Host::Local, Watchers::new());
+        view.settle_attention();
+    });
+    view.read_with(cx, |view, _| {
+        assert_eq!(listed(view), ["t0", "t1", "t2", "t4", "t3"]);
+        assert_eq!(view.attention.place("local", "t4", 0).rank, 5);
     });
 }

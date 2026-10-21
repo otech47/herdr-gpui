@@ -677,7 +677,7 @@ impl HerdrWindow {
                                 .agents
                                 .shows_status_text(agent.agent.as_deref())
                                 .then(|| match mark {
-                                    Mark::Limited => status_text(mark).into(),
+                                    Mark::Limited | Mark::Monitoring => status_text(mark).into(),
                                     Mark::Status(status) => state_label(agent, status_text(status)),
                                 }),
                             lines,

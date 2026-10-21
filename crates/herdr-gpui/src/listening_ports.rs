@@ -70,7 +70,6 @@ impl From<&ConnectTarget> for Daemon {
 }
 
 impl Daemon {
-    #[cfg(test)]
     pub(crate) fn host(&self) -> &Host {
         &self.host
     }
@@ -78,7 +77,7 @@ impl Daemon {
     /// Whether a pane whose `HERDR_SOCKET_PATH` was `socket` is this daemon's.
     /// A pane that did not say, from an older Herdr, is given the benefit of
     /// the doubt, as is a daemon whose socket cannot be named.
-    fn owns(&self, socket: &str) -> bool {
+    pub(crate) fn owns(&self, socket: &str) -> bool {
         let (false, Some(identity)) = (socket.is_empty(), &self.identity) else {
             return true;
         };
@@ -108,13 +107,12 @@ fn session_name(api: &Path) -> Option<&str> {
     }
 }
 
-/// The shell a host is scanned through.
-fn open(host: &Host) -> Result<Shell> {
+/// The shell a host is scanned through, here and by the process scanners.
+pub(crate) fn open(host: &Host) -> Result<Shell> {
     match host {
         Host::Local => local_shell(),
         Host::Ssh(target) => Shell::connect(target),
     }
-    .map_err(failed)
 }
 
 #[cfg(unix)]
@@ -199,7 +197,7 @@ fn run(host: &Host, stop: &Stop, results: &mpsc::SyncSender<Result<Scan>>) {
     loop {
         let opened = match shell.take() {
             Some(shell) => Ok(shell),
-            None => open(host),
+            None => open(host).map_err(failed),
         };
         let result = opened.and_then(|mut opened| {
             let ports = scan(&mut opened);

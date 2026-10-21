@@ -7,7 +7,9 @@ use super::*;
 use crate::{
     config::{Density, LayoutMode, Style},
     endpoint::Endpoint,
+    monitoring::{Tab, Watched, Watchers},
     preferences::{TabsSort, TabsView},
+    usage::Host,
 };
 
 pub(super) fn held_view() -> Option<TabsView> {
@@ -78,6 +80,8 @@ fn populate(this: &mut HerdrWindow, view: TabsView) -> Result<()> {
     this.live.status = ConnectionStatus::Connected;
     this.live.snapshot = Some(Arc::new(local));
     this.endpoints[0].live = this.live.clone();
+    this.monitoring
+        .seed(Host::Local, watchers(&[("t1", "claude")]));
 
     let mut remote = Endpoint::new(
         "ssh:mini".into(),
@@ -102,7 +106,28 @@ fn populate(this: &mut HerdrWindow, view: TabsView) -> Result<()> {
     remote.live.status = ConnectionStatus::Connected;
     remote.live.snapshot = Some(Arc::new(snapshot));
     this.endpoints.push(remote);
+    this.monitoring
+        .seed(Host::Ssh("unused".into()), watchers(&[("r2", "codex")]));
     Ok(())
+}
+
+/// Tabs with a shell running under the named agent, as a scan would find them.
+fn watchers(entries: &[(&str, &str)]) -> Watchers {
+    entries
+        .iter()
+        .map(|&(tab, under)| {
+            (
+                Tab {
+                    id: tab.into(),
+                    socket: String::new(),
+                },
+                Watched {
+                    under: vec![under.into()],
+                    disowned: false,
+                },
+            )
+        })
+        .collect()
 }
 
 pub(super) fn hold_sidebar(handle: WindowHandle<HerdrWindow>, cx: &mut App, view: TabsView) {

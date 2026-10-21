@@ -475,9 +475,9 @@ fn status_word(mark: impl Into<Mark>) -> Option<&'static str> {
 }
 
 /// An agent's status word: its integration's state label when it set one.
-/// A used-up plan always says limited.
+/// A used-up plan always says limited, a shell left running monitoring.
 fn agent_status_word(agent: &ClientShellAgent, mark: Mark) -> Option<Cow<'static, str>> {
-    if mark == Mark::Limited {
+    if matches!(mark, Mark::Limited | Mark::Monitoring) {
         return Some(Cow::Borrowed(status_text(mark)));
     }
     let word = state_label(agent, status_word(mark).unwrap_or(""));

@@ -54,6 +54,7 @@ mod menu;
 mod menus;
 #[cfg(feature = "mockup")]
 mod mockup;
+mod monitoring;
 mod motion;
 mod navigation;
 mod notifications;

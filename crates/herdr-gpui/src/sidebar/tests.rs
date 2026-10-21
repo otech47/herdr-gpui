@@ -22,5 +22,6 @@ use herdr_client::protocol::{
 
 mod hierarchy;
 mod limited;
+mod monitoring;
 mod row_text;
 mod statuses;

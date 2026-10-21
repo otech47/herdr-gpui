@@ -432,6 +432,14 @@ pub enum Error {
     ListeningPortsTool,
     #[error("Listening ports cannot be read on this platform.")]
     ListeningPortsUnsupported,
+    #[error("Could not list the processes on this host.")]
+    Monitoring(#[source] Box<Error>),
+    #[error(
+        "Neither /proc nor ps -E is available on this host, so its processes cannot be listed."
+    )]
+    MonitoringTool,
+    #[error("Processes cannot be listed on this platform.")]
+    MonitoringUnsupported,
     #[error("No free local port for an SSH tunnel.")]
     TunnelPort(#[source] io::Error),
     #[error("Could not start ssh for a tunnel.")]

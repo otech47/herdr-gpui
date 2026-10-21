@@ -107,14 +107,15 @@ impl HerdrWindow {
 
 /// Where a mark sorts under the attention sort, the lowest first: a tab
 /// waiting on an answer, then one whose plan is used up, then still working,
-/// finished, idle, and unknown.
+/// finished, idle with a shell still running, idle, and unknown.
 pub(crate) fn attention_rank(mark: Mark) -> u8 {
     match mark {
         Mark::Status(AgentStatus::Blocked) => 0,
         Mark::Limited => 1,
         Mark::Status(AgentStatus::Working) => 2,
         Mark::Status(AgentStatus::Done) => 3,
-        Mark::Status(AgentStatus::Idle) => 4,
-        Mark::Status(AgentStatus::Unknown) => 5,
+        Mark::Monitoring => 4,
+        Mark::Status(AgentStatus::Idle) => 5,
+        Mark::Status(AgentStatus::Unknown) => 6,
     }
 }
