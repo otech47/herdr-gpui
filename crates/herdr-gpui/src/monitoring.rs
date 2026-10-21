@@ -19,7 +19,9 @@ use crate::{
     system_load::Stop,
     usage::{Host, Shell},
 };
-pub(crate) use scan::{Tab, Watched, Watchers, parse};
+#[cfg(any(test, feature = "integration-test"))]
+pub(crate) use scan::{Tab, Watched};
+pub(crate) use scan::{Watchers, parse};
 use std::{
     collections::HashMap,
     sync::{Arc, mpsc},
