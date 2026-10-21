@@ -9,6 +9,9 @@ use crate::{Error, usage::Host};
 use herdr_client::ConnectTarget;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
+#[cfg(unix)]
+mod repeated_scans;
+
 /// The ports one workspace was found with, whichever daemon it named.
 fn of<'a>(ports: &'a Ports, workspace: &str) -> &'a [Port] {
     ports
