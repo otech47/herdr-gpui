@@ -362,29 +362,18 @@ impl SettingsWindow {
                     // The source's guarded file watcher owns applying changes.
                     // Direct loads here can overwrite its active picker preview.
                     if shared && saved.is_ok() {
-                        // Use the existing connection, without stealing its response lane.
-                        if let Some(endpoint) = source.endpoints.iter().find(|endpoint| {
+                        // Use the existing connection, without stealing its response
+                        // lane. While another device is shown the reload waits for
+                        // this computer's to be shown again.
+                        if let Some(endpoint) = source.endpoints.iter_mut().find(|endpoint| {
                             !matches!(
                                 endpoint.connection.target,
                                 herdr_client::ConnectTarget::Ssh { .. }
                             )
-                        }) && let (Some(handle), Some(snapshot)) =
-                            (&endpoint.connection.handle, &endpoint.live.snapshot)
-                            && endpoint.live.status.is_connected()
+                        }) && let Err(error) = endpoint.reload_config()
+                            && !this.saving
                         {
-                            let status = match handle.request(
-                                &snapshot.boot_id,
-                                herdr_client::Method::ServerReloadConfig,
-                                serde_json::json!({}),
-                            ) {
-                                Ok(_) => "Saved; daemon reload queued (not acknowledged)".into(),
-                                Err(error) => {
-                                    format!("Saved; daemon reload not queued: {error}")
-                                }
-                            };
-                            if !this.saving {
-                                this.status = Some(status);
-                            }
+                            this.status = Some(format!("Saved; daemon reload not queued: {error}"));
                         }
                     }
                 });

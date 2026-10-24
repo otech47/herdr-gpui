@@ -17,6 +17,7 @@ use std::{
 };
 
 mod atomic_projection;
+mod background_commands;
 mod close_pane;
 mod endpoint_switch;
 mod focus_fences;
@@ -227,6 +228,7 @@ fn connected_endpoint_reporting(id: &str, server_version: Option<&str>) -> (Endp
             Method::WorktreeCreate,
             Method::WorktreeOpen,
             Method::WorktreeRemove,
+            Method::ServerReloadConfig,
         ]
         .map(|method| method.as_str().to_owned()),
     );
