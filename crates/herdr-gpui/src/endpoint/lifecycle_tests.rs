@@ -39,6 +39,7 @@ mod staged_release;
 mod startup_pin;
 mod toast_handoff;
 mod toast_navigation;
+mod wake_recovery;
 mod window_notices;
 mod workspace_menu_navigation;
 

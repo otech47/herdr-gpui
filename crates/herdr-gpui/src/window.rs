@@ -782,7 +782,7 @@ impl HerdrWindow {
             copy_mode: None,
             flash: None,
             presentation: Default::default(),
-            wake: endpoint::WakeClock::new(std::time::Instant::now(), std::time::SystemTime::now()),
+            wake: endpoint::WakeClock::now(),
             painter: Default::default(),
             regions: Vec::new(),
             marked: String::new(),
