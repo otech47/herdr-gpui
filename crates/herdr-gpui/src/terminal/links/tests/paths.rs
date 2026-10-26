@@ -116,3 +116,32 @@ fn file_hyperlinks_name_local_paths_only() {
         assert!(link_at(&s, 1., 1., 10., 20.).is_none());
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn printed_file_urls_name_local_paths_only() {
+    for (text, column, expected, columns) in [
+        (
+            "open file:///tmp/a%20b.html now",
+            10,
+            "/tmp/a b.html",
+            5..27,
+        ),
+        (
+            "(file://localhost/tmp/report.html).",
+            3,
+            "/tmp/report.html",
+            1..33,
+        ),
+    ] {
+        assert_eq!(
+            path(text, column),
+            Some((expected.into(), columns)),
+            "{text}"
+        );
+        assert!(link_at(&surface(text), column as f32 * 10. + 1., 1., 10., 20.).is_none());
+    }
+    assert!(read("open file://elsewhere/tmp/a.html now", 10).is_none());
+    // Running to the right edge, the address may continue on the next row.
+    assert!(frame_link(&frame("see file:///tmp/a.html", 22, 1), 8, 0, 0, 22).is_none());
+}

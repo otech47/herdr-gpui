@@ -15,7 +15,7 @@ fn web_url(value: &str) -> Option<String> {
         .map(String::from)
 }
 
-/// The local path a `file://` hyperlink names. A file on another host is not
+/// The local path a `file://` address names. A file on another host is not
 /// this machine's to open, so only an empty host or `localhost` qualifies:
 /// Windows would otherwise read any other host as a network share.
 fn file_url_path(value: &str) -> Option<String> {
@@ -26,6 +26,15 @@ fn file_url_path(value: &str) -> Option<String> {
         return None;
     }
     url.to_file_path().ok()?.into_os_string().into_string().ok()
+}
+
+/// What a URL, explicit or printed, points at, if anything this machine
+/// may open.
+fn url_target(destination: &str) -> Option<RowTarget> {
+    match web_url(destination) {
+        Some(url) => Some(RowTarget::Web(url)),
+        None => file_url_path(destination).map(RowTarget::Path),
+    }
 }
 
 /// What a row-local link points at.
@@ -147,11 +156,7 @@ fn frame_link(frame: &FrameData, column: u16, row: u16, start: u16, end: u16) ->
     let columns = |cells: Range<usize>| start + cells.start as u16..start + cells.end as u16;
     // An explicit link is authoritative, even if its destination is disallowed.
     if let Some(index) = cells[selected].hyperlink.or(cell.hyperlink) {
-        let destination = frame.hyperlinks.get(index as usize)?;
-        let target = match web_url(destination) {
-            Some(url) => RowTarget::Web(url),
-            None => RowTarget::Path(file_url_path(destination)?),
-        };
+        let target = url_target(frame.hyperlinks.get(index as usize)?)?;
         let on_link = |i: &usize| cells[*i].skip || cells[*i].hyperlink == Some(index);
         let first = (0..=source)
             .rev()
@@ -190,8 +195,8 @@ fn frame_link(frame: &FrameData, column: u16, row: u16, start: u16, end: u16) ->
     let (range, target) = match plain_url(&text, hit) {
         Some((_, true)) => return None,
         Some((range, false)) => {
-            let url = web_url(&text[range.clone()])?;
-            (range, RowTarget::Web(url))
+            let target = url_target(&text[range.clone()])?;
+            (range, target)
         }
         None => match path::plain_path(&text, hit)? {
             (_, _, true) => return None,
@@ -229,19 +234,22 @@ fn row_full(frame: &FrameData, row: u16, end: u16) -> bool {
         .is_some_and(|cell| cell.skip || shown(cell) != " ")
 }
 
-/// The byte range of the plain web URL in one row's `text` that covers the
-/// byte at `hit`, trimmed of the prose punctuation around it, and whether the
-/// URL runs to the end of the row, where it may continue off-screen or on the
-/// next row.
+/// The byte range of the plain web or `file://` URL in one row's `text` that
+/// covers the byte at `hit`, trimmed of the prose punctuation around it, and
+/// whether the URL runs to the end of the row, where it may continue
+/// off-screen or on the next row.
 pub(super) fn plain_url(text: &str, hit: usize) -> Option<(Range<usize>, bool)> {
-    for (start, _) in text.match_indices("http") {
+    for (separator, _) in text.match_indices("://") {
+        let Some(start) = ["https", "http", "file"]
+            .into_iter()
+            .find_map(|scheme| text[..separator].strip_suffix(scheme).map(str::len))
+        else {
+            continue;
+        };
         if start > hit {
             break;
         }
         let tail = &text[start..];
-        if !tail.starts_with("http://") && !tail.starts_with("https://") {
-            continue;
-        }
         let end = tail
             .find(|c: char| {
                 c.is_whitespace() || c.is_control() || matches!(c, '<' | '>' | '"' | '\'' | '`')

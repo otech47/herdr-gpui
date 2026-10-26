@@ -255,3 +255,5 @@ fn a_pane_on_an_ssh_host_has_no_file_links(cx: &mut gpui::TestAppContext) {
     cx.run_until_parked();
     assert!(cx.opened_url().is_none());
 }
+
+mod file_urls;
