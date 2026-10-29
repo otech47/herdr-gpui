@@ -206,6 +206,14 @@ impl HerdrWindow {
             .iter()
             .map(|window| window.describe(now))
             .chain(report.balances.iter().map(|balance| balance.text()))
+            .chain(
+                report
+                    .account
+                    .email
+                    .iter()
+                    .filter(|email| !email.trim().is_empty())
+                    .cloned(),
+            )
             .collect();
         let detail = SharedString::from(lines.join("\n"));
         let has_detail = !detail.is_empty();
@@ -297,6 +305,10 @@ impl Render for Hint {
             .text_size(px(12.))
             .text_color(rgb(self.foreground))
             .bg(rgb(self.surface))
-            .children(self.text.split('\n').map(str::to_owned))
+            .children(
+                self.text
+                    .split('\n')
+                    .map(|line| div().child(line.to_owned())),
+            )
     }
 }
