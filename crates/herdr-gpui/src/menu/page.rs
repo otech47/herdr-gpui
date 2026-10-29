@@ -4,6 +4,7 @@
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum Page {
     Menu,
+    TabsOptions,
     About,
     Preferences,
     Devices,

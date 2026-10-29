@@ -106,12 +106,21 @@ fn the_attention_sort_ranks_blocked_limited_working_done_idle_unknown(
 fn the_header_toggle_flips_the_sort_and_remembers_it(cx: &mut gpui::TestAppContext) {
     let (view, cx) = six_tabs(cx);
     draw(cx);
-    let toggle = cx.debug_bounds("tabs-sort").unwrap();
+    let toggle = cx.debug_bounds("tabs-options").unwrap();
     let label = cx.debug_bounds("header-label-tabs").unwrap();
     assert!(label.right() <= toggle.left());
     assert!(cx.debug_bounds("tabs-view").is_none());
     for expected in [TabsSort::Attention, TabsSort::Manual] {
-        click(cx, "tabs-sort");
+        click(cx, "tabs-options");
+        draw(cx);
+        click(
+            cx,
+            if expected == TabsSort::Attention {
+                "tabs-option-0"
+            } else {
+                "tabs-option-1"
+            },
+        );
         draw(cx);
         view.read_with(cx, |view, _| {
             assert_eq!(view.sidebar_tabs_sort, expected);

@@ -272,6 +272,7 @@ impl HerdrWindow {
         let pointer_anchored = matches!(
             page,
             Page::Workspace
+                | Page::TabsOptions
                 | Page::Tab
                 | Page::RenameTab
                 | Page::Group
@@ -378,6 +379,7 @@ impl HerdrWindow {
                 matches!(
                     page,
                     Page::Tab
+                        | Page::TabsOptions
                         | Page::RenameTab
                         | Page::Group
                         | Page::Pane
@@ -393,6 +395,8 @@ impl HerdrWindow {
                             if page == Page::Host && self.host_menu_lists_forwards() {
                                 // Room for a forward's port, state, and actions.
                                 260.
+                            } else if page == Page::TabsOptions {
+                                super::tabs_options::WIDTH
                             } else if matches!(page, Page::Tab | Page::Pane | Page::Host) {
                                 180.
                             } else if page == Page::PaneProcesses {
@@ -536,6 +540,8 @@ impl HerdrWindow {
                         })),
                 );
             }
+        } else if page == Page::TabsOptions {
+            panel = panel.child(self.render_tabs_options(cx));
         } else if page == Page::Devices {
             panel = panel.child(self.render_devices(cx));
         } else if page == Page::Sessions {

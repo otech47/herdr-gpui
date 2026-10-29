@@ -16,6 +16,7 @@ mod pr_actions;
 mod sessions;
 mod settings;
 mod state;
+mod tabs_options;
 mod teleport;
 mod whats_new;
 mod workspace;

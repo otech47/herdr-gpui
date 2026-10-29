@@ -124,11 +124,20 @@ fn the_device_view_lists_the_selected_devices_tabs_and_the_header_cycles_the_vie
     assert!(cx.debug_bounds("row-tab-t0").is_some());
     assert!(cx.debug_bounds("row-tab-ssh:test-r0").is_none());
     assert!(cx.debug_bounds("tabs-group-local").is_none());
-    let toggle = cx.debug_bounds("tabs-view").unwrap();
+    let toggle = cx.debug_bounds("tabs-options").unwrap();
     let label = cx.debug_bounds("header-label-tabs").unwrap();
     assert!(label.right() <= toggle.left());
     for expected in [TabsView::All, TabsView::ByDevice, TabsView::Device] {
-        click(cx, "tabs-view");
+        click(cx, "tabs-options");
+        draw(cx);
+        click(
+            cx,
+            match expected {
+                TabsView::Device => "tabs-option-2",
+                TabsView::All => "tabs-option-3",
+                TabsView::ByDevice => "tabs-option-4",
+            },
+        );
         draw(cx);
         view.read_with(cx, |view, _| {
             assert_eq!(view.sidebar_tabs_view, expected);

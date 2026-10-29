@@ -134,6 +134,9 @@ pub(super) fn hold_sidebar(handle: WindowHandle<HerdrWindow>, cx: &mut App, view
     let result = handle.update(cx, |this, window, cx| {
         populate(this, view)?;
         window.resize(size(px(1000.), px(700.)));
+        if std::env::var_os("HERDR_TEST_TABS_OPTIONS").is_some() {
+            this.open_tabs_options(point(px(283.), px(170.)), window, cx);
+        }
         cx.notify();
         Ok::<(), anyhow::Error>(())
     });
@@ -143,5 +146,26 @@ pub(super) fn hold_sidebar(handle: WindowHandle<HerdrWindow>, cx: &mut App, view
             eprintln!("SIDEBAR hold FAIL: {other:?}");
             std::process::exit(1);
         }
+    }
+    #[cfg(feature = "mockup")]
+    if let Some(path) = std::env::var_os("HERDR_TEST_SIDEBAR_CAPTURE") {
+        cx.spawn(async move |cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(750))
+                .await;
+            let result = handle.update(cx, |_, window, _| window.render_to_image());
+            match result {
+                Ok(Ok(image)) => {
+                    let result = cx
+                        .background_executor()
+                        .spawn(async move { image.save(std::path::PathBuf::from(path)) })
+                        .await;
+                    eprintln!("SIDEBAR capture: {result:?}");
+                }
+                other => eprintln!("SIDEBAR capture FAIL: {other:?}"),
+            }
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
     }
 }

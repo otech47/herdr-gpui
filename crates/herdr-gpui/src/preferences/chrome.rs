@@ -155,6 +155,7 @@ impl TabsView {
         }
     }
 
+    #[cfg(test)]
     pub fn next(self) -> Self {
         match self {
             Self::Device => Self::All,
@@ -194,6 +195,7 @@ impl TabsSort {
         }
     }
 
+    #[cfg(test)]
     pub fn next(self) -> Self {
         match self {
             Self::Manual => Self::Attention,

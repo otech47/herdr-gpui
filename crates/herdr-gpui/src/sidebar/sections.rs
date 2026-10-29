@@ -191,8 +191,7 @@ impl HerdrWindow {
             )
     }
 
-    /// With a tabs list, the controls sit in the top header instead of a
-    /// footer, and "new" means a tab in the shown space, as cmd-t does.
+    /// The app menu stays beside the spaces header.
     pub(super) fn top_controls(&self, cx: &mut Context<Self>) -> Div {
         let theme = &self.theme;
         div()
@@ -200,16 +199,6 @@ impl HerdrWindow {
             .items_center()
             .gap(px(20.))
             .text_color(rgb(theme.muted))
-            .child(
-                div()
-                    .id("sidebar-new-tab")
-                    .cursor_pointer()
-                    .hover(|s| s.text_color(rgb(theme.foreground)))
-                    .child(label_text("new tab"))
-                    .on_click(
-                        cx.listener(|this, _, window, cx| this.command(Command::Tab, window, cx)),
-                    ),
-            )
             .child(
                 div()
                     .id("sidebar-menu-top")
