@@ -137,6 +137,12 @@ pub(super) fn hold_sidebar(handle: WindowHandle<HerdrWindow>, cx: &mut App, view
         if std::env::var_os("HERDR_TEST_TABS_OPTIONS").is_some() {
             this.open_tabs_options(point(px(283.), px(170.)), window, cx);
         }
+        if let Ok(mode) = std::env::var("HERDR_TEST_AGENT_SESSIONS") {
+            this.preview_agent_sessions(&mode, window, cx);
+            if std::env::var_os("HERDR_TEST_NARROW").is_some() {
+                window.resize(size(px(520.), px(640.)));
+            }
+        }
         cx.notify();
         Ok::<(), anyhow::Error>(())
     });

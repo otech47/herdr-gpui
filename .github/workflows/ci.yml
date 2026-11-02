@@ -125,6 +125,7 @@ jobs:
           jq --version
           python3 -m unittest discover -s scripts/release/tests -v
           python3 scripts/release/test-release-security.py
+          python3 -m unittest discover -s scripts -p test_agent_sessions.py -v
       - name: Install pinned Rust toolchain
         run: rustup show
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2

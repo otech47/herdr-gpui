@@ -4,6 +4,7 @@
 mod about;
 mod actions;
 mod agent_notes;
+mod agent_sessions;
 mod agent_skill;
 mod app;
 #[cfg(any(target_os = "macos", test))]

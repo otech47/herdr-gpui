@@ -39,6 +39,10 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.menu.page == Some(Page::AgentSessions) {
+            self.agent_sessions_key(event, window, cx);
+            return;
+        }
         if self.settings_key(event, window, cx) {
             return;
         }

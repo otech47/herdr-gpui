@@ -9,9 +9,12 @@ fn tabs_header_owns_new_tab_and_options_and_fits_a_narrow_sidebar(cx: &mut gpui:
     draw(cx);
     let header = cx.debug_bounds("header-tabs").unwrap();
     let new_tab = cx.debug_bounds("sidebar-new-tab").unwrap();
+    let sessions = cx.debug_bounds("open-agent-session").unwrap();
     let options = cx.debug_bounds("tabs-options").unwrap();
     assert!(new_tab.top() >= header.top() && new_tab.bottom() <= header.bottom());
-    assert!(new_tab.right() <= options.left());
+    assert!(new_tab.right() <= sessions.left());
+    assert!(sessions.top() >= header.top() && sessions.bottom() <= header.bottom());
+    assert!(sessions.right() <= options.left());
     assert!(options.right() <= header.right());
     assert!(cx.debug_bounds("tabs-sort").is_none());
     assert!(cx.debug_bounds("tabs-view").is_none());

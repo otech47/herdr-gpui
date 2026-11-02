@@ -454,6 +454,7 @@ impl HerdrWindow {
         self.poll_file_transfer(cx);
         self.update_workspace_dialog(window, cx);
         self.poll_teleport(window, cx);
+        self.poll_agent_sessions(window, cx);
         self.poll_fan_out(window, cx);
         self.poll_device_setup(window, cx);
         self.poll_worktree_source(cx);

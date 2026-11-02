@@ -22,6 +22,14 @@ impl HerdrWindow {
     }
 
     pub(crate) fn open_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if self
+            .menu
+            .agent_sessions
+            .as_ref()
+            .is_some_and(|p| p.opening())
+        {
+            return false;
+        }
         self.shift_taps.cancel();
         self.finish_font_size_edit(true, cx);
         if !self.cancel_theme_preview(cx) {
@@ -41,6 +49,14 @@ impl HerdrWindow {
     }
 
     pub(crate) fn dismiss_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self
+            .menu
+            .agent_sessions
+            .as_ref()
+            .is_some_and(|p| p.opening())
+        {
+            return;
+        }
         self.finish_font_size_edit(true, cx);
         if !self.cancel_theme_preview(cx) {
             return;
@@ -102,6 +118,7 @@ impl HerdrWindow {
             "decrease font size",
             "reset font size",
             "command palette",
+            "open agent session",
             "workspaces",
             "reload GUI config",
             "app updates",
@@ -134,6 +151,7 @@ impl HerdrWindow {
         cx: &mut Context<Self>,
     ) {
         match item {
+            "open agent session" => self.open_agent_sessions(window, cx),
             "GitHub sign-in" => self.menu.page = Some(Page::GitHub),
             "about" => self.open_about(window, cx),
             "settings" => self.open_preferences(window, cx),
@@ -432,6 +450,7 @@ impl HerdrWindow {
                 !matches!(
                     page,
                     Page::Keybinds
+                        | Page::AgentSessions
                         | Page::Themes
                         | Page::Fonts
                         | Page::Palette
@@ -454,7 +473,12 @@ impl HerdrWindow {
             .when(
                 matches!(
                     page,
-                    Page::Keybinds | Page::Themes | Page::Fonts | Page::Palette | Page::Preferences
+                    Page::Keybinds
+                        | Page::Themes
+                        | Page::Fonts
+                        | Page::Palette
+                        | Page::Preferences
+                        | Page::AgentSessions
                 ),
                 |panel| {
                     panel
@@ -542,6 +566,8 @@ impl HerdrWindow {
             }
         } else if page == Page::TabsOptions {
             panel = panel.child(self.render_tabs_options(cx));
+        } else if page == Page::AgentSessions {
+            panel = panel.child(self.render_agent_sessions(cx));
         } else if page == Page::Devices {
             panel = panel.child(self.render_devices(cx));
         } else if page == Page::Sessions {

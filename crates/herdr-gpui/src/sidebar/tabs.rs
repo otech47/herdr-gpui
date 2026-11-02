@@ -249,6 +249,34 @@ impl HerdrWindow {
                 )
                 .child(
                     div()
+                        .id("open-agent-session")
+                        .debug_selector(|| "open-agent-session".into())
+                        .size(px(20.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .child(
+                            svg()
+                                .path("icons/sessions.svg")
+                                .size(px(12.))
+                                .text_color(rgb(muted)),
+                        )
+                        .tooltip(move |_, cx| {
+                            cx.new(|_| crate::usage::Hint {
+                                text: "Open an agent session".into(),
+                                foreground,
+                                surface,
+                            })
+                            .into()
+                        })
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            cx.stop_propagation();
+                            this.open_agent_sessions(window, cx);
+                        })),
+                )
+                .child(
+                    div()
                         .id("tabs-options")
                         .debug_selector(|| "tabs-options".into())
                         .size(px(20.))

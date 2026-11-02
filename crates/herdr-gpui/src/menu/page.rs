@@ -5,6 +5,7 @@
 pub(crate) enum Page {
     Menu,
     TabsOptions,
+    AgentSessions,
     About,
     Preferences,
     Devices,

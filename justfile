@@ -33,6 +33,10 @@ test:
     cargo test --locked --workspace
     cargo test --locked --workspace --all-features
 
+# Host session discovery uses POSIX process and file locking APIs.
+test-agent-sessions:
+    python3 -m unittest discover -s scripts -p test_agent_sessions.py -v
+
 # Explicit opt-in: launches and cleans up its own isolated daemon only.
 test-live binary:
     HERDR_TEST_BINARY="{{binary}}" cargo test --locked -p herdr-client --test live -- --ignored --nocapture
