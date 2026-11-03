@@ -7,6 +7,13 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Some(snapshot) = self.live.snapshot.as_mut() {
+            let snapshot = Arc::make_mut(snapshot);
+            if snapshot.focused_workspace_id.is_none() {
+                snapshot.focused_workspace_id = Some("w0".into());
+                snapshot.focused_tab_id = Some("t0".into());
+            }
+        }
         let enabled: Vec<_> = self.endpoints.iter().map(|e| e.enabled).collect();
         for endpoint in &mut self.endpoints {
             endpoint.enabled = false;
@@ -28,7 +35,7 @@ impl HerdrWindow {
             host,
             cli: vec!["herdr".into()],
         };
-        let Some(picker) = &mut self.menu.agent_sessions else {
+        let Some(picker) = &mut self.agent_sessions else {
             return;
         };
         picker.rows = [
@@ -67,23 +74,30 @@ impl HerdrWindow {
                 title: title.into(),
                 cwd: cwd.into(),
                 source: origin.into(),
-                modified: 0.,
+                modified: 0,
+                running: index == 0,
             },
         })
         .collect();
         picker.filter("");
         if mode != "list" {
-            self.watch_agent_session(0, window, cx);
-            if let Some(watch) = self
-                .menu
-                .agent_sessions
-                .as_mut()
-                .and_then(|p| p.watch.as_mut())
+            self.open_agent_session(0, window, cx);
+            if let Some(id) = self.active_session_tab(cx)
+                && let Some(watch) = self.session_tabs.get_mut(&id)
             {
                 watch.observation = Some(Observation {
-                    state: if mode == "ready" { Activity::Ready } else { Activity::Watch },
-                    output: "The release branch is ready. I am checking the Android build and the changes included in this release.\n\nWorking: run build checks\n\nThe navigation checks passed. The remaining build is still running.\n\nI will save the result when the checks finish.".into(),
+                    state: if mode == "ready" {
+                        Activity::Ready
+                    } else {
+                        Activity::Watch
+                    },
+                    output: String::new(),
                 });
+                watch.output = "The release branch is ready. I am checking the Android build and the changes included in this release.\n\nWorking: run build checks\n\nThe navigation checks passed. The remaining build is still running.\n\nI will save the result when the checks finish.".into();
+                if mode == "ready" {
+                    watch.output = "The build and navigation checks passed.\n\nThe release is ready for review. No further work is running in this session.".into();
+                }
+                watch.auto_continue = false;
                 watch.next = Instant::now() + Duration::from_secs(86400);
             }
         }

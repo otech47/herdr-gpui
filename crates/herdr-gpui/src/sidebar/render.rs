@@ -628,7 +628,9 @@ impl HerdrWindow {
             }
             if sidebar_tabs && selected && tabs_open {
                 let listed = self.tab_rows(rows, &row_cx, content_x, cx);
-                tabs = tabs.children(listed.rows);
+                tabs = tabs
+                    .children(listed.rows)
+                    .children(self.session_sidebar_rows(cx));
                 tab_drop = listed.drop;
                 sliding |= listed.sliding;
             }

@@ -73,6 +73,9 @@ impl EntityInputHandler for HerdrWindow {
             }
             return;
         }
+        if self.active_session_tab(cx).is_some() {
+            return;
+        }
         if self.copy_mode_active() {
             self.copy_mode_text(text, cx);
             return;
@@ -104,7 +107,7 @@ impl EntityInputHandler for HerdrWindow {
             return;
         }
         // Copy mode has no composition: a key it does not know types nothing.
-        if !self.input_ready() || self.copy_mode_active() {
+        if !self.input_ready() || self.copy_mode_active() || self.active_session_tab(cx).is_some() {
             return;
         }
         self.marked = text.into();

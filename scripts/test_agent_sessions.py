@@ -70,6 +70,30 @@ class SessionsTest(unittest.TestCase):
         row = sessions.catalog(self.home)[0]
         self.assertEqual((row["session"], row["agent"], row["cwd"]), (SID, "codex", "/project"))
         self.assertEqual((row["source"], row["title"]), ("Jarvis", "Check the mobile release"))
+        self.assertTrue(row["running"])
+
+    def test_background_jobs_are_not_lost_behind_newer_saved_sessions(self):
+        self.job()
+        other = self.home / ".codex/sessions/2026/11/02/rollout-new-99999999-2222-3333-4444-555555555555.jsonl"
+        self.write(other, [{"type": "session_meta", "payload": {"id": "99999999-2222-3333-4444-555555555555", "cwd": "/project"}}])
+        with patch.object(sessions, "LIMIT", 1):
+            rows = sessions.catalog(self.home)
+        self.assertEqual(rows[0]["source"], "Jarvis")
+        self.assertEqual(rows[0]["session"], SID)
+        self.assertEqual(len(rows), 2)
+
+    def test_latest_claude_title_is_used_after_a_long_conversation(self):
+        path = self.home / f".claude/projects/project/{SID}.jsonl"
+        self.write(path, [{"type": "user", "cwd": "/project", "message": {"content": "Initial prompt"}},
+                          {"type": "assistant", "message": {"content": "x" * sessions.READ_LIMIT}},
+                          {"type": "custom-title", "customTitle": "Useful task name"}])
+        self.assertEqual(sessions.native(path, "claude")["title"], "Useful task name")
+
+    def test_another_identified_session_does_not_block_this_one(self):
+        responses = [subprocess.CompletedProcess([], 1, "", ""),
+                     subprocess.CompletedProcess([], 0, "123 /usr/local/bin/codex resume another-session-id\n", "")]
+        with patch.object(sessions.subprocess, "run", side_effect=responses):
+            self.assertEqual(sessions.activity(self.entry), "ready")
 
     def test_subagents_are_excluded_and_context_is_not_task_title(self):
         rows = list(sessions.lines(self.path))
@@ -105,12 +129,19 @@ class SessionsTest(unittest.TestCase):
             sessions.handle({"operation": "watch", "key": self.entry}, self.home, self.host)
 
     def test_existing_tab_is_focused_without_spawning_another(self):
-        self.host.state["panes"] = [{**self.host.created, "agent_session": {"agent": "codex", "value": SID}}]
+        self.host.state["panes"] = [{**self.host.created, "agent_status": "idle", "agent_session": {"agent": "codex", "value": SID}}]
         result = sessions.open_session(self.home, self.host, self.entry)
         self.assertEqual(result["opened"]["pane_id"], "w7:p9")
         self.assertEqual(self.host.calls, [("snapshot",)])
         watched = sessions.handle({"operation": "watch", "key": self.entry}, self.home, self.host)
         self.assertEqual(watched["state"], "attached")
+
+    def test_an_existing_busy_herdr_tab_stays_read_only(self):
+        self.host.state["panes"] = [{**self.host.created, "agent_status": "working", "agent_session": {"agent": "codex", "value": SID}}]
+        self.assertEqual(sessions.handle({"operation": "watch", "key": self.entry}, self.home, self.host)["state"], "watch")
+        with self.assertRaisesRegex(ValueError, "still running in Herdr"):
+            sessions.open_session(self.home, self.host, self.entry)
+        self.assertEqual(self.host.calls, [("snapshot",), ("snapshot",)])
 
     def test_running_job_cannot_be_resumed_even_if_ui_is_stale(self):
         self.job()

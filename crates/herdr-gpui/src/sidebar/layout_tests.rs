@@ -458,6 +458,8 @@ pub(crate) fn fixture_window(window: &mut Window, cx: &mut Context<HerdrWindow>)
         deliveries: Default::default(),
         notes_width: crate::panel_resize::NOTES,
         review_files_width: crate::panel_resize::REVIEW_FILES,
+        agent_sessions: None,
+        session_tabs: Default::default(),
         reviews: Default::default(),
         viewport_width: 0.,
         pr_actions: Default::default(),

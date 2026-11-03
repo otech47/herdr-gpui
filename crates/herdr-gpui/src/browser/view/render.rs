@@ -32,12 +32,14 @@ impl HerdrWindow {
             .map(|tab| {
                 let id = tab.id;
                 let (background, text) = self.tab_colors(shown == Some(id), slot.id);
-                // A review tab shows a diff, not a page.
-                let icon = if tab
+                let icon = if matches!(tab.location, Some(Location::AgentSession { .. })) {
+                    "icons/sessions.svg"
+                } else if tab
                     .location
                     .as_ref()
                     .is_some_and(|location| !location.is_page())
                 {
+                    // A review tab shows a diff, not a page.
                     "icons/diff-unified.svg"
                 } else {
                     "icons/globe.svg"

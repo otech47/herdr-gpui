@@ -22,14 +22,6 @@ impl HerdrWindow {
     }
 
     pub(crate) fn open_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        if self
-            .menu
-            .agent_sessions
-            .as_ref()
-            .is_some_and(|p| p.opening())
-        {
-            return false;
-        }
         self.shift_taps.cancel();
         self.finish_font_size_edit(true, cx);
         if !self.cancel_theme_preview(cx) {
@@ -49,14 +41,6 @@ impl HerdrWindow {
     }
 
     pub(crate) fn dismiss_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self
-            .menu
-            .agent_sessions
-            .as_ref()
-            .is_some_and(|p| p.opening())
-        {
-            return;
-        }
         self.finish_font_size_edit(true, cx);
         if !self.cancel_theme_preview(cx) {
             return;

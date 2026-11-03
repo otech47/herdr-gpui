@@ -2,6 +2,8 @@
 #[cfg(any(test, feature = "integration-test"))]
 mod fixtures;
 mod render;
+mod tab;
+pub(crate) use tab::{SavedSession, SessionTab};
 #[cfg(test)]
 mod tests;
 
@@ -51,23 +53,38 @@ impl Source {
             shell_quote(HELPER),
             shell_quote(&request.to_string())
         );
-        let output = self.host.capture(&script, cancel)?;
-        let value: serde_json::Value = serde_json::from_slice(&output)?;
-        if let Some(error) = value["error"].as_str() {
-            return Err(Error::Refused(error.to_owned()));
-        }
-        Ok(serde_json::from_value(value)?)
+        let started = Instant::now();
+        let result = (|| {
+            let output = self.host.capture(&script, cancel)?;
+            let value: serde_json::Value = serde_json::from_slice(&output)?;
+            if let Some(error) = value["error"].as_str() {
+                return Err(Error::Refused(error.to_owned()));
+            }
+            Ok(serde_json::from_value(value)?)
+        })();
+        tracing::debug!(operation = request["operation"].as_str().unwrap_or("unknown"),
+            endpoint = %self.id, elapsed_ms = started.elapsed().as_millis() as u64,
+            success = result.is_ok(), "Agent session request completed");
+        result
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 struct Entry {
     agent: String,
     session: String,
     title: String,
     cwd: String,
     source: String,
-    modified: f64,
+    modified: u64,
+    #[serde(default)]
+    running: bool,
+}
+
+impl Entry {
+    fn background(&self) -> bool {
+        matches!(self.source.as_str(), "Jarvis" | "Roboz")
+    }
 }
 
 #[derive(Deserialize)]
@@ -86,44 +103,37 @@ fn observe(
     sources: &[Source],
     mut probe: impl FnMut(&Source) -> Result<Observation, Error>,
 ) -> Result<(Source, Observation), Error> {
-    let original = probe(&row.host)?;
-    if original.state == Activity::Attached {
-        return Ok((row.host.clone(), original));
+    if !matches!(row.entry.agent.as_str(), "claude" | "kimi") {
+        return Ok((row.host.clone(), probe(&row.host)?));
     }
-    let mut selected = (row.host.clone(), original);
     // These stores sync between devices. A stopped local copy cannot grant
     // permission to resume while the same conversation runs on another host.
-    if matches!(row.entry.agent.as_str(), "claude" | "kimi") {
-        let mut unavailable = None;
-        for source in sources.iter().filter(|s| s.id != row.host.id) {
-            match probe(source) {
-                Ok(observation) if observation.state == Activity::Attached => {
-                    return Ok((source.clone(), observation));
+    let mut selected: Option<(Source, Observation)> = None;
+    let mut unavailable = None;
+    for source in std::iter::once(&row.host).chain(sources.iter().filter(|s| s.id != row.host.id)) {
+        match probe(source) {
+            Ok(observation) => {
+                if selected.as_ref().is_none_or(|(_, previous)| {
+                    observation.state.precedence() > previous.state.precedence()
+                }) {
+                    selected = Some((source.clone(), observation));
                 }
-                Ok(observation)
-                    if matches!(observation.state, Activity::Watch | Activity::Unknown) =>
-                {
-                    selected = (source.clone(), observation);
-                }
-                Ok(observation)
-                    if selected.1.state == Activity::Missing
-                        && observation.state == Activity::Ready =>
-                {
-                    selected = (source.clone(), observation);
-                }
-                Ok(_) => {}
-                Err(_) => unavailable = Some(source.label.clone()),
             }
-        }
-        if selected.1.state.can_open()
-            && let Some(label) = unavailable
-        {
-            return Err(Error::Refused(format!(
-                "Cannot verify this synced session on {label}. Continuation stays disabled until that device is reachable."
-            )));
+            Err(error) => unavailable = Some((source.label.clone(), error)),
         }
     }
-    Ok(selected)
+    match (selected, unavailable) {
+        (Some((_, observation)), Some((label, _))) if observation.state.can_open() => {
+            Err(Error::Refused(format!(
+                "Cannot verify this synced session on {label}. Continuation stays disabled until that device is reachable."
+            )))
+        }
+        (Some(selected), _) => Ok(selected),
+        (None, Some((_, error))) => Err(error),
+        (None, None) => Err(Error::Refused(
+            "No device could locate this session.".into(),
+        )),
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -139,6 +149,16 @@ enum Activity {
 impl Activity {
     fn can_open(self) -> bool {
         matches!(self, Self::Ready | Self::Attached)
+    }
+
+    fn precedence(self) -> u8 {
+        match self {
+            Self::Missing => 0,
+            Self::Ready => 1,
+            Self::Attached => 2,
+            Self::Unknown => 3,
+            Self::Watch => 4,
+        }
     }
 }
 
@@ -160,16 +180,6 @@ struct Destination {
 
 enum Reply {
     Listed(Source, Result<Listing, Error>),
-    Watched(Result<(Source, Observation), Error>),
-    Opened(Result<(Source, OpenResult), Error>),
-}
-
-struct Watch {
-    row: Row,
-    observation: Option<Observation>,
-    pending: bool,
-    next: Instant,
-    error: Option<String>,
 }
 
 pub(crate) struct Picker {
@@ -181,12 +191,11 @@ pub(crate) struct Picker {
     selected: usize,
     remaining: usize,
     errors: Vec<String>,
-    watch: Option<Watch>,
-    opening: bool,
     scroll: ScrollHandle,
     sender: mpsc::Sender<Reply>,
     receiver: mpsc::Receiver<Reply>,
     cancel: Arc<AtomicBool>,
+    refreshed: Instant,
 }
 
 impl Drop for Picker {
@@ -196,16 +205,13 @@ impl Drop for Picker {
 }
 
 impl Picker {
-    pub(crate) fn opening(&self) -> bool {
-        self.opening
-    }
-
     fn filter(&mut self, query: &str) {
         let words: Vec<_> = query
             .to_lowercase()
             .split_whitespace()
             .map(str::to_owned)
             .collect();
+        let mut seen = std::collections::HashSet::new();
         self.filtered = self
             .rows
             .iter()
@@ -221,6 +227,7 @@ impl Picker {
                 )
                 .to_lowercase();
                 words.iter().all(|word| fields.contains(word))
+                    && seen.insert((row.entry.agent.clone(), row.entry.session.clone()))
             })
             .map(|(index, _)| index)
             .collect();
@@ -229,254 +236,158 @@ impl Picker {
 }
 
 impl HerdrWindow {
-    pub(crate) fn open_agent_sessions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.open_menu(window, cx) {
-            return;
-        }
-        let search = cx.new(SearchInput::new);
-        search.update(cx, |input, cx| {
-            input.set_placeholder("Search tasks, projects, agents or devices...", cx);
-            input.set_appearance(self.config.ui.clone(), self.theme.clone(), cx);
-            window.focus(&input.focus, cx);
-        });
-        let subscription = cx.subscribe(
-            &search,
-            |this, search, _: &crate::search_input::Changed, cx| {
-                if let Some(picker) = &mut this.menu.agent_sessions {
-                    picker.filter(search.read(cx).text());
-                }
-                cx.notify();
-            },
-        );
-        let (sender, receiver) = mpsc::channel();
-        let mut picker = Picker {
-            search,
-            _subscription: subscription,
-            rows: vec![],
-            sources: vec![],
-            filtered: vec![],
-            selected: 0,
-            remaining: 0,
-            errors: vec![],
-            watch: None,
-            opening: false,
-            scroll: ScrollHandle::new(),
-            sender,
-            receiver,
-            cancel: Arc::new(AtomicBool::new(false)),
-        };
-        let mut hosts = vec![];
+    fn session_sources(&self) -> Vec<Source> {
+        let mut sources: Vec<Source> = vec![];
         for endpoint in self.endpoints.iter().filter(|e| e.enabled) {
             let target = &endpoint.connection.target;
             let Ok(host) = crate::teleport::host_for(target) else {
                 continue;
             };
-            if hosts.contains(&host) {
+            if sources.iter().any(|source| source.host == host) {
                 continue;
             }
-            hosts.push(host.clone());
             let mut cli = vec!["herdr".to_owned()];
             if let ConnectTarget::Session { name, .. } | ConnectTarget::Ssh { session: name, .. } =
                 target
             {
                 cli.extend(["--session".to_owned(), name.clone()]);
             }
-            let source = Source {
+            sources.push(Source {
                 id: endpoint.id.clone(),
                 label: endpoint.label.clone(),
                 generation: endpoint.generation,
                 host,
                 cli,
-            };
+            });
+        }
+        sources
+    }
+
+    pub(crate) fn open_agent_sessions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.open_menu(window, cx) {
+            return;
+        }
+        if self.agent_sessions.is_none() {
+            let search = cx.new(SearchInput::new);
+            search.update(cx, |input, cx| {
+                input.set_placeholder("Find a task, project or agent...", cx);
+                input.set_appearance(self.config.ui.clone(), self.theme.clone(), cx);
+            });
+            let subscription = cx.subscribe(
+                &search,
+                |this, search, _: &crate::search_input::Changed, cx| {
+                    if let Some(picker) = &mut this.agent_sessions {
+                        picker.filter(search.read(cx).text());
+                        picker.scroll.set_offset(Point::default());
+                    }
+                    cx.notify();
+                },
+            );
+            let (sender, receiver) = mpsc::channel();
+            self.agent_sessions = Some(Picker {
+                search,
+                _subscription: subscription,
+                rows: vec![],
+                sources: vec![],
+                filtered: vec![],
+                selected: 0,
+                remaining: 0,
+                errors: vec![],
+                scroll: ScrollHandle::new(),
+                sender,
+                receiver,
+                cancel: Arc::new(AtomicBool::new(false)),
+                refreshed: Instant::now() - Duration::from_secs(60),
+            });
+        }
+        self.menu.page = Some(Page::AgentSessions);
+        if let Some(picker) = &self.agent_sessions {
+            let focus = picker.search.read(cx).focus.clone();
+            window.focus(&focus, cx);
+            if picker.refreshed.elapsed() > Duration::from_secs(3) {
+                self.refresh_agent_sessions(cx);
+            }
+        }
+        cx.notify();
+    }
+
+    fn refresh_agent_sessions(&mut self, cx: &mut Context<Self>) {
+        let sources = self.session_sources();
+        let Some(picker) = &mut self.agent_sessions else {
+            return;
+        };
+        if picker.remaining > 0 {
+            return;
+        }
+        picker.sources = sources.clone();
+        let previous_len = picker.rows.len();
+        picker
+            .rows
+            .retain(|row| sources.iter().any(|source| source.id == row.host.id));
+        if picker.rows.len() != previous_len {
+            picker.filter(picker.search.read(cx).text());
+        }
+        picker.errors.clear();
+        picker.remaining = sources.len();
+        picker.refreshed = Instant::now();
+        for source in sources {
             let sender = picker.sender.clone();
-            picker.sources.push(source.clone());
             let cancel = picker.cancel.clone();
-            picker.remaining += 1;
             cx.background_executor()
                 .spawn(async move {
-                    let result = source.request(serde_json::json!({"operation": "list"}), &cancel);
+                    let result = source.request(serde_json::json!({"operation":"list"}), &cancel);
                     let _ = sender.send(Reply::Listed(source, result));
                 })
                 .detach();
         }
-        self.menu.agent_sessions = Some(picker);
-        self.menu.page = Some(Page::AgentSessions);
         cx.notify();
     }
 
     pub(crate) fn poll_agent_sessions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(picker) = &mut self.menu.agent_sessions else {
-            return;
-        };
-        let mut destination = None;
-        while let Ok(reply) = picker.receiver.try_recv() {
-            match reply {
-                Reply::Listed(source, result) => {
-                    picker.remaining = picker.remaining.saturating_sub(1);
-                    match result {
-                        Ok(listing) => {
-                            for entry in listing.entries.into_iter().take(200) {
-                                if !picker.rows.iter().any(|r| {
-                                    r.entry.agent == entry.agent && r.entry.session == entry.session
-                                }) {
-                                    picker.rows.push(Row {
-                                        host: source.clone(),
-                                        entry,
-                                    });
-                                }
-                            }
-                        }
-                        Err(error) => picker.errors.push(format!("{}: {error}", source.label)),
-                    }
-                    picker
-                        .rows
-                        .sort_by(|a, b| b.entry.modified.total_cmp(&a.entry.modified));
-                    picker.filter(picker.search.read(cx).text());
-                }
-                Reply::Watched(result) => {
-                    if let Some(watch) = &mut picker.watch {
-                        watch.pending = false;
-                        watch.next = Instant::now() + Duration::from_secs(3);
-                        match result {
-                            Ok((source, observation)) => {
-                                if watch.observation.is_none()
-                                    || picker.scroll.logical_scroll_bottom().1 <= gpui::px(1.)
-                                {
-                                    picker.scroll.scroll_to_bottom();
-                                }
-                                watch.row.host = source;
-                                watch.observation = Some(observation);
-                                watch.error = None;
-                            }
-                            Err(error) => {
-                                watch.error = Some(error.to_string());
-                                watch.observation = None;
-                            }
+        if let Some(picker) = &mut self.agent_sessions {
+            while let Ok(Reply::Listed(source, result)) = picker.receiver.try_recv() {
+                picker.remaining = picker.remaining.saturating_sub(1);
+                let selected = picker
+                    .filtered
+                    .get(picker.selected)
+                    .and_then(|i| picker.rows.get(*i))
+                    .map(|r| r.entry.session.clone());
+                match result {
+                    Ok(listing) => {
+                        picker.rows.retain(|row| row.host.id != source.id);
+                        for entry in listing.entries.into_iter().take(300) {
+                            picker.rows.push(Row {
+                                host: source.clone(),
+                                entry,
+                            });
                         }
                     }
-                }
-                Reply::Opened(result) => {
-                    picker.opening = false;
-                    if let Some(watch) = &mut picker.watch {
-                        match result {
-                            Ok((source, result)) => destination = Some((source, result.opened)),
-                            Err(error) => {
-                                watch.error = Some(error.to_string());
-                                watch.observation = None;
-                            }
-                        }
-                    }
-                }
-            }
-            cx.notify();
-        }
-        if let Some(watch) = &mut picker.watch
-            && !watch.pending
-            && !picker.opening
-            && Instant::now() >= watch.next
-        {
-            watch.pending = true;
-            let row = watch.row.clone();
-            let sources = picker.sources.clone();
-            let sender = picker.sender.clone();
-            let cancel = picker.cancel.clone();
-            cx.background_executor()
-                .spawn(async move {
-                    let result = observe(&row, &sources, |source| {
-                        source.request(
-                            serde_json::json!({"operation":"watch", "key":row.entry}),
-                            &cancel,
-                        )
-                    });
-                    let _ = sender.send(Reply::Watched(result));
-                })
-                .detach();
-        }
-        if let Some((source, opened)) = destination {
-            let valid = self
-                .endpoints
-                .iter()
-                .any(|e| e.id == source.id && e.generation == source.generation);
-            if valid {
-                self.dismiss_menu(window, cx);
-                self.navigate_endpoint(&source.id, NavigationTarget::Pane(&opened.pane_id), cx);
-            } else if let Some(picker) = &mut self.menu.agent_sessions {
-                picker
-                    .errors
-                    .push("The device changed. Refresh before opening this session.".into());
-            }
-        }
-    }
-
-    fn watch_agent_session(&mut self, row: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(picker) = &mut self.menu.agent_sessions else {
-            return;
-        };
-        let Some(row) = picker.rows.get(row).cloned() else {
-            return;
-        };
-        picker.watch = Some(Watch {
-            row,
-            observation: None,
-            pending: false,
-            next: Instant::now(),
-            error: None,
-        });
-        picker.scroll.set_offset(Point::default());
-        window.focus(&self.menu.focus, cx);
-        cx.notify();
-    }
-
-    fn continue_agent_session(&mut self, cx: &mut Context<Self>) {
-        let Some(picker) = &mut self.menu.agent_sessions else {
-            return;
-        };
-        let Some(watch) = &picker.watch else {
-            return;
-        };
-        if picker.opening
-            || !watch
-                .observation
-                .as_ref()
-                .is_some_and(|o| o.state.can_open())
-        {
-            return;
-        }
-        let row = watch.row.clone();
-        let Some(endpoint) = self.endpoints.iter().find(|e| e.id == row.host.id) else {
-            return;
-        };
-        if endpoint.generation != row.host.generation {
-            return;
-        }
-        picker.opening = true;
-        let sources = picker.sources.clone();
-        let sender = picker.sender.clone();
-        let cancel = picker.cancel.clone();
-        cx.background_executor()
-            .spawn(async move {
-                let result = (|| {
-                    let (source, observation) = observe(&row, &sources, |source| {
-                        source.request(
-                            serde_json::json!({"operation":"watch", "key":row.entry}),
-                            &cancel,
-                        )
-                    })?;
-                    if !observation.state.can_open() {
-                        return Err(Error::Refused(
-                            "This session is not ready. Keep watching until it finishes.".into(),
+                    Err(error) => {
+                        tracing::warn!(operation = "list", %error, "Agent session request failed");
+                        picker.errors.push(format!(
+                            "{} is unavailable. Retry to reconnect.",
+                            source.label
                         ));
                     }
-                    let result = source.request(
-                        serde_json::json!({"operation":"open", "key":row.entry}),
-                        &cancel,
-                    )?;
-                    Ok((source, result))
-                })();
-                let _ = sender.send(Reply::Opened(result));
-            })
-            .detach();
-        cx.notify();
+                }
+                picker.rows.sort_by(|a, b| {
+                    b.entry
+                        .background()
+                        .cmp(&a.entry.background())
+                        .then_with(|| b.entry.modified.cmp(&a.entry.modified))
+                });
+                picker.filter(picker.search.read(cx).text());
+                if let Some(selected) = selected {
+                    picker.selected = picker
+                        .filtered
+                        .iter()
+                        .position(|i| picker.rows[*i].entry.session == selected)
+                        .unwrap_or(0);
+                }
+                cx.notify();
+            }
+        }
+        self.poll_session_tabs(window, cx);
     }
 
     pub(crate) fn agent_sessions_key(
@@ -485,59 +396,36 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(picker) = &mut self.menu.agent_sessions else {
+        let Some(picker) = &mut self.agent_sessions else {
             return;
         };
-        if picker.watch.is_none()
-            && (picker.search.read(cx).is_composing()
-                || !matches!(
-                    event.keystroke.key.as_str(),
-                    "escape" | "up" | "down" | "enter"
-                ))
+        if picker.search.read(cx).is_composing()
+            || !matches!(
+                event.keystroke.key.as_str(),
+                "escape" | "up" | "down" | "enter"
+            )
         {
             return;
         }
         cx.stop_propagation();
         window.prevent_default();
-        if picker.opening {
-            return;
-        }
-        if picker.watch.is_some() {
-            // Watch mode deliberately has no keyboard action that can resume,
-            // submit, steer or interrupt the worker, even after it finishes.
-            if event.keystroke.key == "escape" {
-                self.back_to_agent_sessions(window, cx);
-            }
-            return;
-        }
         match event.keystroke.key.as_str() {
             "escape" => self.dismiss_menu(window, cx),
-            "up" => {
-                picker.selected = picker.selected.saturating_sub(1);
-                picker
-                    .scroll
-                    .scroll_to_item(picker.selected + usize::from(picker.remaining > 0));
-            }
-            "down" => {
-                picker.selected =
-                    (picker.selected + 1).min(picker.filtered.len().saturating_sub(1));
-                picker
-                    .scroll
-                    .scroll_to_item(picker.selected + usize::from(picker.remaining > 0));
+            "up" | "down" => {
+                picker.selected = if event.keystroke.key == "up" {
+                    picker.selected.saturating_sub(1)
+                } else {
+                    (picker.selected + 1).min(picker.filtered.len().saturating_sub(1))
+                };
+                picker.scroll.scroll_to_item(picker.selected);
             }
             "enter" => {
                 if let Some(row) = picker.filtered.get(picker.selected).copied() {
-                    self.watch_agent_session(row, window, cx);
+                    self.open_agent_session(row, window, cx);
                 }
             }
             _ => {}
         }
         cx.notify();
-    }
-
-    fn back_to_agent_sessions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        // A new picker owns a new reply channel, so a late observation can
-        // never become the readiness state of a different conversation.
-        self.open_agent_sessions(window, cx);
     }
 }

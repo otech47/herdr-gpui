@@ -131,11 +131,13 @@ disable remain available through `herdr machine`.
 
 ### Agent conversations
 
-Choose **open agent session** from the sidebar menu, or use the session icon beside **new tab**. Search recent conversations by task, project, agent, source or device. The picker reads Claude Code, Codex, Kimi Code and Cursor session stores on enabled devices, including Jarvis and Roboz jobs.
+Choose **sessions** beside **new tab**, or **open agent session** from the sidebar menu. Search by task, project, agent, source or device. Jarvis and Roboz tasks appear first, followed by recent Claude Code, Codex, Kimi Code and Cursor conversations. The picker keeps its search and cached results while refreshing enabled devices.
 
-Select a conversation to see its recent output. Running sessions open in a read-only watch view. Typing, paste and interrupt shortcuts cannot reach the worker. When Herdr verifies that the session has stopped, **Continue session** opens a tab with the original agent, conversation and working directory. Continuation always requires a click. A conversation already attached to Herdr offers **Open existing tab** instead.
+Select an available conversation to open its original agent, session and working directory. Running sessions open as read-only tabs in the Tabs list. You can switch away, reopen them and keep working elsewhere. Typing, paste and interrupt shortcuts cannot reach the worker, including an agent already running in another Herdr tab.
 
-Discovery requires Python 3.9 or later on each POSIX host. Continuation also requires the agent executable and the original working directory. Each device contributes up to 200 recent conversations. Herdr keeps continuation disabled when ownership is uncertain, including an unreachable device that may own a synced Claude or Kimi conversation. A still-running CLI in the same workspace can also require waiting, even between turns.
+When work finishes, the tab shows **Ready to continue** and a **Continue session** button. It stays read-only until you click. Watch tabs return after an app restart without automatically resuming the agent. If a device disconnects, the last displayed output stays visible and **Retry** checks the connection. Opening the same conversation again reuses its tab.
+
+Discovery requires Python 3.9 or later on each POSIX host. Continuation also requires the agent executable and the original working directory. Each device contributes up to 100 Jarvis and Roboz conversations and 200 other recent conversations. Herdr keeps continuation disabled when ownership is uncertain, including an unreachable device that may own a synced Claude or Kimi conversation. An unidentified CLI in the same workspace can also require waiting, even between turns.
 
 The helper tests run with `just test-agent-sessions` on macOS or Linux. The isolated daemon continuation test requires `HERDR_TEST_BINARY` and `HERDR_TEST_PYTHON`, and runs with `cargo test -p herdr-gpui --features integration-test --test live_gui saved_session_opens_once -- --ignored`.
 

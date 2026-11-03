@@ -117,12 +117,16 @@ def native(path, agent):
                 title = task_title(message.get("content"))
     if not SID.fullmatch(str(sid)) or not isinstance(cwd, str) or not cwd.startswith("/"):
         return None
+    if agent == "claude":
+        for row in lines(path, tail=True):
+            if row.get("type") == "custom-title" and row.get("customTitle"):
+                title = clean(row["customTitle"], 160)
     title = title.strip().splitlines()[0] if title.strip() else f"{agent.title()} session"
     # Injected context is not a useful task title.
     if title.startswith(("<", "# AGENTS", "AGENTS.md", "You are ")):
         title = f"{Path(cwd).name} session"
     return {"agent": agent, "session": sid, "cwd": cwd, "title": clean(title, 160),
-            "source": "Saved session", "modified": path.stat().st_mtime,
+            "source": "Saved session", "modified": int(path.stat().st_mtime),
             "path": str(path), "job": None}
 
 
@@ -140,7 +144,8 @@ def jobs(home):
                 continue
             data = document(request)
             title = data.get("body", {}).get("text") or data.get("command", {}).get("text")
-            yield str(sid), {"source": source, "job": str(job), "title": clean(title, 160)}
+            yield str(sid), {"source": source, "job": str(job), "title": clean(title, 160),
+                             "running": state.get("status") not in ("completed", "failed") or not state.get("finished")}
 
 
 def catalog(home):
@@ -161,6 +166,19 @@ def catalog(home):
                     result.append(entry)
             except (OSError, TypeError, AttributeError):
                 continue
+    known = {entry["session"] for entry in result if entry["agent"] == "codex"}
+    for sid in list(enrichment)[-100:]:
+        if sid in known or not SID.fullmatch(sid):
+            continue
+        for path in home.glob(f".codex/sessions/*/*/*/rollout-*{sid}.jsonl"):
+            try:
+                entry = native(path, "codex")
+                if entry:
+                    entry.update(enrichment[sid])
+                    result.append(entry)
+                    break
+            except (OSError, TypeError, AttributeError):
+                continue
     names = {}
     for row in lines(home / ".codex/session_index.jsonl", tail=True):
         if row.get("id") and row.get("thread_name"):
@@ -168,7 +186,10 @@ def catalog(home):
     for entry in result:
         if entry["agent"] == "codex" and entry["session"] in names:
             entry["title"] = names[entry["session"]]
-    return sorted(result, key=lambda r: r["modified"], reverse=True)[:LIMIT]
+    ordered = sorted(result, key=lambda r: r["modified"], reverse=True)
+    background = [row for row in ordered if row.get("job")][:100]
+    recent = [row for row in ordered if not row.get("job")][:LIMIT]
+    return background + recent
 
 
 class Rejected(Exception):
@@ -203,8 +224,19 @@ def attached(snapshot, entry):
     for pane in snapshot.get("panes", []):
         native_session = pane.get("agent_session") or {}
         if native_session.get("value") == entry["session"] and native_session.get("agent") == entry["agent"]:
-            return {key: pane[key] for key in ("pane_id", "tab_id", "workspace_id")}
+            return {**{key: pane[key] for key in ("pane_id", "tab_id", "workspace_id")},
+                    "agent_status": pane.get("agent_status", "unknown")}
     return None
+
+
+def attached_activity(pane, entry):
+    if entry.get("job"):
+        state = document(Path(entry["job"]) / "status.json")
+        if state.get("status") not in ("completed", "failed") or not state.get("finished"):
+            return "watch"
+    if pane["agent_status"] in ("idle", "done"):
+        return "attached"
+    return "watch" if pane["agent_status"] in ("working", "blocked") else "unknown"
 
 
 def activity(entry):
@@ -245,6 +277,10 @@ def activity(entry):
         if names & binaries:
             if entry["session"] in argv:
                 return "watch"
+            if any(flag in argv and argv.index(flag) + 1 < len(argv)
+                   and SID.fullmatch(argv[argv.index(flag) + 1])
+                   for flag in ("resume", "--resume", "--session")):
+                continue
             ambiguous.append(pid)
     if ambiguous:
         owners = subprocess.run([executable, "-a", "-p", ",".join(ambiguous), "-d", "cwd", "-Fn"],
@@ -367,6 +403,8 @@ def open_session(home, host, entry):
         snapshot = host.snapshot()
         existing = attached(snapshot, entry)
         if existing:
+            if attached_activity(existing, entry) != "attached":
+                raise ValueError("This agent is still running in Herdr. Keep watching until it is ready for input.")
             return {"opened": existing}
         receipt = directory / (key + ".json")
         previous = document(receipt)
@@ -439,7 +477,7 @@ def handle(request, home=None, host=None):
         raise
     if operation == "watch":
         existing = attached(host.snapshot(), entry)
-        return {"state": "attached" if existing else activity(entry), "output": output(entry)}
+        return {"state": attached_activity(existing, entry) if existing else activity(entry), "output": output(entry)}
     if operation == "open":
         return open_session(home, host, entry)
     raise ValueError("Unknown session operation.")

@@ -38,7 +38,10 @@ impl PendingInput {
 
 impl HerdrWindow {
     pub(crate) fn send(&mut self, event: ClientPaneInputEvent, cx: &mut Context<Self>) {
-        if self.menu.page.is_some() || self.mouse_focus_pending() {
+        if self.menu.page.is_some()
+            || self.mouse_focus_pending()
+            || self.active_session_tab(cx).is_some()
+        {
             return;
         }
         if !self.input_ready() {

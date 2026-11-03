@@ -182,6 +182,30 @@ impl HerdrWindow {
         if self.menu.page.is_some() {
             return;
         }
+        if self.active_session_tab(cx).is_some()
+            && matches!(
+                command,
+                Command::ClearPane
+                    | Command::CopyMode
+                    | Command::EditScrollback
+                    | Command::Find
+                    | Command::SplitRight
+                    | Command::SplitDown
+                    | Command::Zoom
+                    | Command::RenamePane
+                    | Command::ResizeMode
+                    | Command::ResizeLeft
+                    | Command::ResizeRight
+                    | Command::ResizeUp
+                    | Command::ResizeDown
+                    | Command::SwapLeft
+                    | Command::SwapRight
+                    | Command::SwapUp
+                    | Command::SwapDown
+            )
+        {
+            return;
+        }
         #[cfg(feature = "integration-test")]
         {
             self.input_probe.actions += 1;

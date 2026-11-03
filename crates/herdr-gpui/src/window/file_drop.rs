@@ -21,6 +21,9 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.active_session_tab(cx).is_some() {
+            return;
+        }
         // GPUI translates the platform Submit position into window mouse state
         // before invoking on_drop; the payload itself carries no coordinates.
         let Some(target) = self.file_drop_target(window.mouse_position()) else {

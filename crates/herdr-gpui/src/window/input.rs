@@ -131,7 +131,7 @@ impl HerdrWindow {
 
     /// Cmd-V and Edit > Paste into the focused pane or popup.
     pub(crate) fn paste(&mut self, cx: &mut Context<Self>) {
-        if self.copy_mode_active() {
+        if self.copy_mode_active() || self.active_session_tab(cx).is_some() {
             return;
         }
         // GPUI has no text-only Linux clipboard API. Preserve its native
@@ -150,6 +150,11 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.active_session_tab(cx).is_some() {
+            cx.stop_propagation();
+            window.prevent_default();
+            return;
+        }
         // A new press goes wherever this decides; only the pane branch at the
         // end holds it again for its release.
         self.held_keys.forget(&event.keystroke.key);

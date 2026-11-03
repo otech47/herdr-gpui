@@ -27,6 +27,9 @@ const SEGMENT: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub(crate) enum Location {
+    AgentSession {
+        session: crate::agent_sessions::SavedSession,
+    },
     Web {
         url: WebUrl,
     },
@@ -108,14 +111,14 @@ impl Location {
         match self {
             Self::Web { url } => url.as_str().to_owned(),
             Self::Local { file } => file.page_url(),
-            // Never loaded: a review is drawn by the app.
-            Self::Review { .. } => "about:blank".to_owned(),
+            // Never loaded: these tabs are drawn by the app.
+            Self::Review { .. } | Self::AgentSession { .. } => "about:blank".to_owned(),
         }
     }
 
     /// Whether a native page shows it, rather than the app drawing it.
     pub(crate) fn is_page(&self) -> bool {
-        !matches!(self, Self::Review { .. })
+        !matches!(self, Self::Review { .. } | Self::AgentSession { .. })
     }
 
     /// What the address field and a prompt show for it.
@@ -124,6 +127,7 @@ impl Location {
             Self::Web { url } => url.as_str().to_owned(),
             Self::Local { file } => file.path().display().to_string(),
             Self::Review { checkout } => format!("Review of {}", checkout.branch),
+            Self::AgentSession { session } => session.description(),
         }
     }
 
@@ -133,6 +137,7 @@ impl Location {
             Self::Web { url } => url.host().to_owned(),
             Self::Local { file } => file.entry.rsplit('/').next().unwrap_or_default().to_owned(),
             Self::Review { checkout } => format!("Review \u{00b7} {}", checkout.branch),
+            Self::AgentSession { session } => session.title(),
         }
     }
 

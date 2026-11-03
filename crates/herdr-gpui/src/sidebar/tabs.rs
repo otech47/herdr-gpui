@@ -179,7 +179,7 @@ impl HerdrWindow {
                 }),
                 &tab_cx,
             )
-            .selected(own && row.tab.focused)
+            .selected(own && row.tab.focused && self.active_session_tab(cx).is_none())
             .row()
             .when(own, |row| {
                 row.child(trailing.place(self.tab_close_button(&close_id, cx)))
@@ -233,7 +233,7 @@ impl HerdrWindow {
             div()
                 .flex()
                 .items_center()
-                .gap(px(10.))
+                .gap(px(6.))
                 .text_color(rgb(muted))
                 .child(
                     div()
@@ -251,17 +251,10 @@ impl HerdrWindow {
                     div()
                         .id("open-agent-session")
                         .debug_selector(|| "open-agent-session".into())
-                        .size(px(20.))
                         .flex()
                         .items_center()
-                        .justify_center()
                         .cursor_pointer()
-                        .child(
-                            svg()
-                                .path("icons/sessions.svg")
-                                .size(px(12.))
-                                .text_color(rgb(muted)),
-                        )
+                        .child(label_text("sessions"))
                         .tooltip(move |_, cx| {
                             cx.new(|_| crate::usage::Hint {
                                 text: "Open an agent session".into(),

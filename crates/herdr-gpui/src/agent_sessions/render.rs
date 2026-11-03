@@ -1,17 +1,114 @@
+use super::tab::SessionTab;
 use super::*;
-use gpui::{Div, FontWeight, div, prelude::*, px, rgb};
+use crate::browser::{Location, Store, TabId};
+use gpui::{Div, FontWeight, SharedString, div, prelude::*, px, rgb};
 
 impl HerdrWindow {
     pub(crate) fn render_agent_sessions(&self, cx: &mut Context<Self>) -> Div {
-        let Some(picker) = &self.menu.agent_sessions else {
+        let Some(picker) = &self.agent_sessions else {
             return div();
         };
         let theme = &self.theme;
-        let watching = picker.watch.is_some();
-        let mut panel = div().flex().flex_col().size_full().min_h_0();
-        let title = if watching { "Session" } else { "Open session" };
-        panel =
-            panel.child(
+        let mut list = div()
+            .id("agent-session-list")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .track_scroll(&picker.scroll)
+            .p(px(8.));
+        let mut previous_group = None;
+        for (position, &index) in picker.filtered.iter().enumerate() {
+            let row = &picker.rows[index];
+            let background = row.entry.background();
+            let heading = previous_group != Some(background);
+            previous_group = Some(background);
+            let project = row.entry.cwd.rsplit('/').next().unwrap_or(&row.entry.cwd);
+            let details = if background {
+                format!(
+                    "{} · {} · {} · {}",
+                    project, row.host.label, row.entry.agent, row.entry.source
+                )
+            } else {
+                format!("{} · {} · {}", project, row.host.label, row.entry.agent)
+            };
+            list = list.child(
+                div()
+                    .when(heading, |d| {
+                        d.child(
+                            div()
+                                .px(px(10.))
+                                .py(px(6.))
+                                .text_color(rgb(theme.muted))
+                                .text_size(px(self.config.ui.size * 0.9))
+                                .child(if background {
+                                    "From Jarvis & Roboz"
+                                } else {
+                                    "Recent conversations"
+                                }),
+                        )
+                    })
+                    .child(
+                        div()
+                            .id(("agent-session", index))
+                            .debug_selector(move || format!("agent-session-{index}"))
+                            .p(px(10.))
+                            .rounded(px(crate::config::corners::CONTROL))
+                            .cursor_pointer()
+                            .when(position == picker.selected, |d| d.bg(rgb(theme.active)))
+                            .hover(|d| d.bg(rgb(theme.active)))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(12.))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w_0()
+                                            .child(div().truncate().child(row.entry.title.clone()))
+                                            .child(
+                                                div()
+                                                    .pt(px(3.))
+                                                    .text_color(rgb(theme.muted))
+                                                    .truncate()
+                                                    .child(details),
+                                            ),
+                                    )
+                                    .child(
+                                        div().flex_none().text_color(rgb(theme.muted)).child(
+                                            if row.entry.running { "Watch" } else { "Open" },
+                                        ),
+                                    ),
+                            )
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.open_agent_session(index, window, cx)
+                            })),
+                    ),
+            );
+        }
+        if picker.filtered.is_empty() {
+            list = list.child(div().p(px(16.)).text_color(rgb(theme.muted)).child(
+                if picker.remaining > 0 {
+                    "Finding conversations on your devices..."
+                } else {
+                    "No matching conversations. Try another task or project name."
+                },
+            ));
+        }
+        for error in &picker.errors {
+            list = list.child(
+                div()
+                    .p(px(10.))
+                    .text_color(rgb(theme.muted))
+                    .child(error.clone()),
+            );
+        }
+        div()
+            .flex()
+            .flex_col()
+            .size_full()
+            .min_h_0()
+            .child(
                 div()
                     .p(px(16.))
                     .flex_none()
@@ -25,295 +122,42 @@ impl HerdrWindow {
                             .child(
                                 div()
                                     .flex_1()
-                                    .text_size(px(self.config.ui.size * 1.35))
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .child(title),
+                                    .text_size(px(self.config.ui.size * 1.35))
+                                    .child("Open session"),
+                            )
+                            .child(
+                                div()
+                                    .id("agent-sessions-refresh")
+                                    .px_2()
+                                    .py_1()
+                                    .cursor_pointer()
+                                    .text_color(rgb(theme.muted))
+                                    .child(if picker.remaining > 0 {
+                                        "Refreshing..."
+                                    } else {
+                                        "Refresh"
+                                    })
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.refresh_agent_sessions(cx)
+                                    })),
                             )
                             .child(
                                 div()
                                     .id("agent-sessions-close")
                                     .px_2()
                                     .py_1()
-                                    .rounded(px(crate::config::corners::CONTROL))
-                                    .when(!picker.opening, |d| {
-                                        d.cursor_pointer().hover(|s| s.bg(rgb(theme.active)))
-                                    })
-                                    .text_color(rgb(if picker.opening {
-                                        theme.muted
-                                    } else {
-                                        theme.foreground
-                                    }))
+                                    .cursor_pointer()
                                     .child("Close")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.dismiss_menu(window, cx)
                                     })),
                             ),
                     )
-                    .when(!watching, |d| {
-                        d.child(div().pt(px(12.)).child(picker.search.clone()))
-                    }),
-            );
-        if let Some(watch) = &picker.watch {
-            let ready = watch
-                .observation
-                .as_ref()
-                .is_some_and(|o| o.state.can_open())
-                && watch.error.is_none();
-            let (status, explanation) = if picker.opening {
-                (
-                    "Opening session...",
-                    "Preparing its tab on the original device and workspace.",
-                )
-            } else if watch
-                .observation
-                .as_ref()
-                .is_some_and(|o| o.state == Activity::Attached)
-            {
-                (
-                    "Already open in Herdr",
-                    "Switch to the existing tab to interact with this session.",
-                )
-            } else if ready {
-                (
-                    "Ready to continue",
-                    "Open this conversation in a tab when you are ready.",
-                )
-            } else if watch.error.is_some() {
-                (
-                    "Connection unavailable · read-only",
-                    "Interaction stays disabled until the session can be checked.",
-                )
-            } else if watch.observation.is_none() {
-                (
-                    "Checking session · read-only",
-                    "Checking whether this conversation is available to continue.",
-                )
-            } else if watch
-                .observation
-                .as_ref()
-                .is_some_and(|o| o.state == Activity::Missing)
-            {
-                (
-                    "Session unavailable",
-                    "The saved conversation is no longer on this device. Return to the list to refresh it.",
-                )
-            } else if watch
-                .observation
-                .as_ref()
-                .is_some_and(|o| o.state == Activity::Unknown)
-            {
-                (
-                    "Activity unverified · read-only",
-                    "Herdr cannot yet confirm that this session is available to continue.",
-                )
-            } else {
-                (
-                    "Watching · read-only",
-                    "This session is still running. Wait until it finishes to continue.",
-                )
-            };
-            panel =
-                panel.child(
-                    div()
-                        .p(px(16.))
-                        .flex_none()
-                        .child(
-                            div()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(watch.row.entry.title.clone()),
-                        )
-                        .child(div().pt(px(4.)).text_color(rgb(theme.muted)).child(format!(
-                            "{} · {} · {}",
-                            watch.row.host.label, watch.row.entry.agent, watch.row.entry.source
-                        )))
-                        .child(
-                            div()
-                                .pt(px(4.))
-                                .text_color(rgb(theme.muted))
-                                .truncate()
-                                .child(watch.row.entry.cwd.clone()),
-                        )
-                        .child(
-                            div()
-                                .mt(px(12.))
-                                .p(px(12.))
-                                .rounded(px(crate::config::corners::CONTROL))
-                                .bg(rgb(theme.active))
-                                .debug_selector(|| "session-watch-status".into())
-                                .child(div().font_weight(FontWeight::SEMIBOLD).child(status))
-                                .child(div().pt(px(4.)).child(explanation))
-                                .when(!ready, |d| {
-                                    d.child(div().pt(px(4.)).text_color(rgb(theme.muted)).child(
-                                        "Typing, paste and interrupt shortcuts are disabled.",
-                                    ))
-                                }),
-                        ),
-                );
-            let output = watch
-                .observation
-                .as_ref()
-                .map(|o| o.output.as_str())
-                .filter(|s| !s.is_empty())
-                .unwrap_or("No recent output yet. This view updates automatically.");
-            panel = panel.child(
-                div()
-                    .id("session-watch-output")
-                    .debug_selector(|| "session-watch-output".into())
-                    .flex_1()
-                    .min_h_0()
-                    .px(px(16.))
-                    .pb(px(12.))
-                    .overflow_y_scroll()
-                    .track_scroll(&picker.scroll)
-                    .child(output.to_owned()),
-            );
-            if let Some(error) = &watch.error {
-                panel = panel.child(
-                    div()
-                        .px(px(16.))
-                        .pb(px(8.))
-                        .text_color(rgb(theme.muted))
-                        .child(error.clone()),
-                );
-            }
-            panel = panel.child(
-                div()
-                    .p(px(12.))
-                    .flex_none()
-                    .border_t_1()
-                    .border_color(rgb(theme.active))
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(
-                        div()
-                            .id("session-back")
-                            .px_2()
-                            .py_1()
-                            .cursor_pointer()
-                            .child("Back to sessions")
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.back_to_agent_sessions(window, cx)
-                            })),
-                    )
-                    .child(div().flex_1())
-                    .child(
-                        div()
-                            .id("session-continue")
-                            .debug_selector(|| "session-continue".into())
-                            .px(px(12.))
-                            .py(px(8.))
-                            .rounded(px(crate::config::corners::CONTROL))
-                            .bg(rgb(if ready && !picker.opening {
-                                theme.primary_wash()
-                            } else {
-                                theme.active
-                            }))
-                            .text_color(rgb(if ready && !picker.opening {
-                                theme.foreground
-                            } else {
-                                theme.muted
-                            }))
-                            .when(ready && !picker.opening, |d| {
-                                d.cursor_pointer().on_click(
-                                    cx.listener(|this, _, _, cx| this.continue_agent_session(cx)),
-                                )
-                            })
-                            .child(if picker.opening {
-                                "Opening..."
-                            } else if ready {
-                                if watch
-                                    .observation
-                                    .as_ref()
-                                    .is_some_and(|o| o.state == Activity::Attached)
-                                {
-                                    "Open existing tab"
-                                } else {
-                                    "Continue session"
-                                }
-                            } else {
-                                "Waiting for session"
-                            }),
-                    ),
-            );
-        } else {
-            let mut list = div()
-                .id("agent-session-list")
-                .flex_1()
-                .min_h_0()
-                .overflow_y_scroll()
-                .track_scroll(&picker.scroll)
-                .p(px(8.));
-            if picker.remaining > 0 {
-                list = list.child(
-                    div()
-                        .p(px(8.))
-                        .text_color(rgb(theme.muted))
-                        .child("Finding sessions on your devices..."),
-                );
-            }
-            if picker.remaining == 0 && picker.filtered.is_empty() {
-                list = list.child(
-                    div()
-                        .p(px(8.))
-                        .text_color(rgb(theme.muted))
-                        .child("No matching sessions."),
-                );
-            }
-            for (position, &index) in picker.filtered.iter().enumerate() {
-                let row = &picker.rows[index];
-                list = list.child(
-                    div()
-                        .id(("agent-session", index))
-                        .debug_selector(move || format!("agent-session-{index}"))
-                        .p(px(10.))
-                        .rounded(px(crate::config::corners::CONTROL))
-                        .cursor_pointer()
-                        .when(position == picker.selected, |d| d.bg(rgb(theme.active)))
-                        .hover(|d| d.bg(rgb(theme.active)))
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(8.))
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .truncate()
-                                        .child(row.entry.title.clone()),
-                                )
-                                .child(
-                                    div().flex_none().text_color(rgb(theme.muted)).child("View"),
-                                ),
-                        )
-                        .child(
-                            div()
-                                .pt(px(3.))
-                                .text_color(rgb(theme.muted))
-                                .truncate()
-                                .child(format!(
-                                    "{} · {} · {} · {}",
-                                    row.host.label,
-                                    row.entry.agent,
-                                    row.entry.source,
-                                    row.entry.cwd.rsplit('/').next().unwrap_or(&row.entry.cwd)
-                                )),
-                        )
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            this.watch_agent_session(index, window, cx)
-                        })),
-                );
-            }
-            for error in &picker.errors {
-                list = list.child(
-                    div()
-                        .p(px(8.))
-                        .text_color(rgb(theme.muted))
-                        .child(error.clone()),
-                );
-            }
-            panel = panel.child(list).child(
+                    .child(div().pt(px(12.)).child(picker.search.clone())),
+            )
+            .child(list)
+            .child(
                 div()
                     .px(px(16.))
                     .py(px(12.))
@@ -321,11 +165,254 @@ impl HerdrWindow {
                     .border_t_1()
                     .border_color(rgb(theme.active))
                     .text_color(rgb(theme.muted))
+                    .child("Running sessions open as read-only tabs."),
+            )
+    }
+
+    pub(super) fn render_session_watch(
+        &self,
+        id: TabId,
+        watch: &SessionTab,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let theme = &self.theme;
+        let ready = watch.ready();
+        let narrow = self.viewport_width < 760.;
+        let (status, explanation) = if watch.opening {
+            (
+                "Opening session...",
+                "Preparing the original agent and workspace.",
+            )
+        } else if watch.error.is_some() {
+            (
+                "Connection needs attention",
+                "Your last output is kept here. Reconnect to check this session again.",
+            )
+        } else {
+            match watch.observation.as_ref().map(|o| o.state) {
+                Some(Activity::Ready) => (
+                    "Ready to continue",
+                    "This session is available. Continue when you are ready.",
+                ),
+                Some(Activity::Attached) => (
+                    "Already open in Herdr",
+                    "This conversation has an interactive tab.",
+                ),
+                Some(Activity::Watch) => (
+                    "Running · read-only",
+                    "You can keep working in other tabs. Herdr will show when this session is ready.",
+                ),
+                Some(Activity::Unknown) => (
+                    "Session still in use · read-only",
+                    "An agent may still own this conversation. Waiting for a safe handoff.",
+                ),
+                Some(Activity::Missing) => (
+                    "Session unavailable",
+                    "The saved conversation is no longer on this device.",
+                ),
+                None => ("Connecting to session...", "Checking its device and agent."),
+            }
+        };
+        div()
+            .flex()
+            .flex_col()
+            .size_full()
+            .min_w_0()
+            .min_h_0()
+            .bg(rgb(theme.background))
+            .child(
+                div()
+                    .p(px(20.))
+                    .flex_none()
+                    .border_b_1()
+                    .border_color(rgb(theme.active))
                     .child(
-                        "Recent conversations from all devices. Running sessions open read-only.",
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(12.))
+                            .when(narrow, |d| d.flex_col().items_start())
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .when(narrow, |d| d.w_full())
+                                    .child(
+                                        div()
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .text_size(px(self.config.ui.size * 1.3))
+                                            .truncate()
+                                            .child(watch.saved.entry.title.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .pt(px(4.))
+                                            .text_color(rgb(theme.muted))
+                                            .truncate()
+                                            .child(format!(
+                                                "{} · {} · {}",
+                                                watch.saved.device,
+                                                watch.saved.entry.agent,
+                                                watch.saved.entry.source
+                                            )),
+                                    ),
+                            )
+                            .when(ready, |d| {
+                                d.child(
+                                    div()
+                                        .id("session-continue")
+                                        .debug_selector(|| "session-continue".into())
+                                        .px(px(14.))
+                                        .py(px(9.))
+                                        .rounded(px(crate::config::corners::CONTROL))
+                                        .bg(rgb(theme.primary_wash()))
+                                        .cursor_pointer()
+                                        .child(
+                                            if watch
+                                                .observation
+                                                .as_ref()
+                                                .is_some_and(|o| o.state == Activity::Attached)
+                                            {
+                                                "Open tab"
+                                            } else {
+                                                "Continue session"
+                                            },
+                                        )
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.continue_session_tab(id, cx)
+                                        })),
+                                )
+                            })
+                            .when(watch.error.is_some(), |d| {
+                                d.child(
+                                    div()
+                                        .id("session-retry")
+                                        .px_2()
+                                        .py_1()
+                                        .cursor_pointer()
+                                        .child("Retry")
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            if let Some(tab) = this.session_tabs.get_mut(&id) {
+                                                tab.next = Instant::now();
+                                            }
+                                            cx.notify();
+                                        })),
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
+                            .mt(px(14.))
+                            .debug_selector(|| "session-watch-status".into())
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(status),
+                    )
+                    .child(
+                        div()
+                            .pt(px(4.))
+                            .text_color(rgb(theme.muted))
+                            .child(explanation),
                     ),
-            );
-        }
-        panel
+            )
+            .child(
+                div()
+                    .id(SharedString::from(format!("session-output-{id}")))
+                    .debug_selector(|| "session-watch-output".into())
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .track_scroll(&watch.scroll)
+                    .p(px(24.))
+                    .child(div().max_w(px(900.)).child(if watch.output.is_empty() {
+                        "Waiting for the first update...".to_owned()
+                    } else {
+                        watch.output.clone()
+                    })),
+            )
+            .when_some(watch.error.as_ref(), |d, error| {
+                d.child(
+                    div()
+                        .px(px(20.))
+                        .pb(px(12.))
+                        .text_color(rgb(theme.muted))
+                        .child(error.clone()),
+                )
+            })
+            .child(
+                div()
+                    .px(px(20.))
+                    .py(px(10.))
+                    .flex_none()
+                    .border_t_1()
+                    .border_color(rgb(theme.active))
+                    .text_color(rgb(theme.muted))
+                    .child("Read-only. Typing, paste and interrupt keys are disabled."),
+            )
+    }
+
+    pub(crate) fn session_sidebar_rows(&self, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
+        let Some((scope, workspace)) = self.browser_key() else {
+            return vec![];
+        };
+        let Some(store) = cx.try_global::<Store>() else {
+            return vec![];
+        };
+        let tabs: Vec<_> = store
+            .in_workspace(&scope, &workspace)
+            .filter(|tab| matches!(tab.location, Some(Location::AgentSession { .. })))
+            .cloned()
+            .collect();
+        let active = self.active_session_tab(cx);
+        tabs.into_iter()
+            .map(|tab| {
+                let id = tab.id;
+                let status = self
+                    .session_tabs
+                    .get(&id)
+                    .map_or("Connecting", SessionTab::label);
+                div()
+                    .id(SharedString::from(format!("watched-session-{id}")))
+                    .debug_selector(move || format!("watched-session-{id}"))
+                    .mx(px(8.))
+                    .px(px(10.))
+                    .py(px(7.))
+                    .rounded(px(crate::config::corners::CONTROL))
+                    .when(active == Some(id), |d| d.bg(rgb(self.theme.active)))
+                    .hover(|d| d.bg(rgb(self.theme.active)))
+                    .cursor_pointer()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(div().truncate().child(tab.title))
+                            .child(
+                                div()
+                                    .text_size(px(self.config.ui.size * 0.9))
+                                    .text_color(rgb(self.theme.muted))
+                                    .child(status),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("close-watch")
+                            .px_1()
+                            .child("×")
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.close_browser_tab(id, window, cx);
+                            })),
+                    )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.show_browser_tab(id, window, cx);
+                        if let Some(tab) = this.session_tabs.get(&id) {
+                            window.focus(&tab.focus, cx);
+                        }
+                    }))
+                    .into_any_element()
+            })
+            .collect()
     }
 }
