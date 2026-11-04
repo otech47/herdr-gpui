@@ -9,6 +9,7 @@ use crate::{
     endpoint::Endpoint,
     monitoring::{Tab, Watched, Watchers},
     preferences::{TabsSort, TabsView},
+    state::ConnectionStatus,
     usage::Host,
 };
 

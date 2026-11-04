@@ -46,6 +46,7 @@ pub(crate) use {
 
 pub(crate) use order::step as sidebar_step;
 pub(crate) use tabs::attention::AttentionLedger;
+#[cfg(unix)]
 pub(crate) use tabs::workspace_label_by_id;
 
 #[cfg(any(test, feature = "integration-test"))]
