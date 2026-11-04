@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
+mod session_pages;
 use Shown::*;
 
 fn page(id: u64) -> Pick {
@@ -210,12 +211,14 @@ fn saved_layouts_the_app_could_not_have_written_are_refused() {
     let valid = SavedLayout {
         groups: vec![group(None, 0.5), group(Some(herdr("t1")), 0.5)],
         active: 1,
+        pages: vec![],
     };
     assert!(valid.valid());
     for invalid in [
         SavedLayout {
             groups: vec![],
             active: 0,
+            pages: vec![],
         },
         SavedLayout {
             active: 2,
@@ -224,22 +227,27 @@ fn saved_layouts_the_app_could_not_have_written_are_refused() {
         SavedLayout {
             groups: vec![group(None, f32::NAN)],
             active: 0,
+            pages: vec![],
         },
         SavedLayout {
             groups: vec![group(None, 0.)],
             active: 0,
+            pages: vec![],
         },
         SavedLayout {
             groups: vec![group(Some(herdr("")), 1.)],
             active: 0,
+            pages: vec![],
         },
         SavedLayout {
             groups: vec![group(Some(herdr(&"x".repeat(300))), 1.)],
             active: 0,
+            pages: vec![],
         },
         SavedLayout {
             groups: vec![group(None, 1.); MAX_SAVED_GROUPS + 1],
             active: 0,
+            pages: vec![],
         },
     ] {
         assert!(!invalid.valid(), "{invalid:?}");

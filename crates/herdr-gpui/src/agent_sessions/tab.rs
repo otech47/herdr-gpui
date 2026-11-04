@@ -7,6 +7,8 @@ pub(crate) struct SavedSession {
     endpoint: String,
     pub(super) device: String,
     pub(super) entry: Entry,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) reports: Vec<crate::browser::WebUrl>,
 }
 
 impl SavedSession {
@@ -37,6 +39,7 @@ pub(crate) struct SessionTab {
     sender: mpsc::Sender<Update>,
     receiver: mpsc::Receiver<Update>,
     cancel: Arc<AtomicBool>,
+    handoff: Option<(Source, Destination, Instant)>,
 }
 
 impl Drop for SessionTab {
@@ -62,11 +65,13 @@ impl SessionTab {
             sender,
             receiver,
             cancel: Arc::new(AtomicBool::new(false)),
+            handoff: None,
         }
     }
 
     pub(super) fn ready(&self) -> bool {
         !self.opening
+            && self.handoff.is_none()
             && self.error.is_none()
             && self
                 .observation
@@ -75,7 +80,7 @@ impl SessionTab {
     }
 
     pub(super) fn label(&self) -> &'static str {
-        if self.opening {
+        if self.opening || self.handoff.is_some() {
             "Opening"
         } else if self.error.is_some() {
             "Reconnect"
@@ -93,8 +98,14 @@ impl SessionTab {
 }
 
 impl HerdrWindow {
+    pub(crate) fn focus_session_tab(&self, id: TabId, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(tab) = self.session_tabs.get(&id) {
+            window.focus(&tab.focus, cx);
+        }
+    }
+
     pub(crate) fn active_session_tab(&self, cx: &App) -> Option<TabId> {
-        let Pick::Page(id) = self.group_pick(self.active_group()?)? else {
+        let Pick::Page(id) = self.active_page_session(cx)? else {
             return None;
         };
         cx.try_global::<Store>()?
@@ -126,6 +137,7 @@ impl HerdrWindow {
             endpoint: row.host.id,
             device: row.host.label,
             entry: row.entry,
+            reports: Vec::new(),
         };
         let existing = cx.try_global::<Store>().and_then(|store| {
             store.in_workspace(&scope, &workspace).find(|tab| {
@@ -187,7 +199,7 @@ impl HerdrWindow {
         let sources = self.session_sources();
         let active = self.active_session_tab(cx);
         let mut continue_ids = vec![];
-        let mut destination = None;
+        let mut reports = Vec::new();
         for (&id, tab) in &mut self.session_tabs {
             while let Ok(update) = tab.receiver.try_recv() {
                 match update {
@@ -203,6 +215,8 @@ impl HerdrWindow {
                                     tab.scroll.scroll_to_bottom();
                                 }
                                 tab.output.clone_from(&observation.output);
+                                reports
+                                    .push((id, crate::browser::report_urls(&observation.output)));
                                 tab.saved.endpoint = source.id;
                                 tab.saved.device = source.label;
                                 tab.observation = Some(observation);
@@ -230,9 +244,7 @@ impl HerdrWindow {
                                     output: tab.output.clone(),
                                 });
                                 tab.saved.endpoint = source.id.clone();
-                                if active == Some(id) {
-                                    destination = Some((id, source, result.opened));
-                                }
+                                tab.handoff = Some((source, result.opened, Instant::now()));
                                 tracing::info!("Agent session continuation acknowledged");
                             }
                             Err(error) => {
@@ -245,7 +257,7 @@ impl HerdrWindow {
                 }
                 cx.notify();
             }
-            if tab.pending || tab.opening || Instant::now() < tab.next {
+            if tab.pending || tab.opening || tab.handoff.is_some() || Instant::now() < tab.next {
                 continue;
             }
             let Some(source) = sources.iter().find(|s| s.id == tab.saved.endpoint).cloned() else {
@@ -278,19 +290,12 @@ impl HerdrWindow {
         for id in continue_ids {
             self.continue_session_tab(id, cx);
         }
-        if let Some((id, source, opened)) = destination {
-            if self
-                .endpoints
-                .iter()
-                .any(|e| e.enabled && e.id == source.id && e.generation == source.generation)
-            {
-                self.close_browser_tab(id, window, cx);
-                self.navigate_endpoint(&source.id, NavigationTarget::Pane(&opened.pane_id), cx);
-                window.focus(&self.focus, cx);
-            } else if let Some(tab) = self.session_tabs.get_mut(&id) {
-                tab.error = Some("The device changed. Reconnect it to open the session.".into());
+        for (id, urls) in reports {
+            if !urls.is_empty() {
+                Store::update(cx, |store| store.discover_session_pages(id, urls));
             }
         }
+        self.finish_session_handoffs(window, cx);
     }
 
     pub(super) fn continue_session_tab(&mut self, id: TabId, cx: &mut Context<Self>) {
@@ -374,3 +379,5 @@ impl HerdrWindow {
 
 #[cfg(test)]
 mod tests;
+
+mod handoff;

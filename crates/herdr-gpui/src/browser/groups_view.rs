@@ -15,6 +15,16 @@ use gpui::{prelude::*, *};
 use std::{collections::hash_map::Entry, time::Instant};
 
 impl HerdrWindow {
+    pub(crate) fn forget_transferred_pages(&mut self, pages: &[TabId], cx: &mut Context<Self>) {
+        for layout in self.browser.layouts.values_mut() {
+            for id in pages {
+                layout.replace(&Pick::Page(*id), None, None);
+            }
+            layout.forget_session_pages(|_, id| !pages.contains(&id));
+        }
+        cx.notify();
+    }
+
     /// The daemon's focused tab, when it belongs to the focused workspace.
     pub(crate) fn focused_herdr_tab(&self) -> Option<&str> {
         let snapshot = self.live.snapshot.as_ref()?;
@@ -50,6 +60,43 @@ impl HerdrWindow {
                 entry.insert(layout)
             }
         }
+    }
+
+    pub(crate) fn remembered_session_page(&self, session: &Pick, cx: &App) -> Option<TabId> {
+        let id = self.layout()?.session_page(session)?;
+        let tab = store(cx)?.get(id)?;
+        (tab.session.as_ref() == Some(session)
+            && self.browser_key().as_ref() == Some(&(tab.scope.clone(), tab.workspace_id.clone())))
+        .then_some(id)
+    }
+
+    /// Explicit sidebar and keyboard navigation can target the terminal
+    /// already focused by the daemon while its report is visible.
+    pub(crate) fn select_session_navigation(&mut self, tab_id: &str, cx: &App) {
+        let Some(tab) = self
+            .live
+            .snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.tabs.iter().find(|tab| tab.tab_id == tab_id))
+        else {
+            return;
+        };
+        let key = (
+            super::scope(&self.endpoints[self.selected_endpoint]),
+            tab.workspace_id.clone(),
+        );
+        let session = Pick::Herdr(tab_id.to_owned());
+        let layout = self.layout_for(key.clone());
+        let page = layout.session_page(&session).filter(|id| {
+            store(cx)
+                .and_then(|store| store.get(*id))
+                .is_some_and(|tab| {
+                    tab.session.as_ref() == Some(&session)
+                        && tab.scope == key.0
+                        && tab.workspace_id == key.1
+                })
+        });
+        layout.choose(layout.active(), page.map(Pick::Page).unwrap_or(session));
     }
 
     /// Saves each of this window's layouts that changed, for the next start.
@@ -147,6 +194,7 @@ impl HerdrWindow {
         self.browser
             .tab_scroll
             .retain(|group| group == fallback || live(group));
+        self.browser.session_scroll.retain(live);
     }
 
     /// What tracks `group`'s strip's sideways scroll.
@@ -189,6 +237,7 @@ impl HerdrWindow {
         };
         store
             .in_workspace(&scope, &workspace)
+            .filter(|tab| tab.session.is_none())
             .map(|tab| (Pick::Page(tab.id), super::view::tab_label(&tab.title)))
             .collect()
     }
@@ -384,11 +433,15 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let page = self.remembered_session_page(&Pick::Herdr(tab.to_owned()), cx);
         let Some(layout) = self.ensure_layout() else {
             return;
         };
         layout.choose(group, Pick::Herdr(tab.to_owned()));
         self.bring_group_tab(group, window, cx);
+        if let Some(page) = page {
+            self.show_browser_tab_in(Some(group), page, window, cx);
+        }
         cx.notify();
     }
 
@@ -434,13 +487,19 @@ impl HerdrWindow {
         if arrived && (on_page || restoring) {
             return;
         }
+        let page = self.remembered_session_page(&Pick::Herdr(new.to_owned()), cx);
         let layout = self.layout_for(key);
         match (asked, primary) {
             (Some(group), _) => {
                 layout.choose(group, Pick::Herdr(new.to_owned()));
                 self.set_primary_group(group);
             }
-            (None, Some(primary)) => layout.focus_moved(primary, new),
+            (None, Some(primary)) => match page {
+                Some(page) => {
+                    layout.choose(primary, Pick::Page(page));
+                }
+                None => layout.focus_moved(primary, new),
+            },
             (None, None) => {}
         }
         self.reconcile_group_terminals(cx);
@@ -459,6 +518,12 @@ impl HerdrWindow {
         };
         let closed: Vec<Pick> = layout
             .picks()
+            .chain(
+                store(cx)
+                    .into_iter()
+                    .flat_map(|store| store.in_workspace(&key.0, &key.1))
+                    .filter_map(|tab| tab.session.as_ref()),
+            )
             .filter(|pick| {
                 matches!(pick, Pick::Herdr(tab) if !snapshot.tabs.iter().any(|candidate| {
                     &candidate.tab_id == tab && candidate.workspace_id == key.1
@@ -468,7 +533,13 @@ impl HerdrWindow {
             .collect();
         for pick in &closed {
             layout.replace(pick, None, focused.as_deref());
+            layout.remember_session_page(pick.clone(), None);
         }
+        layout.forget_session_pages(|session, id| {
+            store(cx)
+                .and_then(|store| store.get(id))
+                .is_some_and(|tab| tab.session.as_ref() == Some(session))
+        });
         // Closed-in-group marks for tabs the daemon closed go with them.
         layout.forget_hidden(|pick| match pick {
             Pick::Herdr(tab) => snapshot
@@ -478,6 +549,11 @@ impl HerdrWindow {
             Pick::Page(id) => store(cx).is_some_and(|store| store.get(*id).is_some()),
         });
         if !closed.is_empty() {
+            super::Store::update(cx, |store| {
+                for session in &closed {
+                    store.detach_session(&key.0, &key.1, session);
+                }
+            });
             cx.notify();
         }
     }
@@ -506,11 +582,19 @@ impl HerdrWindow {
         };
         let layout = self.layout_for((tab.scope.clone(), tab.workspace_id.clone()));
         let group = group.unwrap_or(layout.active());
+        if let Some(session) = &tab.session {
+            layout.remember_session_page(session.clone(), Some(id));
+        }
         layout.choose(group, Pick::Page(id));
         #[cfg(any(target_os = "macos", windows))]
-        if let Err(error) = self.browser.pages.ensure(&tab, window, cx) {
-            tracing::warn!(%error, "Cannot create a browser page");
-            self.browser.failed = Some((id, error.to_string().into()));
+        match self.browser.pages.ensure(&tab, window, cx) {
+            Err(error) => {
+                tracing::warn!(%error, "Cannot create a browser page");
+                self.browser.failed.insert(id, error.to_string().into());
+            }
+            Ok(()) => {
+                self.browser.failed.remove(&id);
+            }
         }
         self.sync_address(group, Some(&tab), true, window, cx);
         if tab.location.is_none() {
@@ -548,6 +632,7 @@ impl HerdrWindow {
             .map(|store| {
                 store
                     .in_workspace(&tab.scope, &tab.workspace_id)
+                    .filter(|candidate| candidate.session == tab.session)
                     .map(|tab| tab.id)
                     .collect()
             })
@@ -562,7 +647,13 @@ impl HerdrWindow {
             .then(|| self.focused_herdr_tab().map(str::to_owned))
             .flatten();
         if let Some(layout) = self.browser.layouts.get_mut(&key) {
-            layout.replace(&Pick::Page(id), next.map(Pick::Page), focused.as_deref());
+            let replacement = next.map(Pick::Page).or_else(|| tab.session.clone());
+            layout.replace(&Pick::Page(id), replacement, focused.as_deref());
+            if let Some(session) = &tab.session
+                && layout.session_page(session) == Some(id)
+            {
+                layout.remember_session_page(session.clone(), next);
+            }
         }
         crate::browser::Store::update(cx, |store| store.close(id));
         self.forget_browser_tabs(|tab| tab == id);

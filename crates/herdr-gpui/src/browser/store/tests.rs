@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
+mod session_pages;
 
 fn url(value: &str) -> Option<Location> {
     Some(Location::Web {

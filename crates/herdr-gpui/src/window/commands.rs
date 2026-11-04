@@ -78,6 +78,26 @@ impl HerdrWindow {
                     NavigationTarget::Pane(id) => handle.focus_pane(boot, id),
                 }
             });
+        if queued {
+            let tab = match target {
+                NavigationTarget::Tab(tab) => Some(tab.to_owned()),
+                NavigationTarget::Pane(pane) => self
+                    .live
+                    .snapshot
+                    .as_ref()
+                    .and_then(|snapshot| {
+                        snapshot
+                            .panes
+                            .iter()
+                            .find(|candidate| candidate.pane_id == pane)
+                    })
+                    .map(|pane| pane.tab_id.clone()),
+                NavigationTarget::Workspace(_) => None,
+            };
+            if let Some(tab) = tab {
+                self.select_session_navigation(&tab, cx);
+            }
+        }
         self.marked.clear();
         cx.notify();
         queued

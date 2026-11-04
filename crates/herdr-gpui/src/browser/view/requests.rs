@@ -16,11 +16,28 @@ impl HerdrWindow {
     /// the named workspace qualifies without it. Only the Unix control
     /// socket asks.
     fn browser_target(&self, target: &Target<'_>, strict: bool) -> Option<(usize, String)> {
+        let device = target.device.and_then(|device| {
+            self.endpoints
+                .iter()
+                .find(|endpoint| endpoint.id == device)
+                .or_else(|| {
+                    let mut matches = self
+                        .endpoints
+                        .iter()
+                        .filter(|endpoint| endpoint.label == device);
+                    let matched = matches.next()?;
+                    matches.next().is_none().then_some(matched)
+                })
+                .map(|endpoint| endpoint.id.as_str())
+        });
+        if target.device.is_some() && device.is_none() {
+            return None;
+        }
         self.endpoints
             .iter()
             .enumerate()
             .find_map(|(index, endpoint)| {
-                if let Some(device) = target.device {
+                if let Some(device) = device {
                     if endpoint.id != device {
                         return None;
                     }
@@ -208,13 +225,22 @@ impl HerdrWindow {
                 id
             }
         };
+        let session = origin.and_then(|pane| {
+            self.page_session_for_pane(&super::scope(&self.endpoints[index]), &workspace, pane)
+        });
+        if let Some(session) = &session {
+            Store::update(cx, |store| store.attach_to_session(id, session.clone()));
+        }
         if focus {
             let focused = self
                 .live
                 .snapshot
                 .as_ref()
                 .and_then(|snapshot| snapshot.focused_workspace_id.as_deref());
-            if index != self.selected_endpoint {
+            if let Some(crate::browser::Pick::Herdr(tab)) = &session {
+                let endpoint = self.endpoints[index].id.clone();
+                self.navigate_endpoint(&endpoint, NavigationTarget::Tab(tab), cx);
+            } else if index != self.selected_endpoint {
                 let endpoint = self.endpoints[index].id.clone();
                 self.navigate_endpoint(&endpoint, NavigationTarget::Workspace(&workspace), cx);
             } else if focused != Some(workspace.as_str()) {

@@ -158,6 +158,33 @@ impl HerdrWindow {
             if drag.is_some() {
                 drop.push((position, children[position], shift));
             }
+            let session = crate::browser::Pick::Herdr(id.clone());
+            let pages = self.session_page_count(
+                &crate::browser::scope(endpoint),
+                &row.tab.workspace_id,
+                &session,
+                cx,
+            );
+            let mut lines = tab_lines(name, position + 1, device);
+            if pages > 0
+                && let Some(line) = lines.first_mut()
+            {
+                line.push(ResolvedToken {
+                    kind: TokenKind::Tag(
+                        SharedString::from(format!(
+                            "{pages} {}",
+                            if pages == 1 { "page" } else { "pages" }
+                        )),
+                        TextRole::Secondary,
+                    ),
+                    style: TokenStyle::default(),
+                });
+            }
+            let selected = own
+                && self
+                    .active_page_session(cx)
+                    .as_ref()
+                    .map_or(row.tab.focused, |active| active == &session);
             let element = Cell::new(
                 rows,
                 RowData::Agent(AgentRow {
@@ -176,12 +203,12 @@ impl HerdrWindow {
                     status: self.mark(row.endpoint, agent, row.tab.agent_status),
                     place: None,
                     status_text: None,
-                    lines: tab_lines(name, position + 1, device),
+                    lines,
                     icon_line: Some(0),
                 }),
                 &tab_cx,
             )
-            .selected(own && row.tab.focused && self.active_session_tab(cx).is_none())
+            .selected(selected)
             .row()
             .when(own, |row| {
                 row.child(trailing.place(self.tab_close_button(&close_id, cx)))

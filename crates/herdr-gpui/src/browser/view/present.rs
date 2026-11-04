@@ -26,6 +26,27 @@ pub(super) enum Freeze {
 const FREEZE_WAIT: std::time::Duration = std::time::Duration::from_millis(300);
 
 impl HerdrWindow {
+    #[cfg(any(target_os = "macos", windows))]
+    pub(super) fn ensure_visible_pages(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let missing: Vec<_> = self
+            .live_pages(cx)
+            .into_iter()
+            .filter(|id| !self.browser.pages.contains(*id) && !self.browser.failed.contains_key(id))
+            .filter_map(|id| super::store(cx)?.get(id).cloned())
+            .filter(|tab| {
+                tab.location
+                    .as_ref()
+                    .is_some_and(super::super::Location::is_page)
+            })
+            .collect();
+        for tab in missing {
+            if let Err(error) = self.browser.pages.ensure(&tab, window, cx) {
+                tracing::warn!(%error, "Cannot restore a browser page");
+                self.browser.failed.insert(tab.id, error.to_string().into());
+            }
+        }
+    }
+
     /// Shows or hides the native pages to match what the window draws. The
     /// pages sit above everything GPUI paints, so a page an open menu covers
     /// steps aside, leaving a picture of itself where it can; a page the menu

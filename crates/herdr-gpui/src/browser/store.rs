@@ -1,11 +1,13 @@
 //! The app's browser tabs: which page each one shows and the workspace it
 //! belongs to. Herdr has no browser panes, so these live only in this client;
 //! every window shows the same tabs for a workspace, each with its own page.
-use super::Location;
+use super::{Location, Pick};
 use crate::{reorder::Beside, state_file};
 use gpui::{App, Global};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+mod sessions;
 
 const MAX_TABS: usize = 256;
 const MAX_FILE_BYTES: u64 = 1024 * 1024;
@@ -59,17 +61,26 @@ pub(crate) struct Tab {
     /// go back to.
     #[serde(default)]
     pub origin: Option<String>,
+    /// The terminal or watched conversation this page belongs to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<Pick>,
 }
 
 impl Tab {
     fn valid(&self) -> bool {
         !self.workspace_id.is_empty()
+            && !matches!(&self.location, Some(Location::AgentSession { session }) if session.reports.len() > 64)
             && self.workspace_id.len() <= 256
             && self.title.chars().count() <= MAX_TITLE_CHARS
             && self
                 .origin
                 .as_ref()
                 .is_none_or(|pane| !pane.is_empty() && pane.len() <= 256)
+            && self.session.as_ref().is_none_or(|session| {
+                super::groups::valid_pick(session)
+                    && *session != Pick::Page(self.id)
+                    && self.location.as_ref().is_none_or(Location::is_page)
+            })
     }
 }
 
@@ -100,9 +111,22 @@ fn clean_title(title: &str) -> String {
 }
 
 fn parse(bytes: &[u8]) -> crate::Result<Vec<Tab>> {
-    let saved: Saved = serde_json::from_slice(bytes)?;
+    let mut saved: Saved = serde_json::from_slice(bytes)?;
     if saved.tabs.len() > MAX_TABS || !saved.tabs.iter().all(Tab::valid) {
         return Err(crate::Error::InvalidBrowserTabs);
+    }
+    let parents: Vec<_> = saved
+        .tabs
+        .iter()
+        .filter(|tab| matches!(tab.location, Some(Location::AgentSession { .. })))
+        .map(|tab| (tab.id, tab.scope.clone(), tab.workspace_id.clone()))
+        .collect();
+    for tab in &mut saved.tabs {
+        if let Some(Pick::Page(parent)) = tab.session
+            && !parents.contains(&(parent, tab.scope.clone(), tab.workspace_id.clone()))
+        {
+            tab.session = None;
+        }
     }
     Ok(saved.tabs)
 }
@@ -218,11 +242,14 @@ impl Store {
             id,
             scope,
             workspace_id: workspace_id.to_owned(),
-            title: location
-                .as_ref()
-                .map_or_else(|| "New Tab".to_owned(), Location::default_title),
+            title: clean_title(
+                &location
+                    .as_ref()
+                    .map_or_else(|| "New Tab".to_owned(), Location::default_title),
+            ),
             location,
             origin,
+            session: None,
         });
         self.save();
         Some(id)
@@ -288,6 +315,11 @@ impl Store {
     pub(crate) fn close(&mut self, id: TabId) -> Option<Tab> {
         let index = self.tabs.iter().position(|tab| tab.id == id)?;
         let tab = self.tabs.remove(index);
+        for child in &mut self.tabs {
+            if child.session == Some(Pick::Page(id)) {
+                child.session = None;
+            }
+        }
         self.save();
         Some(tab)
     }

@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::{
+    browser,
     config::{Density, LayoutMode, Style},
     endpoint::Endpoint,
     monitoring::{Tab, Watched, Watchers},
@@ -144,6 +145,35 @@ pub(super) fn hold_sidebar(handle: WindowHandle<HerdrWindow>, cx: &mut App, view
                 window.resize(size(px(520.), px(640.)));
             }
         }
+        if let Ok(url) = std::env::var("HERDR_TEST_SESSION_PAGE") {
+            let url = browser::WebUrl::try_from(url.as_str())?;
+            let (scope, workspace) = this
+                .browser_key()
+                .ok_or_else(|| anyhow::anyhow!("fixture has no workspace"))?;
+            let page = browser::Store::update(cx, |store| {
+                let id = store.open(
+                    scope.clone(),
+                    &workspace,
+                    Some(browser::Location::Web { url }),
+                    None,
+                )?;
+                store.attach_to_session(id, browser::Pick::Herdr("t0".into()));
+                store.visited(id, None, Some("navigation review"));
+                let second = store.open(scope, &workspace, None, None)?;
+                store.attach_to_session(second, browser::Pick::Herdr("t0".into()));
+                store.visited(
+                    second,
+                    None,
+                    Some("API response details with a long page title"),
+                );
+                Some(id)
+            })
+            .ok_or_else(|| anyhow::anyhow!("fixture page could not open"))?;
+            this.show_browser_tab(page, window, cx);
+            if std::env::var_os("HERDR_TEST_NARROW").is_some() {
+                window.resize(size(px(720.), px(640.)));
+            }
+        }
         cx.notify();
         Ok::<(), anyhow::Error>(())
     });
@@ -154,11 +184,20 @@ pub(super) fn hold_sidebar(handle: WindowHandle<HerdrWindow>, cx: &mut App, view
             std::process::exit(1);
         }
     }
+    #[cfg(target_os = "macos")]
+    if let Some(path) = std::env::var_os("HERDR_TEST_WEBVIEW_CAPTURE") {
+        HerdrWindow::check_native_session_page(handle, path.into(), cx);
+    }
     #[cfg(feature = "mockup")]
     if let Some(path) = std::env::var_os("HERDR_TEST_SIDEBAR_CAPTURE") {
+        let delay = std::env::var("HERDR_TEST_CAPTURE_DELAY_MS")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(750)
+            .clamp(750, 15000);
         cx.spawn(async move |cx| {
             cx.background_executor()
-                .timer(Duration::from_millis(750))
+                .timer(Duration::from_millis(delay))
                 .await;
             let result = handle.update(cx, |_, window, _| window.render_to_image());
             match result {

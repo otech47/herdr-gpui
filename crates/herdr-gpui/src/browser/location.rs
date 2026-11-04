@@ -134,7 +134,7 @@ impl Location {
     /// A tab's title before its page names itself.
     pub(crate) fn default_title(&self) -> String {
         match self {
-            Self::Web { url } => url.host().to_owned(),
+            Self::Web { url } => url.report_title().unwrap_or_else(|| url.host().to_owned()),
             Self::Local { file } => file.entry.rsplit('/').next().unwrap_or_default().to_owned(),
             Self::Review { checkout } => format!("Review \u{00b7} {}", checkout.branch),
             Self::AgentSession { session } => session.title(),

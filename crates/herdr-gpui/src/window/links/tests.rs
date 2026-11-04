@@ -287,6 +287,7 @@ fn a_replaced_connection_retires_link_requests_unanswered(cx: &mut gpui::TestApp
             context: PendingActivation {
                 fallback: WebUrl::try_from(URL).ok(),
                 in_tab: false,
+                source: None,
             },
         });
     });

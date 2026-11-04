@@ -19,6 +19,10 @@ mod location;
 mod native;
 #[cfg(any(target_os = "macos", windows))]
 mod preview;
+mod reports;
+mod session_pages;
+
+pub(crate) use reports::{PageSource, report_urls};
 #[cfg(target_os = "macos")]
 mod snapshot;
 mod store;

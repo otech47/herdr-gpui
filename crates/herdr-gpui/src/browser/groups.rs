@@ -96,6 +96,7 @@ pub(crate) struct Layout {
     groups: Vec<Group>,
     active: GroupId,
     clock: u64,
+    pages: Vec<SessionPage>,
 }
 
 /// A layout as saved across restarts: each group's tab and width, left to
@@ -105,6 +106,14 @@ pub(crate) struct Layout {
 pub(crate) struct SavedLayout {
     groups: Vec<SavedGroup>,
     active: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pages: Vec<SessionPage>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct SessionPage {
+    session: Pick,
+    page: TabId,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -115,7 +124,7 @@ struct SavedGroup {
     hidden: Vec<Pick>,
 }
 
-fn valid_pick(pick: &Pick) -> bool {
+pub(super) fn valid_pick(pick: &Pick) -> bool {
     match pick {
         Pick::Herdr(tab) => !tab.is_empty() && tab.len() <= MAX_TAB_ID_BYTES,
         Pick::Page(_) => true,
@@ -129,6 +138,8 @@ impl SavedLayout {
         !self.groups.is_empty()
             && self.groups.len() <= MAX_SAVED_GROUPS
             && self.active < self.groups.len()
+            && self.pages.len() <= MAX_SAVED_HIDDEN
+            && self.pages.iter().all(|entry| valid_pick(&entry.session))
             && self.groups.iter().all(|group| {
                 group.share.is_finite()
                     && group.share > 0.
@@ -146,6 +157,7 @@ impl Layout {
         if self.groups.len() == 1
             && self.groups[0].pick.is_none()
             && self.groups[0].hidden.is_empty()
+            && self.pages.is_empty()
         {
             return None;
         }
@@ -164,6 +176,7 @@ impl Layout {
                 .iter()
                 .position(|group| group.id == self.active)
                 .unwrap_or(0),
+            pages: self.pages.clone(),
         })
     }
 
@@ -189,6 +202,7 @@ impl Layout {
             groups,
             active,
             clock: 1,
+            pages: saved.pages.clone(),
         }
     }
 
@@ -204,7 +218,29 @@ impl Layout {
             }],
             active: id,
             clock: 0,
+            pages: Vec::new(),
         }
+    }
+
+    pub(crate) fn session_page(&self, session: &Pick) -> Option<TabId> {
+        self.pages
+            .iter()
+            .find(|entry| &entry.session == session)
+            .map(|entry| entry.page)
+    }
+
+    pub(crate) fn remember_session_page(&mut self, session: Pick, page: Option<TabId>) {
+        self.pages.retain(|entry| entry.session != session);
+        if let Some(page) = page {
+            if self.pages.len() >= MAX_SAVED_HIDDEN {
+                self.pages.remove(0);
+            }
+            self.pages.push(SessionPage { session, page });
+        }
+    }
+
+    pub(crate) fn forget_session_pages(&mut self, mut keep: impl FnMut(&Pick, TabId) -> bool) {
+        self.pages.retain(|entry| keep(&entry.session, entry.page));
     }
 
     pub(crate) fn slots(&self) -> impl Iterator<Item = Slot> + '_ {

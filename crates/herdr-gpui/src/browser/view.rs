@@ -3,6 +3,9 @@
 //! open one.
 #[cfg(any(target_os = "macos", windows))]
 use super::Annotations;
+#[cfg(all(feature = "integration-test", target_os = "macos"))]
+mod session_pages_native;
+
 use super::{
     Location, Scope, Store, TabId, WebUrl,
     groups::{GroupId, GroupIds, Layout, Pick, SavedLayout},
@@ -54,10 +57,11 @@ pub(crate) struct Browser {
     pub(super) appear: super::tab_appear::TabAppear,
     /// Each strip's sideways scroll.
     pub(super) tab_scroll: super::tab_scroll::TabScroll,
+    pub(super) session_scroll: super::tab_scroll::TabScroll,
     /// Groups opening from a split and folding away as they close.
     pub(super) group_motion: super::group_motion::GroupMotion,
     /// Why a tab's page could not be created, shown in its place.
-    pub(super) failed: Option<(TabId, SharedString)>,
+    pub(super) failed: HashMap<TabId, SharedString>,
     /// The workspaces of the last snapshot and the boot they came from: one
     /// missing from the next snapshot of the same boot was closed.
     workspaces: Option<(Scope, String, HashSet<String>)>,
@@ -85,8 +89,9 @@ impl Browser {
             terminals: Default::default(),
             appear: Default::default(),
             tab_scroll: Default::default(),
+            session_scroll: Default::default(),
             group_motion: Default::default(),
-            failed: None,
+            failed: HashMap::new(),
             workspaces: None,
             #[cfg(any(target_os = "macos", windows))]
             annotations: Annotations::new(cx),
@@ -128,6 +133,7 @@ impl HerdrWindow {
         };
         store
             .in_workspace(&scope, &workspace)
+            .filter(|tab| tab.session.is_none())
             .map(|tab| tab.id)
             .collect()
     }
@@ -144,6 +150,7 @@ impl HerdrWindow {
         let key = self.browser_key();
         let focused = self.focused_herdr_tab().map(str::to_owned);
         for (workspace, layout) in &mut self.browser.layouts {
+            layout.forget_session_pages(|_, id| !gone(id));
             // Only the focused workspace's terminal is known here.
             let focused = focused
                 .as_deref()
@@ -159,14 +166,7 @@ impl HerdrWindow {
         }
         #[cfg(any(target_os = "macos", windows))]
         self.browser.pages.retain(|id| !gone(id));
-        if self
-            .browser
-            .failed
-            .as_ref()
-            .is_some_and(|(id, _)| gone(*id))
-        {
-            self.browser.failed = None;
-        }
+        self.browser.failed.retain(|id, _| !gone(*id));
         #[cfg(any(target_os = "macos", windows))]
         let annotated: Vec<TabId> = self
             .browser
@@ -250,7 +250,10 @@ impl HerdrWindow {
     /// tabs of workspaces the daemon closed. Runs on every window tick.
     pub(crate) fn poll_browser(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         #[cfg(any(target_os = "macos", windows))]
-        self.apply_page_events(window, cx);
+        {
+            self.ensure_visible_pages(window, cx);
+            self.apply_page_events(window, cx);
+        }
         if let Some(store) = store(cx) {
             let gone: HashSet<TabId> = self
                 .browser
@@ -280,6 +283,7 @@ impl HerdrWindow {
         }
         self.forget_closed_workspaces(cx);
         self.forget_closed_herdr_tabs(cx);
+        self.associate_session_pages(cx);
         self.poll_deliveries(cx);
         self.poll_reviews(cx);
         self.sync_addresses(false, window, cx);
@@ -376,6 +380,9 @@ impl HerdrWindow {
                             )
                         });
                         if let Some(opened) = opened {
+                            if let Some(session) = parent.session {
+                                Store::update(cx, |store| store.attach_to_session(opened, session));
+                            }
                             self.show_browser_tab_in(group, opened, window, cx);
                         }
                     }

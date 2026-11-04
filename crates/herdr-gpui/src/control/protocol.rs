@@ -60,7 +60,8 @@ pub(crate) struct Caller {
     pub daemon_socket: Option<String>,
     /// The app's own ID of the endpoint the workspace belongs to: `local`,
     /// or `ssh:` and a saved device's profile ID. Only that endpoint is
-    /// searched. Omitted on the wire when unset, as older apps refuse it.
+    /// searched. An unambiguous saved device name also matches.
+    /// Omitted on the wire when unset, as older apps refuse it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
 }

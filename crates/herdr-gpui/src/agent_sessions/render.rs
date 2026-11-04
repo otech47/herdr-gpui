@@ -370,6 +370,20 @@ impl HerdrWindow {
                     .session_tabs
                     .get(&id)
                     .map_or("Connecting", SessionTab::label);
+                let pages = self.session_page_count(
+                    &scope,
+                    &workspace,
+                    &crate::browser::Pick::Page(id),
+                    cx,
+                );
+                let status = if pages > 0 {
+                    format!(
+                        "{status} · {pages} {}",
+                        if pages == 1 { "page" } else { "pages" }
+                    )
+                } else {
+                    status.to_owned()
+                };
                 div()
                     .id(SharedString::from(format!("watched-session-{id}")))
                     .debug_selector(move || format!("watched-session-{id}"))
@@ -406,9 +420,12 @@ impl HerdrWindow {
                             })),
                     )
                     .on_click(cx.listener(move |this, _, window, cx| {
-                        this.show_browser_tab(id, window, cx);
-                        if let Some(tab) = this.session_tabs.get(&id) {
-                            window.focus(&tab.focus, cx);
+                        if let Some(slot) = this
+                            .group_slots()
+                            .into_iter()
+                            .find(|slot| Some(slot.id) == this.active_group())
+                        {
+                            this.show_session(slot, crate::browser::Pick::Page(id), window, cx);
                         }
                     }))
                     .into_any_element()

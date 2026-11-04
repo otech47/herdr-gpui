@@ -148,7 +148,9 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Div {
-        let pick = self.group_pick(slot.id);
+        let pick = self
+            .group_pick(slot.id)
+            .map(|pick| self.session_for_pick(&pick, cx).unwrap_or(pick));
         let indicators = Indicators::new(
             self.settings.shared.as_ref(),
             matches!(
@@ -784,6 +786,14 @@ impl HerdrWindow {
     ) -> AnyElement {
         let strip = (!self.strip_hidden(slot.id, cx))
             .then(|| self.render_tab_strip(slot, ends, window, cx));
+        let body = div()
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_h_0()
+            .min_w_0()
+            .children(self.render_session_pages(slot, window, cx))
+            .child(body);
         let bottom = self.tab_bar_position() == TabBarPosition::Bottom;
         let share = (self.is_split() || !self.folding_groups().is_empty())
             .then(|| self.group_share(slot.id));

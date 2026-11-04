@@ -29,6 +29,7 @@ pub enum BrowserCommand {
         /// A web address or a local file, told apart when it runs.
         target: String,
         workspace: Option<String>,
+        device: Option<String>,
         focus: bool,
     },
     Reload,
@@ -224,10 +225,20 @@ fn parse_browser(mut args: impl Iterator<Item = OsString>) -> Result<BrowserComm
         _ => return Err(CliError::UnknownBrowserCommand(command)),
     }
     let (mut target, mut workspace, mut focus) = (None, None, true);
+    let mut device = None;
     while let Some(arg) = args.next() {
         match arg.to_str() {
             Some("--help" | "-h") => return Ok(BrowserCommand::Help),
             Some("--no-focus") => focus = false,
+            Some("--device") => {
+                let value = args
+                    .next()
+                    .filter(|value| {
+                        !value.is_empty() && !value.as_encoded_bytes().starts_with(b"-")
+                    })
+                    .ok_or(CliError::MissingDevice)?;
+                device = Some(utf8(value)?);
+            }
             Some("--workspace") => {
                 let value = args
                     .next()
@@ -246,6 +257,7 @@ fn parse_browser(mut args: impl Iterator<Item = OsString>) -> Result<BrowserComm
     Ok(BrowserCommand::Open {
         target: target.ok_or(CliError::MissingUrl)?,
         workspace,
+        device,
         focus,
     })
 }

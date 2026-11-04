@@ -157,9 +157,11 @@ fn open_browser(request: &BrowserOpen, cx: &mut App) -> Response {
         pane: caller.pane_id.as_deref(),
         device: caller.device.as_deref(),
     };
-    // First the window connected to the caller's own daemon; then, when the
-    // socket paths are spelled differently, any window showing its workspace.
+    // Pane IDs collide across devices. An agent must identify its daemon or device.
     for strict in [true, false] {
+        if !strict && caller.pane_id.is_some() && caller.device.is_none() {
+            break;
+        }
         for handle in &windows {
             let placed = handle.update(cx, |view, window, cx| {
                 view.open_requested_browser_tab(
@@ -480,11 +482,18 @@ fn page(target: &str) -> crate::Result<(Page, String)> {
     Ok((Page::Url(url.as_str().to_owned()), url.as_str().to_owned()))
 }
 
-fn browser_open(target: &str, workspace: Option<String>, focus: bool) -> crate::Result<String> {
+fn browser_open(
+    target: &str,
+    workspace: Option<String>,
+    device: Option<String>,
+    focus: bool,
+) -> crate::Result<String> {
     let (page, shown) = page(target)?;
+    let mut caller = caller(workspace)?;
+    caller.device = device;
     let request = Request::Open(BrowserOpen {
         page,
-        caller: caller(workspace)?,
+        caller,
         focus,
     });
     match send(&request)? {
@@ -550,12 +559,14 @@ fn browser_feedback(wait: u64) -> crate::Result<Option<String>> {
 }
 
 const BROWSER_USAGE: &str = "\
-herdr-gpui browser open URL|FILE [--workspace ID] [--no-focus]
+herdr-gpui browser open URL|FILE [--workspace ID] [--device ID|NAME] [--no-focus]
     Show a web address, or a local HTML file, in a browser tab of the running
     Herdr GPUI. The tab joins the caller's own workspace (HERDR_WORKSPACE_ID),
     or the frontmost one outside Herdr. Showing the same page again from the
     same pane reuses and reloads its tab. Bare hosts such as localhost:3000
     are accepted. A file is served with the other files in its folder.
+    Pages from a pane join that session. Use --no-focus for a new report.
+    --device selects an endpoint ID or an unambiguous saved device name.
 herdr-gpui browser reload
     Reload the pages this pane opened, for example after editing the file.
 herdr-gpui browser feedback [--wait SECONDS]
@@ -630,8 +641,9 @@ pub(crate) fn run(command: BrowserCommand) -> ExitCode {
         BrowserCommand::Open {
             target,
             workspace,
+            device,
             focus,
-        } => report(browser_open(&target, workspace, focus)),
+        } => report(browser_open(&target, workspace, device, focus)),
         BrowserCommand::Reload => report(browser_reload()),
         BrowserCommand::Feedback { wait } => match browser_feedback(wait) {
             // Notes keep their line breaks: they are Markdown for the agent.

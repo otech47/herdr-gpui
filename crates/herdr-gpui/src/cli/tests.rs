@@ -1,5 +1,7 @@
 use super::*;
 
+mod session_pages;
+
 #[test]
 fn build_info_is_an_informational_mode() {
     assert_eq!(
@@ -28,6 +30,7 @@ fn browser_commands_never_start_the_gui() {
         LaunchMode::Browser(BrowserCommand::Open {
             target: "localhost:3000".into(),
             workspace: None,
+            device: None,
             focus: true,
         })
     );
@@ -44,6 +47,7 @@ fn browser_commands_never_start_the_gui() {
         LaunchMode::Browser(BrowserCommand::Open {
             target: "https://a.test".into(),
             workspace: Some("w_2".into()),
+            device: None,
             focus: false,
         })
     );

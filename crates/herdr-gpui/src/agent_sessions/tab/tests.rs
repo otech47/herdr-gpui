@@ -3,6 +3,8 @@ use super::*;
 use crate::sidebar::layout_tests::fixture_window;
 use gpui::TestAppContext;
 
+mod session_pages;
+
 #[gpui::test]
 fn running_then_ready_requires_a_click_and_errors_keep_output(cx: &mut TestAppContext) {
     let (view, cx) = cx.add_window_view(fixture_window);

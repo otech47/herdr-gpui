@@ -145,6 +145,10 @@ pub(crate) struct LinkCell {
 }
 
 impl LinkCell {
+    pub(crate) fn pane_id(&self) -> &str {
+        &self.pane_id
+    }
+
     /// The pane cell under a point in surface pixels. A popup covers every
     /// pane, and the daemon resolves pane content only, so a popup yields
     /// nothing here and keeps the local detector.

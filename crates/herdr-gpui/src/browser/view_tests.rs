@@ -37,6 +37,7 @@ mod embedded;
 /// Editor groups. Blank browser tabs need no native page, so none is
 /// created, and a split alone needs no page at all.
 mod groups;
+mod session_pages;
 
 /// Notes need a page to annotate, which Linux builds do not show.
 #[cfg(any(target_os = "macos", windows))]

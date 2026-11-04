@@ -302,7 +302,9 @@ fn live_pane(
 fn right_click_targets_inactive_pane_and_blocks_stale_surfaces(cx: &mut TestAppContext) {
     let (view, cx) = cx.add_window_view(|window, cx| {
         crate::bind_keys(cx);
-        crate::sidebar::layout_tests::fixture_window(window, cx)
+        let mut view = crate::sidebar::layout_tests::fixture_window(window, cx);
+        view.live.snapshot = Some(Arc::new(snapshot()));
+        view
     });
     cx.simulate_resize(size(px(800.), px(600.)));
     cx.update(|window, cx| {
@@ -383,7 +385,9 @@ fn right_click_targets_inactive_pane_and_blocks_stale_surfaces(cx: &mut TestAppC
 fn right_click_follows_the_panes_routing(cx: &mut TestAppContext) {
     let (view, cx) = cx.add_window_view(|window, cx| {
         crate::bind_keys(cx);
-        crate::sidebar::layout_tests::fixture_window(window, cx)
+        let mut view = crate::sidebar::layout_tests::fixture_window(window, cx);
+        view.live.snapshot = Some(Arc::new(snapshot()));
+        view
     });
     cx.simulate_resize(size(px(800.), px(600.)));
     cx.update(|window, cx| window.draw(cx).clear(cx));

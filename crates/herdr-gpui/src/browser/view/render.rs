@@ -25,6 +25,7 @@ impl HerdrWindow {
         };
         let tabs: Vec<Tab> = store
             .in_workspace(&scope, &workspace)
+            .filter(|tab| tab.session.is_none())
             .filter(|tab| self.group_lists(slot.id, &Pick::Page(tab.id)))
             .cloned()
             .collect();
@@ -121,6 +122,14 @@ impl HerdrWindow {
         } else {
             self.theme.muted
         };
+        let (foreground, surface) = (self.theme.foreground, self.theme.surface);
+        let hint = match id {
+            "browser-external" => "Open in browser",
+            "browser-back" => "Back",
+            "browser-forward" => "Forward",
+            "browser-reload" => "Reload page",
+            _ => "Page action",
+        };
         div()
             .id(id)
             .debug_selector(move || slot.selector(id))
@@ -130,6 +139,14 @@ impl HerdrWindow {
             .items_center()
             .justify_center()
             .rounded(px(crate::config::corners::CONTROL))
+            .tooltip(move |_, cx| {
+                cx.new(|_| crate::usage::Hint {
+                    text: hint.into(),
+                    foreground,
+                    surface,
+                })
+                .into()
+            })
             .when(enabled, |button| {
                 button
                     .cursor_pointer()
@@ -153,7 +170,10 @@ impl HerdrWindow {
         let id = tab.id;
         let loaded = tab.location.is_some();
         let external = match &tab.location {
-            Some(Location::Web { url }) => Some(url.clone()),
+            Some(Location::Web { url }) => Some(url.as_str().to_owned()),
+            Some(Location::Local { file }) => {
+                url::Url::from_file_path(file.path()).ok().map(String::from)
+            }
             _ => None,
         };
         #[cfg(any(target_os = "macos", windows))]
@@ -224,12 +244,7 @@ impl HerdrWindow {
         let page = self.browser.pages.page(id).cloned();
         #[cfg(not(any(target_os = "macos", windows)))]
         let page: Option<AnyView> = None;
-        let failure = self
-            .browser
-            .failed
-            .as_ref()
-            .filter(|(failed, _)| *failed == id)
-            .map(|(_, message)| message.clone());
+        let failure = self.browser.failed.get(&id).cloned();
         let placeholder: SharedString = match (&failure, loaded) {
             (Some(message), _) => format!("Could not show this page: {message}").into(),
             (None, false) => "Type an address above and press Return.".into(),

@@ -7,7 +7,7 @@
 
 use super::{HerdrWindow, file_links::FileLink};
 use crate::{
-    browser::WebUrl,
+    browser::{PageSource, WebUrl},
     links::{LinkCell, LinkInbox, LinkRequest, ResolvedLink, activation_fallback},
     terminal::RowLink,
 };
@@ -73,6 +73,7 @@ struct PendingActivation {
     /// daemon neither handles nor reads a web address there.
     fallback: Option<WebUrl>,
     in_tab: bool,
+    source: Option<PageSource>,
 }
 
 /// A press that may become a click on a link.
@@ -270,9 +271,10 @@ impl HerdrWindow {
                 PollResult::Answered(result) => {
                     let in_tab = flight.context.in_tab;
                     let fallback = flight.context.fallback.clone();
+                    let source = flight.context.source.clone();
                     self.links.activating = None;
                     if let Some(url) = activation_fallback(result, fallback) {
-                        self.open_web_link(url, in_tab, window, cx);
+                        self.open_web_link(url, in_tab, source, window, cx);
                     }
                 }
             }
@@ -351,6 +353,9 @@ impl HerdrWindow {
             .url
             .as_deref()
             .and_then(|url| WebUrl::try_from(url).ok());
+        let source = self
+            .link_cell_at(release.position)
+            .and_then(|cell| self.page_source_for_pane(cell.pane_id()));
         if let Some(cell) = &release.cell {
             // One click at a time: a second while the first is unanswered
             // would race its handler.
@@ -363,7 +368,11 @@ impl HerdrWindow {
                     self.links.activating = Some(InFlight {
                         id,
                         inbox: connection.links.clone(),
-                        context: PendingActivation { fallback, in_tab },
+                        context: PendingActivation {
+                            fallback,
+                            in_tab,
+                            source,
+                        },
                     });
                     return true;
                 }
@@ -371,7 +380,7 @@ impl HerdrWindow {
             }
         }
         if let Some(url) = fallback {
-            self.open_web_link(url, in_tab, window, cx);
+            self.open_web_link(url, in_tab, source, window, cx);
         }
         true
     }
@@ -382,11 +391,16 @@ impl HerdrWindow {
         &mut self,
         url: WebUrl,
         in_tab: bool,
+        source: Option<PageSource>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if in_tab && crate::browser::EMBEDDED {
-            self.open_browser_tab(Some(url), window, cx);
+        if (in_tab || url.report_title().is_some()) && crate::browser::EMBEDDED {
+            if let Some(source) = source {
+                self.open_session_link(&source, url, window, cx);
+            } else {
+                self.open_browser_tab(Some(url), window, cx);
+            }
         } else {
             cx.open_url(&String::from(url));
         }
