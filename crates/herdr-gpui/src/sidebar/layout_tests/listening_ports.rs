@@ -68,8 +68,9 @@ fn listening_ports_hang_a_globe_on_their_row(cx: &mut gpui::TestAppContext) {
     assert!(cx.debug_bounds("ports-menu").is_none());
 
     // A rest on it opens the menu over it, after the delay.
+    let before_hover = Instant::now();
     cx.simulate_mouse_move(globe_bounds.center(), None, Modifiers::default());
-    poll(cx, Instant::now());
+    poll(cx, before_hover);
     assert!(cx.debug_bounds("ports-menu").is_none());
     poll(cx, Instant::now() + OPEN_DELAY);
     let menu = cx.debug_bounds("ports-menu").unwrap();
