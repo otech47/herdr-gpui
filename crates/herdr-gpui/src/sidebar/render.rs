@@ -145,12 +145,13 @@ impl HerdrWindow {
                     }
                     - HOST_GAP)
                     .max(0.);
+                let load_size = (font.size * 0.85).round();
                 let load_view = load.map(|reading| {
                     crate::system_load::compact(
                         reading,
                         theme,
-                        super::metrics::glyph_width(font),
-                        (font.size * 0.9).round(),
+                        load_size,
+                        super::metrics::glyph_width(font) * load_size / font.size,
                     )
                 });
                 let label_width =

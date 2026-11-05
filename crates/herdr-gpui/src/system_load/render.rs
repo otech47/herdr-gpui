@@ -17,8 +17,8 @@ const LINE_GAP: f32 = 10.;
 /// Glyphs a share takes at most: `100%`.
 const SHARE_GLYPHS: f32 = 4.;
 const ICON_GAP: f32 = 3.;
-const COMPACT_BAR_WIDTH: f32 = 16.;
-const COMPACT_GAP: f32 = 8.;
+const COMPACT_BAR_WIDTH: f32 = 14.;
+const COMPACT_GAP: f32 = 4.;
 const CARD_WIDTH: f32 = 248.;
 const CARD_PADDING: f32 = 10.;
 const CARD_GRAPH_HEIGHT: f32 = 36.;
@@ -234,10 +234,11 @@ fn line(reading: &Reading, theme: &Theme) -> Div {
         .children(memory)
 }
 
-/// The view and its width. The width depends only on `glyph` and `icon`,
-/// so every host row gives its name the same room.
-pub(crate) fn compact(reading: &Reading, theme: &Theme, glyph: f32, icon: f32) -> (f32, Div) {
-    let item_width = icon + ICON_GAP + COMPACT_BAR_WIDTH + ICON_GAP + glyph * SHARE_GLYPHS;
+/// The view and its width. `size` is the text and icon size, and `glyph`
+/// a glyph's width at that size. The width depends only on those, so every
+/// host row gives its name the same room.
+pub(crate) fn compact(reading: &Reading, theme: &Theme, size: f32, glyph: f32) -> (f32, Div) {
+    let item_width = size + ICON_GAP + COMPACT_BAR_WIDTH + ICON_GAP + glyph * SHARE_GLYPHS;
     let width = 2. * item_width + COMPACT_GAP;
     let row = div()
         .debug_selector(|| "system-load-compact".into())
@@ -246,7 +247,8 @@ pub(crate) fn compact(reading: &Reading, theme: &Theme, glyph: f32, icon: f32) -
         .flex_none()
         .justify_end()
         .items_center()
-        .gap(px(COMPACT_GAP));
+        .gap(px(COMPACT_GAP))
+        .text_size(px(size));
     let Some(sample) = reading.latest() else {
         return (width, row);
     };
@@ -258,7 +260,7 @@ pub(crate) fn compact(reading: &Reading, theme: &Theme, glyph: f32, icon: f32) -
             .flex_none()
             .items_center()
             .gap(px(ICON_GAP))
-            .child(icon_view(path, icon, theme))
+            .child(icon_view(path, size, theme))
             .child(bar(value, warn, COMPACT_BAR_WIDTH, 4., theme))
             .child(share(value, warn, stale, theme, Some(glyph)))
     };
@@ -272,9 +274,7 @@ pub(crate) fn compact(reading: &Reading, theme: &Theme, glyph: f32, icon: f32) -
 fn share(value: f32, warn: f32, stale: bool, theme: &Theme, glyph: Option<f32>) -> Div {
     div()
         .flex_none()
-        .when_some(glyph, |text, glyph| {
-            text.w(px(glyph * SHARE_GLYPHS)).flex().justify_end()
-        })
+        .when_some(glyph, |text, glyph| text.w(px(glyph * SHARE_GLYPHS)))
         .when(glyph.is_none(), |text| {
             text.min_w(px(28.)).flex().justify_end()
         })
