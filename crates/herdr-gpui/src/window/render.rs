@@ -816,7 +816,7 @@ impl Render for HerdrWindow {
                             )),
                     )
                     .children(self.render_listening_ports(cx))
-                    .children(self.render_system_load())
+                    .children(self.render_system_load(cx))
                     .when(crate::caffeine::SUPPORTED, |bar| {
                         let awake = crate::caffeine::active(cx);
                         let (foreground, surface) = (self.theme.foreground, self.theme.surface);

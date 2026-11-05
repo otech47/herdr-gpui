@@ -22,8 +22,6 @@ pub(super) const CHILD_INDENT: f32 = TREE_GUTTER - ROW_PADDING + 12.;
 pub(crate) const ARROW_RESERVE: f32 = 18.;
 pub(crate) const HOST_ARROW_WIDTH: f32 = 12.;
 pub(crate) const HOST_GAP: f32 = 6.;
-/// Name glyphs a host row keeps before its load graph gives way to gauges.
-pub(super) const HOST_NAME_GLYPHS: usize = 8;
 pub(crate) const ICON_RESERVE: f32 = 18.;
 
 #[cfg(any(test, feature = "integration-test"))]

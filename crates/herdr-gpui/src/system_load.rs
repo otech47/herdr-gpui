@@ -15,7 +15,7 @@ use crate::{
     Error, Result,
     usage::{Host, Shell},
 };
-pub(crate) use render::{gauges, line, line_width, tooltip};
+pub(crate) use render::{compact, tooltip};
 use sample::{Memory, Os, Sample, Ticks};
 use std::{
     collections::{HashMap, VecDeque},

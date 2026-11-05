@@ -1,13 +1,15 @@
 use super::*;
 use crate::usage::Host;
 
-/// A local host and a remote one, both with a held load reading, in a sidebar
-/// `width` wide. `show` is the load setting.
-fn hosts_with_load(
+/// A local host and a remote one named `label`, both with a held load
+/// reading, in a sidebar `width` wide. `show` is the load setting.
+fn hosts_with_load<'a>(
     width: f32,
+    label: &str,
     show: bool,
-    cx: &mut gpui::TestAppContext,
-) -> &mut gpui::VisualTestContext {
+    cx: &'a mut gpui::TestAppContext,
+) -> &'a mut gpui::VisualTestContext {
+    let label = label.to_owned();
     let (_, cx) = cx.add_window_view(|window, cx| {
         let view = cx.new(|cx| {
             let mut view = fixture_window(window, cx);
@@ -20,7 +22,7 @@ fn hosts_with_load(
             view.live.snapshot = Some(Arc::new(snapshot(1)));
             let mut remote = crate::endpoint::Endpoint::new(
                 "ssh:test".into(),
-                "Devbox".into(),
+                label,
                 ConnectTarget::Ssh {
                     target: "unused".into(),
                     session: "default".into(),
@@ -57,45 +59,50 @@ const HOSTS: [(&str, &str, &str, &str); 2] = [
     ),
 ];
 
-/// The load graph's width in the fixture's 12 pixel sidebar font.
-fn graph_width() -> f32 {
-    crate::system_load::line_width(12. * 0.62)
-}
-
-fn assert_one_line(width: f32, cx: &mut gpui::TestAppContext) {
+/// Each host row keeps its load on the name's line, in the same width.
+fn assert_compact(width: f32, label: &str, cx: &mut gpui::TestAppContext) -> Pixels {
     let plain: Vec<Pixels> = {
-        let cx = hosts_with_load(width, false, cx);
+        let cx = hosts_with_load(width, label, false, cx);
         HOSTS
             .iter()
             .map(|(_, row, _, _)| cx.debug_bounds(row).unwrap().size.height)
             .collect()
     };
-    let cx = hosts_with_load(width, true, cx);
+    let cx = hosts_with_load(width, label, true, cx);
+    let mut widths = Vec::new();
     for ((id, row, arrow, load), plain) in HOSTS.into_iter().zip(plain) {
+        let row = cx.debug_bounds(row).unwrap();
         let arrow = cx.debug_bounds(arrow).unwrap();
         let load = cx.debug_bounds(load).unwrap();
         assert!(
             (load.center().y - arrow.center().y).abs() <= px(1.),
             "{id}: load sits beside the name"
         );
-        assert_eq!(cx.debug_bounds(row).unwrap().size.height, plain, "{id}");
+        assert!(load.right() <= row.right(), "{id}: load stays in the row");
+        assert_eq!(row.size.height, plain, "{id}");
+        widths.push(load.size.width);
     }
+    assert_eq!(widths[0], widths[1]);
+    widths[0]
 }
 
 #[gpui::test]
-fn a_wide_host_row_keeps_the_load_graph_on_the_name_line(cx: &mut gpui::TestAppContext) {
-    assert_one_line(340., cx);
-    let cx = hosts_with_load(340., true, cx);
-    let load = cx.debug_bounds("host-load-ssh:test").unwrap();
-    assert!((load.size.width - px(graph_width())).abs() <= px(1.));
-    assert!(cx.debug_bounds("system-load-gauges").is_none());
+fn every_host_row_shows_the_same_compact_load(cx: &mut gpui::TestAppContext) {
+    let short = assert_compact(340., "Devbox", cx);
+    let long = assert_compact(340., "Devbox contributors on the netcup server", cx);
+    let narrow = assert_compact(232., "Devbox contributors on the netcup server", cx);
+    assert_eq!(short, long);
+    assert_eq!(short, narrow);
 }
 
 #[gpui::test]
-fn a_narrow_host_row_trades_the_graph_for_gauges(cx: &mut gpui::TestAppContext) {
-    assert_one_line(232., cx);
-    let cx = hosts_with_load(232., true, cx);
+fn hovering_a_host_s_load_shows_its_card_at_once(cx: &mut gpui::TestAppContext) {
+    let cx = hosts_with_load(340., "Devbox", true, cx);
+    assert!(cx.debug_bounds("system-load-card").is_none());
     let load = cx.debug_bounds("host-load-ssh:test").unwrap();
-    assert!(load.size.width < px(graph_width() / 2.));
-    assert!(cx.debug_bounds("system-load-gauges").is_some());
+    cx.simulate_mouse_move(load.center(), None, Modifiers::default());
+    cx.run_until_parked();
+    cx.update(|window, cx| full_draw(window, cx).clear(cx));
+    let card = cx.debug_bounds("system-load-card").unwrap();
+    assert!(card.size.width > load.size.width);
 }

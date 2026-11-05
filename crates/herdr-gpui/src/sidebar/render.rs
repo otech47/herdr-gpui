@@ -3,7 +3,7 @@
 //! caches only.
 
 use super::{
-    HOST_ARROW_WIDTH, HOST_GAP, HOST_NAME_GLYPHS, STATUS_WIDTH, SidebarDrag, agent_name,
+    HOST_ARROW_WIDTH, HOST_GAP, STATUS_WIDTH, SidebarDrag, agent_name,
     agents::{Indicators, Mark, agent_place, state_label, status_text},
     agents_sort,
     cell::{AgentRow, Cell, Fold, RowContext, RowData, RowState, WorkspaceRow, layout_for},
@@ -145,24 +145,13 @@ impl HerdrWindow {
                     }
                     - HOST_GAP)
                     .max(0.);
-                // The row is one line tall, so the load shares it with the name.
-                let glyph = super::metrics::glyph_width(font);
-                let line_width = crate::system_load::line_width(glyph);
-                let name_glyphs = endpoint.label.chars().count().min(HOST_NAME_GLYPHS) as f32;
                 let load_view = load.map(|reading| {
-                    if name_room - line_width >= name_glyphs * glyph {
-                        (
-                            line_width,
-                            div()
-                                .w(px(line_width))
-                                .flex()
-                                .flex_none()
-                                .justify_end()
-                                .child(crate::system_load::line(reading, theme, Some(glyph))),
-                        )
-                    } else {
-                        crate::system_load::gauges(reading, theme, glyph, (font.size * 0.8).round())
-                    }
+                    crate::system_load::compact(
+                        reading,
+                        theme,
+                        super::metrics::glyph_width(font),
+                        (font.size * 0.9).round(),
+                    )
                 });
                 let label_width =
                     (name_room - load_view.as_ref().map_or(-HOST_GAP, |(width, _)| *width)).max(0.);
@@ -250,7 +239,7 @@ impl HerdrWindow {
                                                 .child(label_text(&endpoint.label)),
                                         ),
                                 )
-                                .when_some(load_view.zip(load), |row, ((_, view), reading)| {
+                                .when_some(load_view, |row, (_, view)| {
                                     row.child(
                                         div()
                                             .id(SharedString::from(format!(
@@ -260,8 +249,11 @@ impl HerdrWindow {
                                             .flex_none()
                                             .child(view)
                                             .tooltip(crate::system_load::tooltip(
-                                                reading, &host, theme,
-                                            )),
+                                                cx.weak_entity(),
+                                                host.clone(),
+                                                theme,
+                                            ))
+                                            .tooltip_show_delay(std::time::Duration::ZERO),
                                     )
                                 })
                                 .child(
