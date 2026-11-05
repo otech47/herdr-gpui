@@ -27,6 +27,7 @@ image                          = { features = ["bmp", "tiff"], workspace = true 
 nucleo-matcher.workspace       = true
 pbkdf2.workspace               = true
 percent-encoding.workspace     = true
+pulldown-cmark.workspace       = true
 rodio.workspace                = true
 rusqlite.workspace             = true
 secrecy.workspace              = true

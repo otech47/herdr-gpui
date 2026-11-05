@@ -10,7 +10,7 @@ use std::path::{Component, Path, PathBuf};
 /// it `http://herdr-preview.localhost/`.
 pub(crate) const PREVIEW_SCHEME: &str = "herdr-preview";
 #[cfg(any(target_os = "macos", windows, test))]
-const PREVIEW_ORIGINS: [&str; 3] = [
+pub(super) const PREVIEW_ORIGINS: [&str; 3] = [
     "herdr-preview://localhost/",
     "http://herdr-preview.localhost/",
     "https://herdr-preview.localhost/",
@@ -109,7 +109,7 @@ impl Location {
     #[cfg(any(target_os = "macos", windows, test))]
     pub(crate) fn page_url(&self) -> String {
         match self {
-            Self::Web { url } => url.as_str().to_owned(),
+            Self::Web { url } => super::markdown::page_url(url),
             Self::Local { file } => file.page_url(),
             // Never loaded: these tabs are drawn by the app.
             Self::Review { .. } | Self::AgentSession { .. } => "about:blank".to_owned(),
@@ -145,6 +145,9 @@ impl Location {
     /// Where a page reported it went, relative to this tab: a local page
     /// stays in its folder, so another file there keeps the same root.
     pub(crate) fn visited(&self, reported: &str) -> Option<Self> {
+        if let Some(url) = super::markdown::source_url(reported) {
+            return Some(Self::Web { url });
+        }
         if let Some(entry) = PREVIEW_ORIGINS
             .iter()
             .find_map(|origin| reported.strip_prefix(origin))

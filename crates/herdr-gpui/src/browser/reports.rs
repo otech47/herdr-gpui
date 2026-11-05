@@ -26,7 +26,17 @@ impl WebUrl {
         let extension = name.rsplit('.').next()?.to_ascii_lowercase();
         matches!(
             extension.as_str(),
-            "html" | "htm" | "pdf" | "png" | "jpg" | "jpeg" | "webp" | "svg" | "txt" | "md"
+            "html"
+                | "htm"
+                | "pdf"
+                | "png"
+                | "jpg"
+                | "jpeg"
+                | "webp"
+                | "svg"
+                | "txt"
+                | "md"
+                | "markdown"
         )
         .then(|| name.into_owned())
     }

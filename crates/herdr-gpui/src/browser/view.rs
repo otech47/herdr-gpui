@@ -350,6 +350,11 @@ impl HerdrWindow {
                 Event::Title(id, title) => {
                     Store::update(cx, |store| store.visited(id, None, Some(&title)));
                 }
+                Event::Markdown(id, url) => {
+                    let location = Location::Web { url };
+                    Store::update(cx, |store| store.visited(id, Some(location.clone()), None));
+                    self.browser.pages.load(id, &location, cx);
+                }
                 // The field follows on the next sync, unless someone is
                 // typing in it.
                 Event::Loaded(id, url) => {

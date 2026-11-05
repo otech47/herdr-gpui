@@ -1,12 +1,13 @@
-//! Serves a local page's folder through the private preview scheme. The
-//! platform asks on the UI thread, so each request is queued for a worker
-//! that reads the file; nothing here touches the disk on the UI thread.
-use super::location::requested_file;
+//! The platform requests previews on the UI thread. File reads and Markdown
+//! downloads stay on the bounded worker queue.
+use super::{WebUrl, location::requested_file, markdown};
 use std::{
     borrow::Cow,
+    io::Read,
     path::{Path, PathBuf},
     sync::mpsc::{self, SyncSender, TrySendError},
     thread,
+    time::Duration,
 };
 use wry::{RequestAsyncResponder, http};
 
@@ -21,9 +22,13 @@ const PREVIEW_ORIGINS: [&str; 3] = [
 ];
 
 struct Job {
-    root: PathBuf,
-    path: String,
+    source: Source,
     responder: RequestAsyncResponder,
+}
+
+enum Source {
+    File { root: PathBuf, path: String },
+    Markdown(WebUrl),
 }
 
 pub(crate) struct Preview {
@@ -88,8 +93,61 @@ fn read(root: &Path, request_path: &str) -> Result<(Vec<u8>, &'static str), u16>
     if metadata.len() > MAX_FILE_BYTES {
         return Err(413);
     }
+    let markdown = markdown::is_path(&resolved.to_string_lossy());
+    if markdown && metadata.len() > markdown::MAX_BYTES {
+        return Err(413);
+    }
     let bytes = std::fs::read(&resolved).map_err(|_| 404_u16)?;
+    if markdown {
+        let source = std::str::from_utf8(&bytes).map_err(|_| 415_u16)?;
+        let title = resolved
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("Document");
+        return Ok((
+            markdown::render(source, title, None),
+            "text/html; charset=utf-8",
+        ));
+    }
     Ok((bytes, content_type(&resolved)))
+}
+
+fn read_markdown(url: &WebUrl) -> Result<(Vec<u8>, &'static str), u16> {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(8)))
+        .max_redirects(3)
+        .http_status_as_error(false)
+        .build()
+        .into();
+    let mut response = agent.get(url.as_str()).call().map_err(|error| {
+        tracing::warn!(%error, "Markdown request failed");
+        502_u16
+    })?;
+    let status = response.status().as_u16();
+    if !(200..=299).contains(&status) {
+        return Err(status);
+    }
+    let mut bytes = Vec::new();
+    response
+        .body_mut()
+        .as_reader()
+        .take(markdown::MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| 502_u16)?;
+    if bytes.len() as u64 > markdown::MAX_BYTES {
+        return Err(413);
+    }
+    let source = std::str::from_utf8(&bytes).map_err(|_| 415_u16)?;
+    let name = url
+        .0
+        .path_segments()
+        .and_then(Iterator::last)
+        .unwrap_or("Document");
+    let title = percent_encoding::percent_decode_str(name).decode_utf8_lossy();
+    Ok((
+        markdown::render(source, &title, Some(url.as_str())),
+        "text/html; charset=utf-8",
+    ))
 }
 
 /// Whether a request comes from a web page rather than from the local page
@@ -117,32 +175,44 @@ impl Preview {
             .name("browser-preview".into())
             .spawn(move || {
                 for job in queue {
-                    match read(&job.root, &job.path) {
+                    let result = match job.source {
+                        Source::File { root, path } => read(&root, &path),
+                        Source::Markdown(url) => read_markdown(&url),
+                    };
+                    match result {
                         Ok((bytes, kind)) => respond(job.responder, 200, kind, bytes),
-                        Err(status) => respond(job.responder, status, "text/plain", Vec::new()),
+                        Err(status) => respond(
+                            job.responder,
+                            status,
+                            "text/html; charset=utf-8",
+                            markdown::unavailable(status),
+                        ),
                     }
                 }
             })?;
         Ok(Self { jobs })
     }
 
-    /// Answers one request for a page. `root` is the page's folder, or
-    /// `None` for a web page, which the scheme serves nothing to.
+    /// `root` permits folder assets; remote Markdown needs only its source URL.
     pub(crate) fn handle(
         &self,
         root: Option<&Path>,
         request: &http::Request<Vec<u8>>,
         responder: RequestAsyncResponder,
     ) {
-        let Some(root) = root.filter(|_| !from_the_web(request)) else {
-            respond(responder, 403, "text/plain", Vec::new());
-            return;
+        let source = if let Some(url) = markdown::source_url(&request.uri().to_string()) {
+            Source::Markdown(url)
+        } else {
+            let Some(root) = root.filter(|_| !from_the_web(request)) else {
+                respond(responder, 403, "text/plain", Vec::new());
+                return;
+            };
+            Source::File {
+                root: root.to_owned(),
+                path: request.uri().path().to_owned(),
+            }
         };
-        let job = Job {
-            root: root.to_owned(),
-            path: request.uri().path().to_owned(),
-            responder,
-        };
+        let job = Job { source, responder };
         if let Err(TrySendError::Full(job) | TrySendError::Disconnected(job)) =
             self.jobs.try_send(job)
         {
@@ -150,6 +220,9 @@ impl Preview {
         }
     }
 }
+
+#[cfg(test)]
+mod markdown_tests;
 
 #[cfg(test)]
 mod tests {

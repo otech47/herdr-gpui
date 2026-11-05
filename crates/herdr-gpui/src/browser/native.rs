@@ -21,6 +21,7 @@ const EVENT_CAPACITY: usize = 64;
 pub(crate) enum Event {
     Title(TabId, String),
     Loaded(TabId, String),
+    Markdown(TabId, WebUrl),
     /// The page asked for a new window, which becomes a new tab.
     NewWindow(TabId, String),
     /// A screenshot for a note, as TIFF bytes, or `None` when WebKit had
@@ -109,7 +110,8 @@ impl Pages {
             return Ok(());
         };
         let id = tab.id;
-        let (title, loaded, popup, posted) = (
+        let (title, loaded, popup, posted, navigate) = (
+            self.sender.clone(),
             self.sender.clone(),
             self.sender.clone(),
             self.sender.clone(),
@@ -144,7 +146,15 @@ impl Pages {
                 }
             })
             .with_devtools(cfg!(debug_assertions))
-            .with_navigation_handler(|url| navigable(&url))
+            .with_navigation_handler(move |url| {
+                if let Ok(source) = WebUrl::try_from(url.as_str())
+                    && super::markdown::is_url(&source)
+                {
+                    report(&navigate, Event::Markdown(id, source));
+                    return false;
+                }
+                navigable(&url)
+            })
             .with_new_window_req_handler(move |url, _| {
                 report(&popup, Event::NewWindow(id, url));
                 wry::NewWindowResponse::Deny
