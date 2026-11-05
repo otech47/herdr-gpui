@@ -1,6 +1,6 @@
 //! Resolve user-selected links within the painted pane or popup only: web
-//! addresses, and the local file paths a pane prints, which open only on a
-//! link-modifier click on the machine that runs the pane.
+//! addresses, and file paths interpreted on the pane's host. Paths open only
+//! on a link-modifier click.
 use super::{HIDDEN, InputTarget, popup_origin, selection::shown, wheel_target};
 use herdr_client::protocol::{FrameData, PaneSurfaceFrame};
 use std::ops::Range;

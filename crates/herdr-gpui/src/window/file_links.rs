@@ -1,8 +1,8 @@
 //! Local file paths a pane prints, opened by a link-modifier click. A path is
 //! read from its row alone; the click resolves it against the pane's working
 //! directory and checks that it exists off the UI thread, so a word that only
-//! looks like a path opens nothing. A pane on an SSH host prints that host's
-//! paths, which this machine cannot open, so none are read there.
+//! looks like a path opens nothing. Preview documents on SSH hosts resolve
+//! through that host's file server, never through the desktop filesystem.
 //!
 //! Terminal output is untrusted, and a hyperlink's text need not match its
 //! target, so a click never launches anything. Only a plain folder or a
@@ -18,6 +18,8 @@ use std::{
     fs::Metadata,
     path::{Component, Path, PathBuf, Prefix},
 };
+
+pub(super) mod pages;
 
 /// Extensions of documents the system opens in a viewer or editor rather
 /// than running. Scripts are left out on purpose: `.py`, `.sh`, or `.js` may
@@ -155,8 +157,7 @@ fn executable(_: &Metadata) -> bool {
 }
 
 impl HerdrWindow {
-    /// The row-local link of either kind under `position` in a pane. Paths
-    /// count only on a pane this machine runs.
+    /// Remote paths are eligible only for document previews.
     pub(crate) fn local_link_at(&self, position: Point<Pixels>) -> Option<PaneLink> {
         if self.menu.page.is_some()
             || !self.live.surface_ready()
@@ -171,8 +172,14 @@ impl HerdrWindow {
             self.cell_width,
             self.config.terminal.line_height(),
         )?;
-        (matches!(link.link.target, RowTarget::Web(_)) || !self.selected_is_remote())
-            .then_some(link)
+        let supported = match &link.link.target {
+            RowTarget::Web(_) => true,
+            RowTarget::Path(path) => {
+                !self.selected_is_remote()
+                    || (crate::browser::EMBEDDED && cfg!(unix) && pages::preview_path(path))
+            }
+        };
+        supported.then_some(link)
     }
 
     /// The file path under `position`, with the directory it is relative to.

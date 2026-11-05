@@ -61,7 +61,14 @@ pub(crate) fn report_urls(output: &str) -> Vec<WebUrl> {
 
 impl Store {
     pub(crate) fn open_session_page(&mut self, source: &PageSource, url: WebUrl) -> Option<TabId> {
-        let location = Location::Web { url };
+        self.open_session_location(source, Location::Web { url })
+    }
+
+    pub(crate) fn open_session_location(
+        &mut self,
+        source: &PageSource,
+        location: Location,
+    ) -> Option<TabId> {
         if let Some(id) = self
             .session_pages(&source.scope, &source.workspace, &source.session)
             .find(|tab| tab.location.as_ref() == Some(&location))

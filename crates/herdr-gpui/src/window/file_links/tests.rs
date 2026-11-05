@@ -258,3 +258,5 @@ fn a_pane_on_an_ssh_host_has_no_file_links(cx: &mut gpui::TestAppContext) {
 
 #[cfg(unix)]
 mod file_urls;
+
+mod pages;

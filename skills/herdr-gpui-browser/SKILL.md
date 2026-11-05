@@ -30,6 +30,7 @@ herdr-gpui browser open http://localhost:3000 --no-focus
 - The page belongs to your session, identified by `HERDR_PANE_ID` and `HERDR_WORKSPACE_ID`. Use `--no-focus` when publishing a report so the current view stays selected. Omit it only when the user asks to switch to the page.
 - Keep the shareable URL in your reply. The page toolbar's **Open in browser** button opens the original URL externally.
 - Markdown files (`.md` and `.markdown`) open as formatted documents, including tables, code, images, and links to other documents. Local paths and HTTP URLs use the same page controls.
+- Cmd-clicking a printed Markdown or HTML path opens it in that session. On macOS, paths from SSH panes resolve through `~/.local/bin/tailopen` on the source host.
 - A local file is served with the other files in its folder, so relative
   links to CSS, scripts, and images work. Keep the page and its assets in a
   dedicated folder: never your home directory, and nothing in a hidden

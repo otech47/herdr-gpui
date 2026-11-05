@@ -292,6 +292,17 @@ impl HerdrWindow {
         modifiers: Modifiers,
     ) -> Option<PressedLink> {
         let url = self.terminal_link_at(position);
+        if modifiers.secondary()
+            && let Some(file) = self.file_link_at(position)
+            && super::file_links::pages::preview_path(&file.path)
+        {
+            return Some(PressedLink {
+                url: None,
+                cell: None,
+                file: Some(file),
+                position,
+            });
+        }
         let daemon = self.daemon_link_at(position);
         if url.is_some() || daemon.is_some() {
             // A plugin handler may claim any link the daemon can read, not
@@ -346,7 +357,17 @@ impl HerdrWindow {
             return false;
         }
         if let Some(file) = release.file {
-            self.open_file_link(file, cx);
+            let source = self
+                .link_cell_at(release.position)
+                .and_then(|cell| self.page_source_for_pane(cell.pane_id()));
+            if crate::browser::EMBEDDED
+                && super::file_links::pages::preview_path(&file.path)
+                && let Some(source) = source
+            {
+                self.open_file_page(file, source, window, cx);
+            } else if !self.selected_is_remote() {
+                self.open_file_link(file, cx);
+            }
             return true;
         }
         let fallback = release
