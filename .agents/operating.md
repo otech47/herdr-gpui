@@ -19,6 +19,8 @@ Neither program is installed through Homebrew. Do not reinstall either with it.
 
 The Mini has no app, no checkout and no signing keychain. The app keeps ssh connections to it: one `herdr remote-client-bridge` per window plus helper shells. After a Mini reboot the first bridge starts the Mini's daemon, detached in its own session with its standard streams on `/dev/null`, so that daemon outlives the app and the ssh session that started it. Updating the Mini's daemon means copying a new binary there and restarting it, which Oscar does.
 
+A third device, "Devbox", is the SetLife dev box `devbox-netcup-01`, a NixOS server reached as the `oscar` account through the ssh alias `devbox` on this Mac only, endpoint id `ssh:de9962317477c8659860f2aea0a00031`. It runs the daemon from the official v0.9.3 `herdr-linux-x86_64` release binary at `~/.local/bin/herdr`, the same version as both Macs. The directories the launcher chords name, `~/tools`, `~/fedibtc/fedi` and `~/WorkSTEPS`, do not exist there. The `control-setlife-devbox` skill covers the machine itself.
+
 Oscar keeps one macOS desktop per project and one app window per space: tools, fedi, setlife-network and worksteps on this Mac. Agent sessions run as tabs in those spaces, on either Mac.
 
 ## The repository
