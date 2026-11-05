@@ -140,7 +140,7 @@ fn a_full_command_queue_is_retried_without_a_status_error(cx: &mut gpui::TestApp
                 .clone(),
             view.options,
             true,
-            |_, stop| -> std::io::Result<herdr_client::Transport> {
+            |_, stop| -> std::io::Result<herdr_client::Stream> {
                 while !stop.load(std::sync::atomic::Ordering::Acquire) {
                     std::thread::sleep(std::time::Duration::from_millis(1));
                 }
