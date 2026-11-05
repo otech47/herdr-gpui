@@ -79,6 +79,8 @@ ditto target/release/Herdr.app /Applications/Herdr.app
 
 `just bundle` signs the bundle with this Mac's own certificate, so the app's privacy grants survive a reinstall. The executable inside the bundle is `Contents/MacOS/Herdr`.
 
+Run embedded browser checks from the signed app bundle. A bare Cargo executable does not exercise the bundle's App Transport Security policy. Include an HTTP report and its interactive content in the native check.
+
 A visible change is verified on the real window, not only in headless layout tests. `HERDR_TEST_SIDEBAR_HOLD=all` (or `by-device`, `device`) with the app's `--sidebar-test` flag holds a two-device sidebar fixture open. Run it under `env -i` with HOME and the XDG config and state dirs pointed at a scratch sandbox, so the held app never reads or writes the real config and state. Screenshot a window with `screencapture -x -l <window id> out.png`, with the id from the lister in `.agents/herdr-windows.swift`. System Events sees no gpui window. Keep screenshots, logs and scratch scripts in a `scratch new` run dir.
 
 ## Relaunching the app

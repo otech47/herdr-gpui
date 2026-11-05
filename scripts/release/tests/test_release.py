@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import plistlib
 import subprocess
 import shutil
 import tarfile
@@ -186,6 +187,9 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual((app / "Contents/Resources/THIRD-PARTY-NOTICES.txt").read_bytes(), self.notices.read_bytes())
         self.assertEqual((app / "Contents/Resources/Herdr.icns").read_bytes(), (ROOT / "assets/icons/Herdr.icns").read_bytes())
         self.assertEqual((app / "Contents/Resources/Assets.car").read_bytes(), (ROOT / "assets/icons/Herdr.car").read_bytes())
+        policy = plistlib.loads((app / "Contents/Info.plist").read_bytes()).get("NSAppTransportSecurity", {})
+        self.assertIs(policy.get("NSAllowsArbitraryLoadsInWebContent"), True)
+        self.assertIsNot(policy.get("NSAllowsArbitraryLoads"), True)
         for source in ("LICENSE", "NOTICE", "assets/icons/LICENSE-octicons", "crates/herdr-protocol/NOTICE.md", "crates/herdr-gpui/SOUND-NOTICE.md"):
             self.assertEqual((app / "Contents/Resources" / Path(source).name).read_bytes(), (ROOT / source).read_bytes())
         self.run_script("package-macos.sh", "20260920.3", arm, intel, self.work, self.notices, success=False)
