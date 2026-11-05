@@ -15,7 +15,7 @@ use crate::{
     Error, Result,
     usage::{Host, Shell},
 };
-pub(crate) use render::{gauges, line, tooltip};
+pub(crate) use render::{gauges, line, line_width, tooltip};
 use sample::{Memory, Os, Sample, Ticks};
 use std::{
     collections::{HashMap, VecDeque},
@@ -297,5 +297,29 @@ impl SystemLoad {
             }
         }
         changed
+    }
+}
+
+#[cfg(test)]
+impl SystemLoad {
+    /// Shows `host` at a fixed load with no worker sampling it.
+    pub(crate) fn hold(&mut self, host: Host, cpu: f32, memory: f32) {
+        let mut reading = Reading::default();
+        reading.apply(Ok(Sample {
+            cpu: Some(cpu),
+            memory: Some(Memory {
+                used: (memory * 1024.) as u64,
+                total: 100 * 1024,
+            }),
+            cores: None,
+            load: None,
+        }));
+        self.monitors.insert(
+            host,
+            Monitor {
+                worker: None,
+                reading,
+            },
+        );
     }
 }

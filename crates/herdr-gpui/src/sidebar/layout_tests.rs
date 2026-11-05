@@ -29,6 +29,8 @@ mod host_fold;
 #[cfg(test)]
 mod host_groups;
 #[cfg(test)]
+mod host_load;
+#[cfg(test)]
 mod layouts;
 #[cfg(test)]
 mod listening_ports;

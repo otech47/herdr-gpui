@@ -1,6 +1,6 @@
 //! Drawing a host's load: a CPU sparkline and a memory meter with their
-//! shares in the status bar and on roomy host rows, two small gauges after a
-//! compact host's name, and the details in a tooltip.
+//! shares in the status bar and after a host's name, two small gauges there
+//! instead when the row is too narrow, and the details in a tooltip.
 
 use super::{HISTORY, Reading, sample::Memory};
 use crate::{config::Theme, usage::Host, window::HerdrWindow};
@@ -12,6 +12,9 @@ const GRAPH_HEIGHT: f32 = 11.;
 const METER_WIDTH: f32 = 32.;
 const GAUGE_WIDTH: f32 = 3.;
 const ITEM_GAP: f32 = 5.;
+const LINE_GAP: f32 = 10.;
+/// Glyphs a label takes: `CPU`, `MEM`.
+const LABEL_GLYPHS: f32 = 3.;
 /// Glyphs a share takes at most: `100%`.
 const SHARE_GLYPHS: f32 = 4.;
 const CPU_WARN: f32 = 75.;
@@ -104,14 +107,22 @@ pub(crate) fn line(reading: &Reading, theme: &Theme, glyph: Option<f32>) -> Div 
     div()
         .flex()
         .items_center()
-        .gap(px(10.))
+        .gap(px(LINE_GAP))
         .overflow_hidden()
         .child(cpu)
         .children(memory)
 }
 
-/// Two vertical gauges with their shares, for a host row with no room for a
-/// second line, and the width they take.
+/// The width `line` takes with `glyph` fixed. Change the two together.
+pub(crate) fn line_width(glyph: f32) -> f32 {
+    let text = (LABEL_GLYPHS + SHARE_GLYPHS) * glyph + 2. * ITEM_GAP;
+    let history = HISTORY as f32;
+    let sparkline = history * BAR_WIDTH + (history - 1.) * BAR_GAP;
+    2. * text + sparkline + METER_WIDTH + LINE_GAP
+}
+
+/// Two vertical gauges with their shares, for a host row too narrow for
+/// `line`, and the width they take.
 pub(crate) fn gauges(reading: &Reading, theme: &Theme, glyph: f32, height: f32) -> (f32, Div) {
     let item_width = GAUGE_WIDTH + 2. + glyph * SHARE_GLYPHS;
     let width = 2. * item_width + ITEM_GAP;

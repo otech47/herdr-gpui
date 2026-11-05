@@ -3,7 +3,7 @@
 //! caches only.
 
 use super::{
-    HOST_ARROW_WIDTH, HOST_GAP, STATUS_WIDTH, SidebarDrag, agent_name,
+    HOST_ARROW_WIDTH, HOST_GAP, HOST_NAME_GLYPHS, STATUS_WIDTH, SidebarDrag, agent_name,
     agents::{Indicators, Mark, agent_place, state_label, status_text},
     agents_sort,
     cell::{AgentRow, Cell, Fold, RowContext, RowData, RowState, WorkspaceRow, layout_for},
@@ -135,33 +135,42 @@ impl HerdrWindow {
                     .show_system_load
                     .then(|| self.system_load.get(&host))
                     .flatten();
-                // Densities with detail lines give the load its own line;
-                // compact ones fit gauges between the name and the status.
-                let load_line = load.filter(|_| layout.workspace_details());
-                let gauges = load.filter(|_| load_line.is_none()).map(|reading| {
-                    crate::system_load::gauges(
-                        reading,
-                        theme,
-                        super::metrics::glyph_width(font),
-                        (font.size * 0.8).round(),
-                    )
-                });
-                // The removal pulse and the gauges take their room from the
+                // The removal pulse and the load take their room from the
                 // label, not from the status.
-                let label_width = (host_label_width
+                let name_room = (host_label_width
                     - if removing {
                         STATUS_WIDTH + HOST_GAP
                     } else {
                         0.
                     }
-                    - gauges.as_ref().map_or(0., |(width, _)| width + HOST_GAP))
-                .max(0.);
-                let lines = 1. + if load_line.is_some() { 1. } else { 0. };
+                    - HOST_GAP)
+                    .max(0.);
+                // The row is one line tall, so the load shares it with the name.
+                let glyph = super::metrics::glyph_width(font);
+                let line_width = crate::system_load::line_width(glyph);
+                let name_glyphs = endpoint.label.chars().count().min(HOST_NAME_GLYPHS) as f32;
+                let load_view = load.map(|reading| {
+                    if name_room - line_width >= name_glyphs * glyph {
+                        (
+                            line_width,
+                            div()
+                                .w(px(line_width))
+                                .flex()
+                                .flex_none()
+                                .justify_end()
+                                .child(crate::system_load::line(reading, theme, Some(glyph))),
+                        )
+                    } else {
+                        crate::system_load::gauges(reading, theme, glyph, (font.size * 0.8).round())
+                    }
+                });
+                let label_width =
+                    (name_room - load_view.as_ref().map_or(-HOST_GAP, |(width, _)| *width)).max(0.);
                 spaces = spaces.child(
                     div()
                         .id(SharedString::from(format!("host-{endpoint_id}")))
                         .debug_selector(|| format!("host-{endpoint_id}"))
-                        .h(px(lines * line_height(font)
+                        .h(px(line_height(font)
                             + 2. * layout.host_padding()
                             + look.chrome_height()))
                         .flex_none()
@@ -241,14 +250,15 @@ impl HerdrWindow {
                                                 .child(label_text(&endpoint.label)),
                                         ),
                                 )
-                                .when_some(gauges.zip(load), |row, ((_, gauges), reading)| {
+                                .when_some(load_view.zip(load), |row, ((_, view), reading)| {
                                     row.child(
                                         div()
                                             .id(SharedString::from(format!(
                                                 "host-load-{endpoint_id}"
                                             )))
+                                            .debug_selector(|| format!("host-load-{endpoint_id}"))
                                             .flex_none()
-                                            .child(gauges)
+                                            .child(view)
                                             .tooltip(crate::system_load::tooltip(
                                                 reading, &host, theme,
                                             )),
@@ -267,23 +277,6 @@ impl HerdrWindow {
                                         })),
                                 ),
                         )
-                        .when_some(load_line, |row, reading| {
-                            row.child(
-                                div()
-                                    .id(SharedString::from(format!("host-load-{endpoint_id}")))
-                                    .h(px(line_height(font)))
-                                    .flex()
-                                    .items_center()
-                                    .pl(px(HOST_ARROW_WIDTH + HOST_GAP))
-                                    .overflow_hidden()
-                                    .child(crate::system_load::line(
-                                        reading,
-                                        theme,
-                                        Some(super::metrics::glyph_width(font)),
-                                    ))
-                                    .tooltip(crate::system_load::tooltip(reading, &host, theme)),
-                            )
-                        })
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.select_endpoint(&select_id, cx);
                             window.focus(&this.focus, cx);
