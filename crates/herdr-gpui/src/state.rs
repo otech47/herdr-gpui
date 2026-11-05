@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 mod projection;
 
-
 pub(crate) type DialogResponse = Result<serde_json::Value, Arc<crate::Error>>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

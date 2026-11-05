@@ -45,9 +45,9 @@ pub use clipboard::{ClipboardImageCancellation, ClipboardImageUpload};
 pub use compat::{MIN_HERDR_VERSION, VersionMismatch};
 pub use connect::{connect, connect_with_connector, connect_with_surface_active};
 pub use discovery::{ConnectTarget, session_socket};
+pub use environment::set_command_environment;
 /// Error returned when queueing commands; also available as the crate's `Error`.
 pub use error::Error as SendError;
-pub use environment::set_command_environment;
 pub use error::{Error, Result, StorageOperation};
 pub use event::ClientEvent;
 pub use forward::{ForwardEvent, PortForward, preferred_local_port};
