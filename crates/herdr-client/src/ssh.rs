@@ -53,6 +53,7 @@ const PROBE_DONE: &str = "herdr-probe:done";
 const PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 /// `ssh -G` only reads configuration, but a cold start on a busy machine
 /// has taken over five seconds.
+#[cfg(unix)]
 const RESOLVE_TIMEOUT: Duration = Duration::from_secs(15);
 #[cfg(unix)]
 const PROBE_OUTPUT_LIMIT: u64 = 64 * 1024;
