@@ -2,7 +2,7 @@
 //! is a platform child view layered above the GPUI surface: one per side of a
 //! split is visible, and the window hides them while an overlay is open.
 use super::{Location, Tab, TabId, WebUrl, location::PREVIEW_SCHEME, preview::Preview};
-use gpui::{App, AppContext as _, Entity, Window};
+use gpui::{App, AppContext as _, CursorStyle, Entity, Window};
 use gpui_wry::WebView;
 use std::{
     collections::HashMap,
@@ -10,6 +10,8 @@ use std::{
     sync::mpsc::{self, Receiver, SyncSender, TrySendError},
 };
 use wry::raw_window_handle::HasWindowHandle;
+
+mod cursor;
 
 /// Enough for a burst of title and load reports between two window ticks;
 /// later ones are dropped rather than queued without bound.
@@ -35,13 +37,22 @@ pub(crate) enum Event {
     /// A message the annotation picker posted. Any script in the page can
     /// post one, so it is parsed as untrusted input.
     Posted(TabId, String),
+    Cursor(TabId, CursorStyle),
 }
 
 /// Longer posts are dropped before they are queued.
 const MAX_POST_BYTES: usize = 64 * 1024;
 
+fn post_event(id: TabId, body: String) -> Option<Event> {
+    if let Some(cursor) = cursor::parse(&body) {
+        return Some(Event::Cursor(id, cursor));
+    }
+    (body.len() <= MAX_POST_BYTES).then_some(Event::Posted(id, body))
+}
+
 pub(crate) struct Pages {
     pages: HashMap<TabId, Entity<WebView>>,
+    cursors: HashMap<TabId, CursorStyle>,
     shown: Vec<TabId>,
     sender: SyncSender<Event>,
     events: Receiver<Event>,
@@ -54,6 +65,7 @@ impl Default for Pages {
         let (sender, events) = mpsc::sync_channel(EVENT_CAPACITY);
         Self {
             pages: HashMap::new(),
+            cursors: HashMap::new(),
             shown: Vec::new(),
             sender,
             events,
@@ -139,10 +151,10 @@ impl Pages {
                     preview.handle(root.as_deref(), &request, responder);
                 },
             )
+            .with_initialization_script(cursor::SCRIPT)
             .with_ipc_handler(move |request| {
-                let body = request.into_body();
-                if body.len() <= MAX_POST_BYTES {
-                    report(&posted, Event::Posted(id, body));
+                if let Some(event) = post_event(id, request.into_body()) {
+                    report(&posted, event);
                 }
             })
             .with_devtools(cfg!(debug_assertions))
@@ -162,10 +174,12 @@ impl Pages {
             // Nothing a page offers is saved to disk.
             .with_download_started_handler(|_, _| false)
             .with_document_title_changed_handler(move |text| report(&title, Event::Title(id, text)))
-            .with_on_page_load_handler(move |event, url| {
-                if matches!(event, wry::PageLoadEvent::Finished) {
-                    report(&loaded, Event::Loaded(id, url));
+            .with_on_page_load_handler(move |event, url| match event {
+                // The next document reports its cursor once the mouse moves.
+                wry::PageLoadEvent::Started => {
+                    report(&loaded, Event::Cursor(id, CursorStyle::Arrow));
                 }
+                wry::PageLoadEvent::Finished => report(&loaded, Event::Loaded(id, url)),
             });
         // Window has an inherent `window_handle` of its own.
         let handle = HasWindowHandle::window_handle(window)?;
@@ -206,6 +220,7 @@ impl Pages {
 
     pub(crate) fn close(&mut self, id: TabId) {
         self.shown.retain(|shown| *shown != id);
+        self.cursors.remove(&id);
         // Dropping the entity hides the view; the platform releases it with
         // the last handle.
         self.pages.remove(&id);
@@ -308,6 +323,18 @@ impl Pages {
         if let Some(page) = self.pages.get(&id) {
             let _ = page.read(cx).raw().focus();
         }
+    }
+
+    pub(crate) fn cursor(&self, id: TabId) -> CursorStyle {
+        self.cursors.get(&id).copied().unwrap_or_default()
+    }
+
+    /// Returns whether the page's cursor changed.
+    pub(crate) fn set_cursor(&mut self, id: TabId, cursor: CursorStyle) -> bool {
+        if !self.pages.contains_key(&id) {
+            return false;
+        }
+        self.cursors.insert(id, cursor).unwrap_or_default() != cursor
     }
 
     /// Everything the pages reported since the last call.

@@ -367,6 +367,11 @@ impl HerdrWindow {
                     self.page_loaded(id, cx);
                 }
                 Event::Posted(id, body) => self.page_posted(id, &body, window, cx),
+                Event::Cursor(id, cursor) => {
+                    if self.browser.pages.set_cursor(id, cursor) {
+                        cx.notify();
+                    }
+                }
                 #[cfg(target_os = "macos")]
                 Event::Captured(id, capture, tiff) => self.page_captured(id, capture, tiff, cx),
                 #[cfg(target_os = "macos")]

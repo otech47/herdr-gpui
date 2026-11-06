@@ -351,11 +351,22 @@ impl HerdrWindow {
             ));
         #[cfg(any(target_os = "macos", windows))]
         let (picture, bounds) = (self.frozen_picture(id), self.browser.page_bounds.clone());
+        // The window's cursor covers the page's own, so it shows the one the
+        // page asked for. A frozen picture takes no input.
+        #[cfg(any(target_os = "macos", windows))]
+        let cursor = if picture.is_some() {
+            CursorStyle::Arrow
+        } else {
+            self.browser.pages.cursor(id)
+        };
+        #[cfg(not(any(target_os = "macos", windows)))]
+        let cursor = CursorStyle::Arrow;
         let content = match (page, &failure) {
             (Some(page), None) => div()
                 .flex_1()
                 .min_h_0()
                 .relative()
+                .cursor(cursor)
                 .child(page)
                 // Where the page draws, so a menu hides only the pages it
                 // covers; and, while one does, the page's picture in its place.
