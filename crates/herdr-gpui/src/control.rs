@@ -196,10 +196,6 @@ fn open_browser(request: &BrowserOpen, cx: &mut App) -> Response {
     )
 }
 
-/// Brings the window showing the named workspace to the front, at the named
-/// tab. Without one, a window showing a space of the same name switches to
-/// it, else the frontmost window of its daemon shows it, or a window opens
-/// for it.
 #[cfg(unix)]
 fn focus_workspace(caller: &Caller, tab: Option<&str>, cx: &mut App) -> Response {
     if !valid_caller(caller) || tab.is_some_and(|tab| !plain(tab, 256)) {
@@ -214,8 +210,7 @@ fn focus_workspace(caller: &Caller, tab: Option<&str>, cx: &mut App) -> Response
             "workspace focus needs a workspace ID",
         );
     };
-    let windows = main_windows(cx);
-    if windows.is_empty() {
+    if main_windows(cx).is_empty() {
         return Response::error(ErrorCode::NoWindow, "Herdr GPUI has no window open");
     }
     let target = Target {
@@ -224,46 +219,57 @@ fn focus_workspace(caller: &Caller, tab: Option<&str>, cx: &mut App) -> Response
         pane: None,
         device: caller.device.as_deref(),
     };
-    let focused = Response::Focused {
-        workspace_id: workspace.to_owned(),
-    };
+    if show_workspace(&target, tab, cx) {
+        return Response::Focused {
+            workspace_id: workspace.to_owned(),
+        };
+    }
+    Response::error(
+        ErrorCode::WorkspaceNotFound,
+        format!("No Herdr GPUI window is connected to a daemon with workspace {workspace}"),
+    )
+}
+
+/// Brings the window showing the target's workspace to the front, at `tab`.
+/// Without one, a window showing a space of the same name switches to it,
+/// else the frontmost window of its daemon shows it, or a window opens for it.
+#[cfg(unix)]
+pub(crate) fn show_workspace(target: &Target<'_>, tab: Option<&str>, cx: &mut App) -> bool {
+    let windows = main_windows(cx);
     for strict in [true, false] {
         for handle in &windows {
             let raised = handle.update(cx, |view, window, cx| {
-                view.raise_if_showing(&target, tab, strict, window, cx)
+                view.raise_if_showing(target, tab, strict, window, cx)
             });
             if raised.unwrap_or(false) {
                 cx.activate(true);
-                return focused;
+                return true;
             }
         }
     }
     for strict in [true, false] {
         for handle in &windows {
             let switched = handle.update(cx, |view, window, cx| {
-                view.raise_if_showing_namesake(&target, tab, strict, window, cx)
+                view.raise_if_showing_namesake(target, tab, strict, window, cx)
             });
             if switched.unwrap_or(false) {
                 cx.activate(true);
-                return focused;
+                return true;
             }
         }
     }
     for strict in [true, false] {
         for handle in &windows {
             let shown = handle.update(cx, |view, window, cx| {
-                view.show_requested_workspace(&target, tab, strict, window, cx)
+                view.show_requested_workspace(target, tab, strict, window, cx)
             });
             if shown.unwrap_or(false) {
                 cx.activate(true);
-                return focused;
+                return true;
             }
         }
     }
-    Response::error(
-        ErrorCode::WorkspaceNotFound,
-        format!("No Herdr GPUI window is connected to a daemon with workspace {workspace}"),
-    )
+    false
 }
 
 /// Reloads every page the calling pane opened, in every window.
