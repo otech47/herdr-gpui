@@ -66,7 +66,7 @@ if ! command -v cargo >/dev/null; then
         | sh -s -- -y --no-modify-path --default-toolchain none >/dev/null 2>&1
 fi
 # Installs the pinned toolchain and its clippy component from rust-toolchain.toml.
-rustup show >/dev/null
+rustup toolchain install >/dev/null
 # One rustc per 2 GiB. A cold build of this graph at full parallelism exhausts a
 # default Docker VM, and the container is then OOM-killed with exit code 137.
 jobs=$(( $(awk '/^MemTotal:/ {print $2}' /proc/meminfo) / (2 * 1024 * 1024) ))
