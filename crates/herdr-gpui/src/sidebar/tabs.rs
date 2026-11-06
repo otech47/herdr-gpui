@@ -19,6 +19,7 @@ use herdr_client::protocol::{ClientShellAgent, ClientShellSnapshot, ClientShellT
 use std::{ops::Range, time::Instant};
 
 pub(super) mod attention;
+mod elsewhere;
 mod views;
 pub(crate) use views::ListedTab;
 #[cfg(unix)]
@@ -50,15 +51,18 @@ impl HerdrWindow {
             .iter()
             .map(|row| tab_title(row.tab, row.snapshot))
             .collect();
+        let mut elements = self.waiting_rows(rows, row_cx, content_x, &listed, cx);
+        let lead = elements.len();
         if listed.is_empty() {
+            elements.push(
+                div()
+                    .px(px(content_x))
+                    .text_color(rgb(row_cx.theme.muted))
+                    .child(label_text("no tabs"))
+                    .into_any_element(),
+            );
             return TabRows {
-                rows: vec![
-                    div()
-                        .px(px(content_x))
-                        .text_color(rgb(row_cx.theme.muted))
-                        .child(label_text("no tabs"))
-                        .into_any_element(),
-                ],
+                rows: elements,
                 drop: None,
                 sliding: false,
             };
@@ -72,9 +76,10 @@ impl HerdrWindow {
             .map(|row| row_key(&self.endpoints[row.endpoint].id, &row.tab.tab_id))
             .collect();
         let endpoints: Vec<usize> = listed.iter().map(|row| row.endpoint).collect();
-        // Each row's child index in the list, past the device lines above it.
+        // Each row's child index in the list, past the waiting rows and the
+        // device lines above it.
         let children: Vec<usize> = {
-            let (mut group, mut next) = (None, 0);
+            let (mut group, mut next) = (None, lead);
             endpoints
                 .iter()
                 .map(|&endpoint| {
@@ -112,7 +117,7 @@ impl HerdrWindow {
         let mut drop = Vec::new();
         let trailing = Trailing::new(row_cx);
         let tab_cx = trailing.context(row_cx);
-        let mut elements = Vec::with_capacity(listed.len());
+        elements.reserve(listed.len());
         let mut group = None;
         for (position, (row, name)) in listed.iter().zip(&names).enumerate() {
             let endpoint = &self.endpoints[row.endpoint];

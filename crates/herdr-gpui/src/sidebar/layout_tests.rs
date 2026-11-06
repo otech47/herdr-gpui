@@ -71,6 +71,8 @@ mod tabs_views_reorder;
 #[cfg(test)]
 mod tabs_views_rows;
 #[cfg(test)]
+mod tabs_waiting;
+#[cfg(test)]
 mod text_width;
 #[cfg(test)]
 mod update_panel;
