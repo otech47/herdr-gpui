@@ -460,6 +460,8 @@ impl HerdrWindow {
         self.poll_copy_mode(cx);
         #[cfg(target_os = "macos")]
         crate::app_badge::sync(window.window_handle().window_id(), &self.endpoints, cx);
+        #[cfg(target_os = "macos")]
+        self.poll_file_promises(window, cx);
         self.cancel_stale_image();
         self.poll_file_transfer(cx);
         self.update_workspace_dialog(window, cx);
@@ -900,6 +902,8 @@ impl HerdrWindow {
             return this;
         }
         Self::poll_on_frame(cx.entity().downgrade(), window);
+        #[cfg(target_os = "macos")]
+        Self::accept_file_promises(window);
         this.sidebar_preferences = this.endpoints[0]
             .connection
             .target

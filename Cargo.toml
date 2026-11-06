@@ -55,8 +55,8 @@ objc                 = "0.2"
 oo7                  = { default-features = false, features = ["async-std", "native_crypto"], version = "0.6" }
 dispatch2            = { default-features = false, features = ["objc2", "std"], version = "0.3.1" }
 objc2                = "0.6.4"
-objc2-app-kit        = { default-features = false, features = ["NSApplication", "NSDockTile", "NSImage", "NSImageRep", "NSPasteboard", "std"], version = "0.3.2" }
-objc2-foundation     = { default-features = false, features = ["NSBundle", "NSData", "NSError", "NSProcessInfo", "NSString", "std"], version = "0.3.2" }
+objc2-app-kit        = { default-features = false, features = ["NSApplication", "NSDockTile", "NSDragging", "NSFilePromiseReceiver", "NSImage", "NSImageRep", "NSPasteboard", "NSResponder", "NSView", "NSWindow", "block2", "std"], version = "0.3.2" }
+objc2-foundation     = { default-features = false, features = ["NSArray", "NSBundle", "NSData", "NSDictionary", "NSError", "NSGeometry", "NSOperation", "NSProcessInfo", "NSString", "NSURL", "std"], version = "0.3.2" }
 # The WebKit snapshot behind page annotation screenshots, at the versions wry uses.
 block2               = "0.6.2"
 objc2-core-foundation = { default-features = false, features = ["CFCGTypes", "std"], version = "0.3.2" }

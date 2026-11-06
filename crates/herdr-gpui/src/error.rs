@@ -84,6 +84,19 @@ pub enum Error {
     FileDropControl,
     #[error("Dropped paths must not be empty.")]
     FileDropEmptyPath,
+    #[cfg(target_os = "macos")]
+    #[error("The dragged file did not arrive: {reason}")]
+    FilePromise { reason: String },
+    #[cfg(target_os = "macos")]
+    #[error("Could not create {} for dragged files.", path.display())]
+    FilePromiseFolder {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[cfg(target_os = "macos")]
+    #[error("This window cannot take dragged files that are still being written.")]
+    FilePromiseWindow,
     #[error("Could not {operation} the local image file.")]
     ImageFile {
         operation: &'static str,

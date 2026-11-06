@@ -21,28 +21,60 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.active_session_tab(cx).is_some() {
-            return;
-        }
         // GPUI translates the platform Submit position into window mouse state
         // before invoking on_drop; the payload itself carries no coordinates.
-        let Some(target) = self.file_drop_target(window.mouse_position()) else {
-            return;
-        };
-        cx.stop_propagation();
-        if paths.paths().is_empty() {
-            return;
+        if self.drop_paths(paths.paths(), window.mouse_position(), window, cx) {
+            cx.stop_propagation();
         }
-        let result = quote_paths(paths.paths()).and_then(|text| {
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(super) fn accept_file_promises(window: &Window) {
+        if let Err(error) = promise::accept(window) {
+            tracing::warn!(%error, "Dragged screenshots and images will not drop");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(super) fn poll_file_promises(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        for drop in promise::take(window.window_handle().window_id()) {
+            if let Some(error) = drop.errors.first() {
+                self.local_error = Some(format!("Files not pasted: {error}"));
+                cx.notify();
+            }
+            if !drop.paths.is_empty() {
+                self.drop_paths(&drop.paths, drop.position, window, cx);
+            }
+        }
+    }
+
+    /// Whether a terminal under `position` took the drop.
+    fn drop_paths(
+        &mut self,
+        paths: &[PathBuf],
+        position: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if self.active_session_tab(cx).is_some() {
+            return false;
+        }
+        let Some(target) = self.file_drop_target(position) else {
+            return false;
+        };
+        if paths.is_empty() {
+            return true;
+        }
+        let result = quote_paths(paths).and_then(|text| {
             if self.accepts_remote_images()
-                && let [path] = paths.paths()
+                && let [path] = paths
                 && let Some(source) = super::image_source::from_path(path)
             {
                 self.start_remote_image(target.clone(), source, Some(text), cx);
                 return Ok(());
             }
             if self.accepts_remote_images() {
-                self.start_file_transfer(target.clone(), paths.paths().to_vec(), cx);
+                self.start_file_transfer(target.clone(), paths.to_vec(), cx);
                 return Ok(());
             }
             let endpoint = &self.endpoints[self.selected_endpoint];
@@ -67,6 +99,7 @@ impl HerdrWindow {
                 cx.notify();
             }
         }
+        true
     }
 
     fn file_drop_target(&self, position: Point<Pixels>) -> Option<InputTarget> {
@@ -130,5 +163,7 @@ pub(super) fn quote_paths(paths: &[PathBuf]) -> Result<String> {
     Ok(quoted)
 }
 
+#[cfg(target_os = "macos")]
+mod promise;
 #[cfg(test)]
 mod tests;
