@@ -35,7 +35,8 @@ def app_pids():
 
 
 def local_server_pid():
-    out = run("pgrep", "-f", f"^{HERDR} server$").stdout.split()
+    # -a: a session running in a herdr pane has the server as an ancestor, which pgrep skips by default
+    out = run("pgrep", "-af", f"^{HERDR} server$").stdout.split()
     return int(out[0]) if out else None
 
 
