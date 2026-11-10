@@ -13,45 +13,11 @@ use crate::{
 };
 use gpui::{prelude::*, *};
 use herdr_client::protocol::AgentStatus;
-use std::cmp::Reverse;
 
 impl HerdrWindow {
     /// Blocked tabs the list does not hold, the latest to start waiting first.
     pub(crate) fn waiting_elsewhere<'a>(&'a self, listed: &[ListedTab<'a>]) -> Vec<ListedTab<'a>> {
-        let mut waiting = Vec::new();
-        for (index, endpoint) in self.endpoints.iter().enumerate() {
-            let live = self.live_of(index);
-            if !endpoint.enabled || !live.status.is_connected() {
-                continue;
-            }
-            let Some(snapshot) = live.snapshot.as_deref() else {
-                continue;
-            };
-            waiting.extend(
-                snapshot
-                    .tabs
-                    .iter()
-                    .filter(|tab| tab.agent_status == AgentStatus::Blocked)
-                    .filter(|tab| {
-                        !listed
-                            .iter()
-                            .any(|row| row.endpoint == index && row.tab.tab_id == tab.tab_id)
-                    })
-                    .map(|tab| ListedTab {
-                        endpoint: index,
-                        snapshot,
-                        tab,
-                    }),
-            );
-        }
-        waiting.sort_by_key(|row| {
-            Reverse(
-                self.attention
-                    .place(&self.endpoints[row.endpoint].id, &row.tab.tab_id, 0)
-                    .since,
-            )
-        });
-        waiting
+        herdr_board::waiting_elsewhere(&self.sources(), listed, &self.attention)
     }
 
     /// The rows carry no number: cmd-1 to cmd-9 count only the list's own rows.
@@ -82,13 +48,10 @@ impl HerdrWindow {
         for row in &waiting {
             let endpoint = &self.endpoints[row.endpoint];
             let name = tab_title(row.tab, row.snapshot);
-            let space =
-                clipped(workspace_label_by_id(row.snapshot, &row.tab.workspace_id).unwrap_or(""));
-            let place = if row.endpoint == 0 {
-                space
-            } else {
-                format!("{space} · {}", clipped(&endpoint.label))
-            };
+            let place = herdr_board::waiting_place(
+                workspace_label_by_id(row.snapshot, &row.tab.workspace_id).unwrap_or(""),
+                (row.endpoint != 0).then_some(endpoint.label.as_str()),
+            );
             let agent = row
                 .snapshot
                 .agents
@@ -161,16 +124,4 @@ impl HerdrWindow {
     ) {
         self.navigate_endpoint(&device, crate::NavigationTarget::Tab(&tab), cx);
     }
-}
-
-/// A tag keeps its full width while the title truncates, so long space and
-/// device names are cut short to leave the title room.
-fn clipped(name: &str) -> String {
-    const MOST: usize = 16;
-    if name.chars().count() <= MOST {
-        return name.to_owned();
-    }
-    let mut clipped: String = name.chars().take(MOST - 1).collect();
-    clipped.push('…');
-    clipped
 }

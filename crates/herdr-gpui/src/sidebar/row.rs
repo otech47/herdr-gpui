@@ -659,15 +659,3 @@ fn shared_label_text(text: SharedString) -> SharedString {
 fn shared_label_text(text: SharedString) -> layout_tests::ProbeText {
     layout_tests::ProbeText(text)
 }
-
-pub(super) fn first_text<'a>(
-    values: impl IntoIterator<Item = Option<&'a str>>,
-    fallback: &'a str,
-) -> &'a str {
-    values
-        .into_iter()
-        .flatten()
-        .map(str::trim)
-        .find(|s| !s.is_empty())
-        .unwrap_or(fallback)
-}

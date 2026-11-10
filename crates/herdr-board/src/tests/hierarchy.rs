@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn hierarchy_uses_git_metadata_and_emits_each_workspace_once() {
-    let mut workspaces = layout_tests::snapshot(7).workspaces;
+    let mut workspaces = snapshot(7).workspaces;
     for workspace in &mut workspaces {
         workspace.worktree = None;
         workspace.label = "same label".into();
@@ -16,7 +16,7 @@ fn hierarchy_uses_git_metadata_and_emits_each_workspace_once() {
         (5, "/other/.git", false),
         (6, "/orphan/.git", true),
     ] {
-        workspaces[index].worktree = Some(herdr_client::protocol::ClientShellWorktree {
+        workspaces[index].worktree = Some(ClientShellWorktree {
             key: key.into(),
             label: "same repo name".into(),
             is_linked_worktree: linked,
@@ -43,8 +43,8 @@ fn hierarchy_uses_git_metadata_and_emits_each_workspace_once() {
     assert!(workspace_entries(&[]).is_empty());
 }
 
-fn worktree(key: &str, linked: bool) -> Option<herdr_client::protocol::ClientShellWorktree> {
-    Some(herdr_client::protocol::ClientShellWorktree {
+fn worktree(key: &str, linked: bool) -> Option<ClientShellWorktree> {
+    Some(ClientShellWorktree {
         key: key.into(),
         label: "repo".into(),
         is_linked_worktree: linked,
@@ -56,7 +56,7 @@ fn worktree(key: &str, linked: bool) -> Option<herdr_client::protocol::ClientShe
 /// worktree turns a repository into a group.
 #[test]
 fn every_plain_checkout_is_a_parent_and_only_linked_worktrees_form_groups() {
-    let mut workspaces = layout_tests::snapshot(6).workspaces;
+    let mut workspaces = snapshot(6).workspaces;
     for workspace in &mut workspaces {
         workspace.worktree = None;
     }
@@ -67,7 +67,7 @@ fn every_plain_checkout_is_a_parent_and_only_linked_worktrees_form_groups() {
     assert_eq!(workspace_entries(&workspaces), flat);
     let none = std::collections::HashSet::new();
     assert!(
-        super::super::visible_workspace_entries(&workspaces, &none)
+        visible_workspace_entries(&workspaces, &none)
             .iter()
             .all(|entry| entry.2.is_none())
     );
@@ -86,7 +86,7 @@ fn every_plain_checkout_is_a_parent_and_only_linked_worktrees_form_groups() {
     );
     // Each parent folds the group; folding hides only linked worktrees.
     for collapsed in [none.clone(), ["/repo/.git".to_owned()].into()] {
-        let entries = super::super::visible_workspace_entries(&workspaces, &collapsed);
+        let entries = visible_workspace_entries(&workspaces, &collapsed);
         let groups: Vec<_> = entries
             .iter()
             .filter(|entry| entry.2.as_deref() == Some("/repo/.git"))
@@ -107,7 +107,7 @@ fn every_plain_checkout_is_a_parent_and_only_linked_worktrees_form_groups() {
 /// its group, under any parent of its repository.
 #[test]
 fn unavailable_checkouts_keep_their_saved_group() {
-    let mut workspaces = layout_tests::snapshot(7).workspaces;
+    let mut workspaces = snapshot(7).workspaces;
     for index in [4, 5] {
         workspaces[index].branch = None;
         workspaces[index].new_workspace_cwd = "/missing/checkout".into();
@@ -137,11 +137,11 @@ fn unavailable_checkouts_keep_their_saved_group() {
 
 #[test]
 fn collapse_uses_repository_identity_without_mutating_selection() {
-    let mut workspaces = layout_tests::snapshot(7).workspaces;
+    let mut workspaces = snapshot(7).workspaces;
     workspaces[4].focused = true;
     let before = workspaces.clone();
-    let collapsed = std::collections::HashSet::from([layout_tests::REPO_KEY.into()]);
-    let entries = super::super::visible_workspace_entries(&workspaces, &collapsed);
+    let collapsed = std::collections::HashSet::from([REPO_KEY.into()]);
+    let entries = visible_workspace_entries(&workspaces, &collapsed);
     assert_eq!(
         entries.iter().map(|entry| entry.0).collect::<Vec<_>>(),
         vec![0, 1, 2, 3, 6]
@@ -149,27 +149,21 @@ fn collapse_uses_repository_identity_without_mutating_selection() {
     assert_eq!(entries.iter().filter(|entry| entry.2.is_some()).count(), 1);
     assert_eq!(workspaces, before);
     workspaces[3].label = "renamed".into();
-    assert_eq!(
-        super::super::visible_workspace_entries(&workspaces, &collapsed).len(),
-        5
-    );
+    assert_eq!(visible_workspace_entries(&workspaces, &collapsed).len(), 5);
     workspaces.remove(5);
     workspaces.remove(4);
     assert!(
-        super::super::visible_workspace_entries(&workspaces, &collapsed)
+        visible_workspace_entries(&workspaces, &collapsed)
             .iter()
             .all(|entry| entry.2.is_none())
     );
     workspaces.remove(3);
-    assert_eq!(
-        super::super::visible_workspace_entries(&workspaces, &collapsed).len(),
-        4
-    );
+    assert_eq!(visible_workspace_entries(&workspaces, &collapsed).len(), 4);
 }
 
 #[test]
 fn child_labels_follow_upstream_custom_label_and_branch_rules() {
-    let mut workspace = layout_tests::snapshot(1).workspaces.remove(0);
+    let mut workspace = snapshot(1).workspaces.remove(0);
     workspace.branch = Some("worktree/fix-sidebar".into());
     assert_eq!(workspace_label(&workspace, true), "fix-sidebar");
     assert_eq!(workspace_label(&workspace, false), "herdr");

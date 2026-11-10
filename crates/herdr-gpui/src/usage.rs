@@ -226,7 +226,7 @@ impl Usage {
                 .iter()
                 .filter(|reading| reading.provider.id() == agent)
                 .filter_map(|reading| reading.report.as_ref())
-                .any(|report| report.windows.iter().any(|window| window.left() == 0))
+                .any(|report| herdr_board::usage::used_up(&report.windows))
         })
     }
 
