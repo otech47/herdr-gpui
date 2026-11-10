@@ -1,0 +1,18 @@
+[package]
+edition.workspace      = true
+license.workspace      = true
+name                   = "herdr-board-server"
+publish.workspace      = true
+rust-version.workspace = true
+version.workspace      = true
+
+[lints]
+workspace = true
+
+[dependencies]
+herdr-board.workspace  = true
+herdr-client.workspace = true
+thiserror.workspace    = true
+
+[dev-dependencies]
+serde_json.workspace = true
