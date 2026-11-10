@@ -39,6 +39,10 @@ mod embedded;
 mod groups;
 mod session_pages;
 
+/// Links that leave a page, which only builds that show pages report.
+#[cfg(any(target_os = "macos", windows))]
+mod page_links;
+
 /// Notes need a page to annotate, which Linux builds do not show.
 #[cfg(any(target_os = "macos", windows))]
 mod notes;

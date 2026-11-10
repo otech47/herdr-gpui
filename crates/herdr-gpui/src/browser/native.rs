@@ -12,6 +12,9 @@ use std::{
 use wry::raw_window_handle::HasWindowHandle;
 
 mod cursor;
+mod link;
+
+pub(crate) use link::Action as LinkAction;
 
 /// Enough for a burst of title and load reports between two window ticks;
 /// later ones are dropped rather than queued without bound.
@@ -38,6 +41,9 @@ pub(crate) enum Event {
     /// post one, so it is parsed as untrusted input.
     Posted(TabId, String),
     Cursor(TabId, CursorStyle),
+    /// A link that leaves the page's site, clicked or picked from the
+    /// bubble over it.
+    Link(TabId, LinkAction, WebUrl),
 }
 
 /// Longer posts are dropped before they are queued.
@@ -46,6 +52,9 @@ const MAX_POST_BYTES: usize = 64 * 1024;
 fn post_event(id: TabId, body: String) -> Option<Event> {
     if let Some(cursor) = cursor::parse(&body) {
         return Some(Event::Cursor(id, cursor));
+    }
+    if let Some((action, url)) = link::parse(&body) {
+        return Some(Event::Link(id, action, url));
     }
     (body.len() <= MAX_POST_BYTES).then_some(Event::Posted(id, body))
 }
@@ -152,6 +161,7 @@ impl Pages {
                 },
             )
             .with_initialization_script(cursor::SCRIPT)
+            .with_initialization_script(link::SCRIPT)
             .with_ipc_handler(move |request| {
                 if let Some(event) = post_event(id, request.into_body()) {
                     report(&posted, event);

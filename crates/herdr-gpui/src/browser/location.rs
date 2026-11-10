@@ -141,6 +141,13 @@ impl Location {
         }
     }
 
+    /// Whether `url` is on the site this page shows. A page stays on its
+    /// site, and a local file is on none.
+    #[cfg(any(target_os = "macos", windows, test))]
+    pub(crate) fn same_site(&self, url: &WebUrl) -> bool {
+        matches!(self, Self::Web { url: here } if here.0.origin() == url.0.origin())
+    }
+
     #[cfg(any(target_os = "macos", windows, test))]
     /// Where a page reported it went, relative to this tab: a local page
     /// stays in its folder, so another file there keeps the same root.
@@ -387,6 +394,39 @@ mod tests {
             url: WebUrl::try_from("https://a.test/").unwrap(),
         };
         assert!(web.visited("herdr-preview://localhost/x.html").is_none());
+    }
+
+    #[test]
+    fn a_page_is_on_the_site_of_its_address() {
+        let web = |text: &str| WebUrl::try_from(text).unwrap();
+        let page = Location::Web {
+            url: web("http://oz-mbp.example.ts.net:8788/reports/a.html"),
+        };
+        assert!(page.same_site(&web("http://oz-mbp.example.ts.net:8788/reports/b.html#top")));
+        for elsewhere in [
+            "https://github.com/a/b/pull/1",
+            "http://oz-mbp.example.ts.net:3000/",
+            "https://oz-mbp.example.ts.net:8788/reports/a.html",
+            "http://other.example.ts.net:8788/reports/a.html",
+        ] {
+            assert!(!page.same_site(&web(elsewhere)), "{elsewhere}");
+        }
+        // A rendered markdown document is on the site it was read from.
+        let notes = Location::Web {
+            url: web("https://a.test/docs/notes.md"),
+        };
+        assert!(notes.same_site(&web("https://a.test/docs/more.md")));
+    }
+
+    // Windows paths need a drive to be absolute.
+    #[cfg(unix)]
+    #[test]
+    fn local_files_are_on_no_site() {
+        let page = Location::Local {
+            file: file("/Users/me/site/index.html").unwrap(),
+        };
+        let url = WebUrl::try_from("http://localhost:8788/site/index.html").unwrap();
+        assert!(!page.same_site(&url));
     }
 
     // Windows paths need a drive to be absolute.

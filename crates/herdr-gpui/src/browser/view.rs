@@ -16,6 +16,8 @@ use gpui::{prelude::*, *};
 use present::Freeze;
 use std::collections::{HashMap, HashSet};
 
+#[cfg(any(target_os = "macos", windows))]
+pub(super) mod page_links;
 mod present;
 mod render;
 #[cfg(unix)]
@@ -60,6 +62,9 @@ pub(crate) struct Browser {
     pub(super) session_scroll: super::tab_scroll::TabScroll,
     /// Groups opening from a split and folding away as they close.
     pub(super) group_motion: super::group_motion::GroupMotion,
+    /// When a page last had an address opened in the system browser.
+    #[cfg(any(target_os = "macos", windows))]
+    pub(super) opened_outside: Option<std::time::Instant>,
     /// Why a tab's page could not be created, shown in its place.
     pub(super) failed: HashMap<TabId, SharedString>,
     /// The workspaces of the last snapshot and the boot they came from: one
@@ -91,6 +96,8 @@ impl Browser {
             tab_scroll: Default::default(),
             session_scroll: Default::default(),
             group_motion: Default::default(),
+            #[cfg(any(target_os = "macos", windows))]
+            opened_outside: None,
             failed: HashMap::new(),
             workspaces: None,
             #[cfg(any(target_os = "macos", windows))]
@@ -376,27 +383,8 @@ impl HerdrWindow {
                 Event::Captured(id, capture, tiff) => self.page_captured(id, capture, tiff, cx),
                 #[cfg(target_os = "macos")]
                 Event::Frozen(id, tiff) => self.page_frozen(id, tiff, cx),
-                Event::NewWindow(id, url) => {
-                    let parent = store(cx).and_then(|store| store.get(id)).cloned();
-                    if let (Some(parent), Ok(url)) = (parent, WebUrl::try_from(url.as_str())) {
-                        // The new tab opens where its opener shows.
-                        let group = self.group_showing(&Pick::Page(id), cx);
-                        let opened = Store::update(cx, |store| {
-                            store.open(
-                                parent.scope,
-                                &parent.workspace_id,
-                                Some(Location::Web { url }),
-                                parent.origin,
-                            )
-                        });
-                        if let Some(opened) = opened {
-                            if let Some(session) = parent.session {
-                                Store::update(cx, |store| store.attach_to_session(opened, session));
-                            }
-                            self.show_browser_tab_in(group, opened, window, cx);
-                        }
-                    }
-                }
+                Event::Link(_, action, url) => self.page_link(action, &url, cx),
+                Event::NewWindow(id, url) => self.page_asked_for_window(id, &url, window, cx),
             }
         }
     }
