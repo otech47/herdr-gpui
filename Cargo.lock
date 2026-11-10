@@ -3418,6 +3418,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "herdr-board"
+version = "0.1.0"
+dependencies = [
+ "herdr-protocol",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "herdr-client"
 version = "0.1.0"
 dependencies = [
@@ -3452,6 +3462,7 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "gpui-wry",
+ "herdr-board",
  "herdr-client",
  "image",
  "lb-wry",

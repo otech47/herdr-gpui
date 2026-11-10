@@ -4,7 +4,6 @@
 //! to list and the order of their tabs.
 
 use super::{
-    agent_name,
     cell::{AgentRow, Cell, RowContext, RowData, RowLayout},
     label_text,
     tab_reorder::row_key,
@@ -15,12 +14,12 @@ use crate::{
     HerdrWindow, NavigationTarget, config::TokenStyle, preferences::TabsView, reorder::preview,
 };
 use gpui::{prelude::*, *};
-use herdr_client::protocol::{ClientShellAgent, ClientShellSnapshot, ClientShellTab};
 use std::{ops::Range, time::Instant};
 
 pub(super) mod attention;
 mod elsewhere;
 mod views;
+pub(super) use herdr_board::tab_title;
 pub(crate) use views::ListedTab;
 #[cfg(unix)]
 pub(crate) use views::workspace_label_by_id;
@@ -379,42 +378,6 @@ fn tab_group_line(
         .text_color(rgb(row_cx.theme.muted))
         .child(label_text(label))
         .into_any_element()
-}
-
-/// What a tab is called in the sidebar: its own name when renamed, else its
-/// agent's terminal title, else the agent, else the shell's directory.
-pub(super) fn tab_title(tab: &ClientShellTab, snapshot: &ClientShellSnapshot) -> String {
-    if tab.custom_label {
-        return tab.label.clone();
-    }
-    if let Some(agent) = snapshot
-        .agents
-        .iter()
-        .find(|agent| agent.tab_id == tab.tab_id)
-    {
-        return agent_title(agent).unwrap_or_else(|| agent_name(agent).to_owned());
-    }
-    let cwd = snapshot
-        .panes
-        .iter()
-        .find(|pane| pane.tab_id == tab.tab_id)
-        .and_then(|pane| pane.foreground_cwd.as_deref().or(pane.cwd.as_deref()));
-    match cwd
-        .and_then(|cwd| std::path::Path::new(cwd).file_name())
-        .and_then(|name| name.to_str())
-    {
-        Some(name) => name.to_owned(),
-        None => tab.label.clone(),
-    }
-}
-
-fn agent_title(agent: &ClientShellAgent) -> Option<String> {
-    agent
-        .terminal_title_stripped
-        .as_deref()
-        .map(str::trim)
-        .filter(|title| !title.is_empty())
-        .map(str::to_owned)
 }
 
 /// A tab's one sidebar line: the position cmd-`number` counts, in the agent
