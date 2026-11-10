@@ -72,7 +72,6 @@ pub struct TabRow {
     /// What `herdr terminal session control|observe` takes to open the row's
     /// terminal on its device.
     pub terminal_id: Option<String>,
-    /// The daemon's number for the tab.
     pub number: usize,
     pub title: String,
     pub agent: Option<AgentLabel>,
@@ -128,7 +127,6 @@ pub struct Gauge {
     pub resets_at: Option<u64>,
 }
 
-/// One device handed to [`build`].
 #[derive(Clone, Copy, Debug)]
 pub struct DeviceInput<'a> {
     pub source: Source<'a>,
@@ -137,7 +135,6 @@ pub struct DeviceInput<'a> {
     pub detail: Option<&'a str>,
 }
 
-/// One agent's limits on one device, handed to [`build`].
 #[derive(Clone, Copy, Debug)]
 pub struct UsageInput<'a> {
     pub device_id: &'a str,
@@ -180,10 +177,8 @@ pub fn settle(
     ledger.settle(sightings);
 }
 
-/// The board for these devices. The first device is the client's own, which
-/// a waiting row's tag leaves unnamed. `mark` adds what a snapshot cannot
-/// say: a used-up plan or a shell left running. The revision is the
-/// publisher's to set.
+/// The first device is the client's own, which a waiting row's tag leaves
+/// unnamed. The revision is the publisher's to set.
 pub fn build(
     devices: &[DeviceInput<'_>],
     ledger: &AttentionLedger,
