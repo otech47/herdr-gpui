@@ -1,13 +1,15 @@
 #![allow(clippy::unwrap_used)]
 
 use crate::{
-    args::{Args, Endpoint},
-    hub::Hub,
+    args::Args,
+    devices::{Endpoint, Route},
+    hub::{Followed, Hub},
 };
-use herdr_client::{ConnectTarget, protocol::ClientShellSnapshot};
+use herdr_client::protocol::ClientShellSnapshot;
 use std::sync::Arc;
 
 mod args;
+mod devices;
 mod http;
 mod hub;
 
@@ -16,7 +18,7 @@ fn endpoint(id: &str) -> Endpoint {
         id: id.to_owned(),
         label: id.to_uppercase(),
         enabled: true,
-        target: ConnectTarget::Local,
+        route: Route::Local,
     }
 }
 
@@ -42,11 +44,16 @@ fn snapshot(status: &str) -> Arc<ClientShellSnapshot> {
     Arc::new(snapshot)
 }
 
-fn hub(devices: &[&str]) -> Hub {
-    Hub::starting_at(devices.iter().map(|id| endpoint(id)).collect(), 7).unwrap()
+/// A hub following `devices`, which publishes revision 7.
+fn hub(devices: &[&str]) -> (Hub, Vec<Followed>) {
+    let hub = Hub::starting_at(6).unwrap();
+    let followed = hub
+        .set_devices(devices.iter().map(|id| endpoint(id)).collect())
+        .unwrap();
+    (hub, followed)
 }
 
-fn connect(hub: &Hub, device: usize, status: &str) {
+fn connect(hub: &Hub, device: &Followed, status: &str) {
     hub.update(device, |link| {
         link.connected = true;
         link.snapshot = Some(snapshot(status));

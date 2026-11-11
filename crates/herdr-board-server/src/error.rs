@@ -6,8 +6,6 @@ pub enum Error {
     Usage(String),
     #[error("cannot listen on the loopback port: {0}")]
     Listen(#[source] io::Error),
-    #[error("cannot read the saved devices: {0}")]
-    Devices(#[from] herdr_client::Error),
     #[error(transparent)]
     Board(#[from] herdr_board::Error),
 }

@@ -45,6 +45,9 @@ pub struct Device {
     pub status: DeviceStatus,
     /// Why the device is not connected, when its connection said.
     pub detail: Option<String>,
+    /// The SSH targets from the publisher's machine to the device, each
+    /// resolved by the machine before it. Empty for the publisher's own.
+    pub route: Vec<String>,
     /// The most urgent state among its tabs.
     pub state: String,
     pub spaces: Vec<Space>,
@@ -133,6 +136,7 @@ pub struct DeviceInput<'a> {
     /// Still on its way to a first connection, not yet failed.
     pub connecting: bool,
     pub detail: Option<&'a str>,
+    pub route: &'a [String],
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -251,6 +255,7 @@ pub fn build(
                 (true, false, false) => DeviceStatus::Disconnected,
             },
             detail: device.detail.map(|detail| safe_text(detail, TEXT_LIMIT)),
+            route: device.route.to_vec(),
             state: status_text(urgent).to_owned(),
             spaces,
         });

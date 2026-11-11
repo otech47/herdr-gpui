@@ -15,10 +15,16 @@ The functions `build` is made of are public too: `listed_tabs`, `sort_by_attenti
 ## Serving a board
 
 ```text
-herdr-board-server --port 7480 [--label NAME] [--saved-devices] [--ssh LABEL=TARGET]...
+herdr-board-server --port 7480 [--label NAME] [--ssh LABEL=TARGET]...
 ```
 
-The server follows the Herdr daemon of the machine it runs on. With `--saved-devices` it also follows the ssh devices saved in the Herdr app, and each `--ssh` adds one more. It attaches to a daemon the way the app does, as a client whose surface is inactive. It receives snapshots, never takes part in sizing a terminal, and cannot send input. It reconnects on its own, waiting at most 30 seconds between attempts.
+The server follows the Herdr daemon of the machine it runs on and of each `--ssh` target. It also follows every device saved in the Herdr app on this machine and on each `--ssh` target. A device added in the app is on the board within a minute, with no change to how the server starts. A saved device that is this machine, or a daemon already followed, is not followed twice.
+
+The server keeps the saved devices it last read in `herdr/board-server/saved-devices.json` under `$XDG_STATE_HOME`, or under `~/.local/state`. It follows those while the machine that saved them cannot be asked.
+
+A device saved on another machine is named by that machine's SSH configuration. The server connects to it directly when its own configuration takes the same target to the same user, host and port. Otherwise it connects through the machine that saved it. The `route` of the device says which.
+
+It attaches to a daemon the way the app does, as a client whose surface is inactive. It receives snapshots, never takes part in sizing a terminal, and cannot send input. It reconnects on its own, waiting at most 30 seconds between attempts.
 
 It listens on `127.0.0.1` only and authenticates nobody. A request whose `Host` header names anything but `127.0.0.1` or `localhost` gets `403`. Put a proxy that authenticates callers in front of it to reach it from another machine, and have the proxy send a loopback `Host`.
 
@@ -103,6 +109,7 @@ Every answer closes its connection. Long polls and streams are limited to 64 at 
 | --- | --- |
 | `id` | `local`, or `ssh:<id>` for an ssh device. Stable across restarts. |
 | `label` | The name to show. |
+| `route` | The SSH targets from the server's machine to the device, in order. Each is resolved by the machine before it. Empty for the server's own machine. |
 | `status` | `connected`, `connecting`, `disconnected` or `disabled`. |
 | `detail` | Why the device is not connected, when the connection said. Otherwise `null`. |
 | `state` | The most urgent state among its tabs. |

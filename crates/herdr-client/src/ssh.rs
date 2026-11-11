@@ -3,8 +3,12 @@
 //! The remote host is always POSIX; the local half needs a socket pair it can
 //! hand to the `ssh` child as its standard streams, which only Unix provides.
 #[cfg(unix)]
+use crate::catalog;
+#[cfg(unix)]
 use crate::limits::POLL;
-use crate::{Error, Result, catalog::validate_target, session_socket, transport::Stream};
+use crate::{
+    Error, Result, SavedHost, catalog::validate_target, session_socket, transport::Stream,
+};
 #[cfg(unix)]
 use std::{
     io::{self, Read, Write},
@@ -249,6 +253,51 @@ pub fn resolve_destination(target: &str) -> Result<Destination> {
     Err(Error::SshUnsupported)
 }
 
+/// Resolve `target` as `gateway` reaches it: `ssh -G` run on `gateway`, which
+/// reads its own configuration and connects no further. Blocks: call it from
+/// a background thread.
+#[cfg(unix)]
+pub fn resolve_destination_from(gateway: &str, target: &str) -> Result<Destination> {
+    validate_target(gateway)?;
+    validate_target(target)?;
+    let script = format!("exec ssh -G -- {}", quote(target));
+    let command = format!("/bin/sh -c {}", quote(&script));
+    let (status, output) = run_remote(gateway, &command, PROBE_TIMEOUT, || false)?;
+    if !status.success() {
+        return Err(Error::RemoteCommand(status));
+    }
+    parse_destination(&output).ok_or(Error::RemoteOutput)
+}
+
+#[cfg(windows)]
+pub fn resolve_destination_from(gateway: &str, target: &str) -> Result<Destination> {
+    validate_target(gateway)?;
+    validate_target(target)?;
+    Err(Error::SshUnsupported)
+}
+
+/// The devices saved in the Herdr app on `gateway`, read without a prompt.
+/// Empty when it has saved none. Blocks: call it from a background thread.
+#[cfg(unix)]
+pub fn remote_saved_hosts(gateway: &str) -> Result<Vec<SavedHost>> {
+    validate_target(gateway)?;
+    let command = format!("/bin/sh -c {}", quote(catalog::PRINT));
+    let (status, output) = run_remote(gateway, &command, PROBE_TIMEOUT, || false)?;
+    if !status.success() {
+        return Err(Error::RemoteCommand(status));
+    }
+    if output.is_empty() {
+        return Ok(Vec::new());
+    }
+    catalog::saved_hosts(&output)
+}
+
+#[cfg(windows)]
+pub fn remote_saved_hosts(gateway: &str) -> Result<Vec<SavedHost>> {
+    validate_target(gateway)?;
+    Err(Error::SshUnsupported)
+}
+
 #[cfg(unix)]
 fn parse_destination(output: &[u8]) -> Option<Destination> {
     let text = std::str::from_utf8(output).ok()?;
@@ -370,32 +419,50 @@ pub(super) fn command(target: &str, remote_command: &str) -> Command {
     command
 }
 
+/// [`command`] run by the `ssh` of `gateway`, for a target that only
+/// `gateway` has the configuration and keys to reach. Both hops follow the
+/// bridge's connection policy.
+#[cfg(unix)]
+fn command_through(gateway: &str, target: &str, remote_command: &str) -> Command {
+    let hop = format!(
+        "exec ssh {} -o ClearAllForwardings=yes -- {} {}",
+        NONINTERACTIVE.join(" "),
+        quote(target),
+        quote(remote_command)
+    );
+    command(gateway, &format!("/bin/sh -c {}", quote(&hop)))
+}
+
+/// The bridge's connection policy.
+#[cfg(unix)]
+const NONINTERACTIVE: &[&str] = &[
+    "-T",
+    "-C",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "NumberOfPasswordPrompts=0",
+    "-o",
+    "StrictHostKeyChecking=yes",
+    "-o",
+    "ConnectTimeout=10",
+    "-o",
+    "ConnectionAttempts=1",
+    "-o",
+    "ServerAliveInterval=15",
+    "-o",
+    "ServerAliveCountMax=4",
+    "-o",
+    "ForwardX11=no",
+    "-o",
+    "ControlMaster=no",
+];
+
 /// `ssh` with the bridge's connection policy and nothing to connect yet.
 #[cfg(unix)]
 fn noninteractive() -> Command {
     let mut command = crate::environment::command("ssh");
-    command.args([
-        "-T",
-        "-C",
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "NumberOfPasswordPrompts=0",
-        "-o",
-        "StrictHostKeyChecking=yes",
-        "-o",
-        "ConnectTimeout=10",
-        "-o",
-        "ConnectionAttempts=1",
-        "-o",
-        "ServerAliveInterval=15",
-        "-o",
-        "ServerAliveCountMax=4",
-        "-o",
-        "ForwardX11=no",
-        "-o",
-        "ControlMaster=no",
-    ]);
+    command.args(NONINTERACTIVE);
     command
 }
 
@@ -457,6 +524,7 @@ pub fn script_command(target: &str, script: &str) -> Result<Command> {
 
 #[cfg(unix)]
 pub(crate) fn connect(
+    gateway: Option<&str>,
     target: &str,
     session: &str,
     stop: &AtomicBool,
@@ -466,7 +534,14 @@ pub(crate) fn connect(
     let (mut stream, child_stream) = Stream::pair()?;
     stream.set_read_timeout(Some(POLL))?;
     stream.set_write_timeout(Some(Duration::from_secs(1)))?;
-    let mut command = command(target, &bridge_command(session));
+    let bridge = bridge_command(session);
+    let mut command = match gateway {
+        Some(gateway) => {
+            validate_target(gateway)?;
+            command_through(gateway, target, &bridge)
+        }
+        None => command(target, &bridge),
+    };
     command
         .stdin(Stdio::from(OwnedFd::from(child_stream.try_clone()?)))
         .stdout(Stdio::from(OwnedFd::from(child_stream)))
@@ -539,10 +614,14 @@ fn incompatible_status(output: &[u8]) -> Option<Error> {
 /// everywhere.
 #[cfg(windows)]
 pub(crate) fn connect(
+    gateway: Option<&str>,
     target: &str,
     session: &str,
     _stop: &AtomicBool,
 ) -> Result<(Stream, SshChild)> {
+    if let Some(gateway) = gateway {
+        validate_target(gateway)?;
+    }
     validate_target(target)?;
     session_socket(Path::new(""), session)?;
     Err(Error::SshUnsupported)
@@ -646,15 +725,19 @@ mod tests {
     fn invalid_targets_and_sessions_are_rejected_before_the_platform_refusal() {
         let stop = AtomicBool::new(false);
         assert!(matches!(
-            connect("-oProxyCommand=x", "default", &stop),
+            connect(None, "-oProxyCommand=x", "default", &stop),
             Err(Error::InvalidSshTarget)
         ));
         assert!(matches!(
-            connect("host", "../escape", &stop),
+            connect(Some("-oProxyCommand=x"), "host", "default", &stop),
+            Err(Error::InvalidSshTarget)
+        ));
+        assert!(matches!(
+            connect(None, "host", "../escape", &stop),
             Err(Error::InvalidSession)
         ));
         assert!(matches!(
-            connect("host", "default", &stop),
+            connect(None, "host", "default", &stop),
             Err(Error::SshUnsupported)
         ));
     }

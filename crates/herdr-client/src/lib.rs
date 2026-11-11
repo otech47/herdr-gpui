@@ -43,7 +43,7 @@ pub use catalog::{
 };
 pub use clipboard::{ClipboardImageCancellation, ClipboardImageUpload};
 pub use compat::{MIN_HERDR_VERSION, VersionMismatch};
-pub use connect::{connect, connect_with_connector, connect_with_surface_active};
+pub use connect::{connect, connect_through, connect_with_connector, connect_with_surface_active};
 pub use discovery::{ConnectTarget, session_socket};
 pub use environment::set_command_environment;
 /// Error returned when queueing commands; also available as the crate's `Error`.
@@ -64,7 +64,8 @@ pub use sessions::{
 pub use ssh::script_command;
 pub use ssh::{
     Destination, FORWARD_READY, HostProbe, SshFailure, forward_command, probe_host,
-    remote_config_value, remote_origin_url, resolve_destination,
+    remote_config_value, remote_origin_url, remote_saved_hosts, resolve_destination,
+    resolve_destination_from,
 };
 pub use surface_images::{
     MAX_IMAGE_BYTES, MAX_IMAGE_SIDE, MAX_IMAGES, MAX_PLACEMENTS, SurfaceImage, SurfaceImages,

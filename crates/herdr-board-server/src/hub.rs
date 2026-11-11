@@ -1,9 +1,10 @@
 //! The board as last published, and what each device last said.
 
-use crate::{Result, args::Endpoint};
+use crate::{Result, devices::Endpoint};
 use herdr_board::{AttentionLedger, Board, DeviceInput, Mark, Source};
 use herdr_client::protocol::ClientShellSnapshot;
 use std::{
+    mem,
     sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -24,35 +25,50 @@ pub(crate) struct Published {
     pub(crate) json: Arc<str>,
 }
 
+/// One device from when the hub began to follow it until it stops. A device
+/// that is dropped and followed again is another one.
+#[derive(Clone, Debug)]
+pub(crate) struct Followed {
+    pub(crate) endpoint: Endpoint,
+    serial: u64,
+}
+
 pub(crate) struct Hub {
     state: Mutex<State>,
     changed: Condvar,
 }
 
 struct State {
-    devices: Vec<(Endpoint, Link)>,
+    devices: Vec<Device>,
+    followed: u64,
     ledger: AttentionLedger,
     /// The published board with its revision zeroed, to tell a change from a repeat.
     board: Board,
     published: Published,
 }
 
+#[derive(Clone)]
+struct Device {
+    endpoint: Endpoint,
+    hops: Vec<String>,
+    serial: u64,
+    link: Link,
+}
+
 impl Hub {
-    pub(crate) fn new(endpoints: Vec<Endpoint>) -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         // A client that outlives a restart must never see the revision fall,
         // so each run starts above anything an earlier run can have reached.
         let start = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |since| since.as_millis().try_into().unwrap_or(u64::MAX));
-        Self::starting_at(endpoints, start)
+        Self::starting_at(start)
     }
 
-    pub(crate) fn starting_at(endpoints: Vec<Endpoint>, revision: u64) -> Result<Self> {
+    pub(crate) fn starting_at(revision: u64) -> Result<Self> {
         let mut state = State {
-            devices: endpoints
-                .into_iter()
-                .map(|endpoint| (endpoint, Link::default()))
-                .collect(),
+            devices: Vec::new(),
+            followed: 0,
             ledger: AttentionLedger::default(),
             board: Board::default(),
             published: Published {
@@ -72,22 +88,65 @@ impl Hub {
         self.lock().published.clone()
     }
 
-    /// Record what a device's connection reported and publish the board if
-    /// that changed it.
-    pub(crate) fn update(&self, device: usize, change: impl FnOnce(&mut Link)) -> Result<()> {
+    /// Follow `endpoints` and nothing else, in that order. An endpoint that
+    /// is unchanged keeps what its connection reported. Returns the devices
+    /// that still need a connection.
+    pub(crate) fn set_devices(&self, endpoints: Vec<Endpoint>) -> Result<Vec<Followed>> {
         let mut state = self.lock();
-        let Some((_, link)) = state.devices.get_mut(device) else {
+        let mut added = Vec::new();
+        let mut devices = Vec::with_capacity(endpoints.len());
+        for endpoint in endpoints {
+            let kept = state
+                .devices
+                .iter()
+                .find(|device| device.endpoint == endpoint);
+            if let Some(device) = kept {
+                devices.push(device.clone());
+                continue;
+            }
+            let serial = state.followed;
+            state.followed += 1;
+            added.push(Followed {
+                endpoint: endpoint.clone(),
+                serial,
+            });
+            devices.push(Device {
+                hops: endpoint.route.hops(),
+                endpoint,
+                serial,
+                link: Link::default(),
+            });
+        }
+        let before = mem::replace(&mut state.devices, devices);
+        if let Err(error) = self.republish(&mut state) {
+            // The caller connects only what is returned, so a device must not
+            // stay followed without being returned.
+            state.devices = before;
+            return Err(error);
+        }
+        Ok(added)
+    }
+
+    pub(crate) fn follows(&self, device: &Followed) -> bool {
+        self.lock()
+            .devices
+            .iter()
+            .any(|known| known.serial == device.serial)
+    }
+
+    /// Record what a device's connection reported and publish the board if
+    /// that changed it. A device no longer followed is ignored.
+    pub(crate) fn update(&self, device: &Followed, change: impl FnOnce(&mut Link)) -> Result<()> {
+        let mut state = self.lock();
+        let Some(known) = state
+            .devices
+            .iter_mut()
+            .find(|known| known.serial == device.serial)
+        else {
             return Ok(());
         };
-        change(link);
-        let board = state.build();
-        if board != state.board {
-            state.board = board;
-            state.published.revision += 1;
-            state.publish()?;
-            self.changed.notify_all();
-        }
-        Ok(())
+        change(&mut known.link);
+        self.republish(&mut state)
     }
 
     /// The board once its revision passes `after`, or `None` when `wait`
@@ -108,6 +167,17 @@ impl Hub {
         }
     }
 
+    fn republish(&self, state: &mut State) -> Result<()> {
+        let board = state.build();
+        if board != state.board {
+            state.board = board;
+            state.published.revision += 1;
+            state.publish()?;
+            self.changed.notify_all();
+        }
+        Ok(())
+    }
+
     fn lock(&self) -> MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -118,17 +188,18 @@ impl State {
         let inputs: Vec<DeviceInput<'_>> = self
             .devices
             .iter()
-            .map(|(endpoint, link)| DeviceInput {
+            .map(|device| DeviceInput {
                 source: Source {
-                    id: &endpoint.id,
-                    label: &endpoint.label,
-                    enabled: endpoint.enabled,
+                    id: &device.endpoint.id,
+                    label: &device.endpoint.label,
+                    enabled: device.endpoint.enabled,
                     visible: true,
-                    connected: link.connected,
-                    snapshot: link.snapshot.as_deref(),
+                    connected: device.link.connected,
+                    snapshot: device.link.snapshot.as_deref(),
                 },
-                connecting: link.connecting,
-                detail: link.detail.as_deref(),
+                connecting: device.link.connecting,
+                detail: device.link.detail.as_deref(),
+                route: &device.hops,
             })
             .collect();
         let sources: Vec<Source<'_>> = inputs.iter().map(|input| input.source).collect();

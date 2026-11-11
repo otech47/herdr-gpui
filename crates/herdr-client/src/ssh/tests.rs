@@ -249,6 +249,42 @@ fn command_is_noninteractive_and_target_is_one_argument() {
     }
 }
 #[test]
+fn a_command_through_a_gateway_reaches_the_target_intact() {
+    let root = std::env::temp_dir().join(format!("herdr-client-{}-gateway", std::process::id()));
+    std::fs::create_dir(&root).unwrap();
+    let ssh = "#!/bin/sh\nfor arg; do printf '%s\\n' \"$arg\"; done\n";
+    crate::test_executable::write(root.join("ssh"), ssh, 0o700).unwrap();
+    let remote = "printf '%s' \"it's $HOME\"";
+    let command = command_through("me@gateway", "me@box;not-a-command", remote);
+    let args: Vec<_> = command.get_args().map(|a| a.to_str().unwrap()).collect();
+    assert_eq!(args[args.len() - 2], "me@gateway");
+    // What the gateway's login shell is given, run here with a stand-in `ssh`.
+    let output = Command::new("/bin/sh")
+        .args(["-c", args[args.len() - 1]])
+        .env("PATH", &root)
+        .output()
+        .unwrap();
+    let seen = String::from_utf8(output.stdout).unwrap();
+    let seen: Vec<_> = seen.lines().collect();
+    for option in ["BatchMode=yes", "StrictHostKeyChecking=yes"] {
+        assert!(seen.contains(&option));
+    }
+    assert_eq!(
+        seen[seen.len() - 3..],
+        ["--", "me@box;not-a-command", remote]
+    );
+    assert!(matches!(
+        connect(
+            Some("-oProxyCommand=bad"),
+            "host",
+            "default",
+            &AtomicBool::new(false)
+        ),
+        Err(Error::InvalidSshTarget)
+    ));
+    std::fs::remove_dir_all(root).unwrap();
+}
+#[test]
 fn script_runs_under_remote_sh_and_rejects_option_targets() {
     let command = script_command("user@host", "echo 'hi'").unwrap();
     let args: Vec<_> = command.get_args().map(|a| a.to_str().unwrap()).collect();

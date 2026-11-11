@@ -233,6 +233,20 @@ fn catalog_path(development: bool, var: impl Fn(&str) -> Option<OsString>) -> Pa
         .join("client/endpoints.json")
 }
 
+/// A POSIX shell script that prints the catalog of the machine it runs on,
+/// or nothing when that machine has none. Its path is [`catalog_path`]'s for
+/// a release build.
+#[cfg(unix)]
+pub(crate) const PRINT: &str = r#"file="${XDG_STATE_HOME:-$HOME/.local/state}/herdr/client/endpoints.json"
+[ -f "$file" ] || exit 0
+exec cat "$file""#;
+
+/// The saved hosts in a catalog's bytes.
+#[cfg(unix)]
+pub(crate) fn saved_hosts(bytes: &[u8]) -> Result<Vec<SavedHost>> {
+    parse_catalog(bytes).map(|catalog| catalog.ssh)
+}
+
 fn load_path(path: &Path) -> Result<Vec<SavedHost>> {
     load_catalog(path).map(|catalog| catalog.ssh)
 }

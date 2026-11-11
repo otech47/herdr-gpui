@@ -1,6 +1,5 @@
 use super::*;
 use crate::Error;
-use herdr_client::SavedHost;
 
 fn parse(args: &[&str]) -> crate::Result<Args> {
     Args::parse(args.iter().map(|arg| (*arg).to_owned()))
@@ -14,7 +13,6 @@ fn the_port_is_required_and_the_rest_default() {
         Args {
             port: 7480,
             label: "Local".to_owned(),
-            saved: false,
             ssh: Vec::new(),
         }
     );
@@ -35,7 +33,7 @@ fn malformed_arguments_are_refused() {
 }
 
 #[test]
-fn devices_keep_the_apps_ids_and_this_machine_leads() {
+fn this_machine_leads_the_named_devices() {
     let args = parse(&[
         "--port",
         "1",
@@ -44,48 +42,27 @@ fn devices_keep_the_apps_ids_and_this_machine_leads() {
         "--ssh",
         "Laptop=me@laptop",
         "--ssh",
-        "Again=box",
+        "Again=me@laptop",
     ])
     .unwrap();
-    let saved = vec![SavedHost {
-        id: "box".to_owned(),
-        label: "Box".to_owned(),
-        target: "me@box".to_owned(),
-        session: "work".to_owned(),
-        enabled: false,
-    }];
-    let endpoints = args.endpoints(saved);
-    let seen: Vec<_> = endpoints
-        .iter()
-        .map(|endpoint| {
-            (
-                endpoint.id.as_str(),
-                endpoint.label.as_str(),
-                endpoint.enabled,
-            )
-        })
-        .collect();
-    // A device named twice keeps its saved entry.
     assert_eq!(
-        seen,
+        crate::devices::named(&args),
         [
-            ("local", "Mini", true),
-            ("ssh:box", "Box", false),
-            ("ssh:me@laptop", "Laptop", true),
+            Endpoint {
+                id: "local".to_owned(),
+                label: "Mini".to_owned(),
+                enabled: true,
+                route: Route::Local,
+            },
+            Endpoint {
+                id: "ssh:me@laptop".to_owned(),
+                label: "Laptop".to_owned(),
+                enabled: true,
+                route: Route::Ssh {
+                    target: "me@laptop".to_owned(),
+                    session: "default".to_owned(),
+                },
+            },
         ]
-    );
-    assert_eq!(
-        endpoints[1].target,
-        ConnectTarget::Ssh {
-            target: "me@box".to_owned(),
-            session: "work".to_owned(),
-        }
-    );
-    assert_eq!(
-        endpoints[2].target,
-        ConnectTarget::Ssh {
-            target: "me@laptop".to_owned(),
-            session: "default".to_owned(),
-        }
     );
 }

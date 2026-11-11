@@ -96,7 +96,8 @@ fn fetch(address: SocketAddr, target: &str) -> (String, String) {
 
 #[test]
 fn the_board_is_served_now_and_when_it_next_changes() {
-    let hub = Arc::new(hub(&["local"]));
+    let (hub, devices) = hub(&["local"]);
+    let hub = Arc::new(hub);
     let address = served(&hub);
 
     let (status, body) = fetch(address, "/board");
@@ -110,7 +111,7 @@ fn the_board_is_served_now_and_when_it_next_changes() {
     assert_eq!(fetch(address, "/nothing").0, "HTTP/1.1 404 Not Found");
 
     let poll = thread::spawn(move || fetch(address, "/board?after=7&wait=30"));
-    connect(&hub, 0, "working");
+    connect(&hub, &devices[0], "working");
     let (status, body) = poll.join().unwrap();
     assert_eq!(status, "HTTP/1.1 200 OK");
     assert_eq!(board(&body).revision, 8);
@@ -118,7 +119,8 @@ fn the_board_is_served_now_and_when_it_next_changes() {
 
 #[test]
 fn the_stream_sends_the_board_then_each_change() {
-    let hub = Arc::new(hub(&["local"]));
+    let (hub, devices) = hub(&["local"]);
+    let hub = Arc::new(hub);
     let address = served(&hub);
     let mut stream = TcpStream::connect(address).unwrap();
     stream.write_all(get("/events").as_bytes()).unwrap();
@@ -134,6 +136,6 @@ fn the_stream_sends_the_board_then_each_change() {
         (event[1].clone(), board(data).revision)
     };
     assert_eq!(event(), ("id: 7".to_owned(), 7));
-    connect(&hub, 0, "done");
+    connect(&hub, &devices[0], "done");
     assert_eq!(event(), ("id: 8".to_owned(), 8));
 }

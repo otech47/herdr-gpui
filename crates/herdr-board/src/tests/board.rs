@@ -6,6 +6,7 @@ fn input<'a>(id: &'a str, label: &'a str, snapshot: &'a ClientShellSnapshot) -> 
         source: source(id, label, snapshot),
         connecting: false,
         detail: None,
+        route: &[],
     }
 }
 
@@ -331,7 +332,9 @@ fn the_json_shape_is_the_contract() {
     assert_eq!(json["revision"], 7);
     assert_eq!(
         keys(&json["devices"][0]),
-        ["detail", "id", "label", "spaces", "state", "status"]
+        [
+            "detail", "id", "label", "route", "spaces", "state", "status"
+        ]
     );
     assert_eq!(json["devices"][0]["status"], "connected");
     assert_eq!(

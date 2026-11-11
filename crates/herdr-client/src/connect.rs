@@ -36,12 +36,39 @@ pub fn connect_with_surface_active(
     options: ConnectOptions,
     surface_active: bool,
 ) -> Result<Client> {
-    connect_with_connector(target, options, surface_active, |target, _| {
-        let path = target
-            .socket_path()
-            .map_err(|error| io::Error::new(error.kind(), error))?;
-        Stream::connect(path)
-    })
+    connect_with_connector(target, options, surface_active, local_socket)
+}
+
+/// Connect to the Herdr on `target` through `gateway`: a host this machine
+/// reaches over SSH, which then runs the SSH client that reaches `target`
+/// with its own configuration, keys and known hosts. For a device this
+/// machine cannot reach itself.
+pub fn connect_through(
+    gateway: &str,
+    target: &str,
+    session: &str,
+    options: ConnectOptions,
+    surface_active: bool,
+) -> Result<Client> {
+    catalog::validate_target(gateway)?;
+    let target = ConnectTarget::Ssh {
+        target: target.to_owned(),
+        session: session.to_owned(),
+    };
+    start(
+        target,
+        Some(gateway.to_owned()),
+        options,
+        surface_active,
+        local_socket,
+    )
+}
+
+fn local_socket(target: &ConnectTarget, _: &AtomicBool) -> io::Result<Stream> {
+    let path = target
+        .socket_path()
+        .map_err(|error| io::Error::new(error.kind(), error))?;
+    Stream::connect(path)
 }
 
 /// Connect using application-specific local socket setup on the I/O worker.
@@ -49,6 +76,17 @@ pub fn connect_with_surface_active(
 /// The connector should observe `stop` during waits so detach cancels setup.
 pub fn connect_with_connector(
     target: ConnectTarget,
+    options: ConnectOptions,
+    surface_active: bool,
+    connector: impl FnOnce(&ConnectTarget, &AtomicBool) -> io::Result<Stream> + Send + 'static,
+) -> Result<Client> {
+    start(target, None, options, surface_active, connector)
+}
+
+/// `gateway` applies to an SSH target only.
+fn start(
+    target: ConnectTarget,
+    gateway: Option<String>,
     options: ConnectOptions,
     surface_active: bool,
     connector: impl FnOnce(&ConnectTarget, &AtomicBool) -> io::Result<Stream> + Send + 'static,
@@ -74,7 +112,8 @@ pub fn connect_with_connector(
             let result = (|| {
                 let (stream, child) = match &target {
                     ConnectTarget::Ssh { target, session } => {
-                        let (stream, child) = ssh::connect(target, session, &worker_stop)?;
+                        let (stream, child) =
+                            ssh::connect(gateway.as_deref(), target, session, &worker_stop)?;
                         (stream, Some(child))
                     }
                     _ => (connector(&target, &worker_stop)?, None),
