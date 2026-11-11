@@ -17,7 +17,7 @@ import time
 
 LIMIT = 200
 READ_LIMIT = 256 * 1024
-KINDS = {"claude", "codex", "kimi", "cursor"}
+KINDS = {"claude", "codex", "kimi"}
 SID = re.compile(r"[a-zA-Z0-9_-]{8,100}\Z")
 
 
@@ -104,13 +104,6 @@ def native(path, agent):
             payload = row.get("payload", {})
             if row.get("type") == "event_msg" and payload.get("type") == "user_message" and not title:
                 title = task_title(payload.get("message"))
-        elif agent == "cursor":
-            payload = row.get("payload", {})
-            if payload.get("parent_conversation_id") not in (None, "", sid):
-                return None
-            cwd = cwd or payload.get("cwd", "")
-            if not title:
-                title = task_title(payload.get("prompt"))
         elif agent == "kimi":
             message = row.get("message", {})
             if message.get("role") == "user" and not title:
@@ -151,8 +144,7 @@ def jobs(home):
 def catalog(home):
     patterns = {"codex": ".codex/sessions/*/*/*/rollout-*.jsonl",
                 "claude": ".claude/projects/*/*.jsonl",
-                "kimi": ".kimi-code/sessions/wd_*/session_*/agents/main/wire.jsonl",
-                "cursor": ".cursor/sessions/*.jsonl"}
+                "kimi": ".kimi-code/sessions/wd_*/session_*/agents/main/wire.jsonl"}
     enrichment = dict(jobs(home))
     result = []
     for agent, pattern in patterns.items():
@@ -271,8 +263,7 @@ def activity(entry):
         except ValueError:
             continue
         names = {Path(arg).name for arg in argv[:2]}
-        binaries = {"cursor": {"agent", "cursor-agent", "cursor"},
-                    "codex": {"codex", "codex.js"}, "claude": {"claude", "claude.js"},
+        binaries = {"codex": {"codex", "codex.js"}, "claude": {"claude", "claude.js"},
                     "kimi": {"kimi"}}[entry["agent"]]
         if names & binaries:
             if entry["session"] in argv:
@@ -327,9 +318,6 @@ def output(entry):
                 messages.append("Working: " + clean(payload.get("name")))
         elif entry["agent"] == "claude" and kind == "assistant":
             messages.append(text(row.get("message", {}).get("content")))
-        elif entry["agent"] == "cursor":
-            if row.get("event") == "afterAgentResponse":
-                messages.append(text(payload.get("text")))
         elif entry["agent"] == "kimi":
             message = row.get("message", {})
             if message.get("role") == "assistant":
@@ -348,8 +336,7 @@ def resolve(home, key):
         raise ValueError("That session identity is invalid.")
     pattern = {"codex": f".codex/sessions/*/*/*/rollout-*{sid}.jsonl",
                "claude": f".claude/projects/*/{sid}.jsonl",
-               "kimi": f".kimi-code/sessions/wd_*/session_{sid}/agents/main/wire.jsonl",
-               "cursor": f".cursor/sessions/{sid}.jsonl"}[agent]
+               "kimi": f".kimi-code/sessions/wd_*/session_{sid}/agents/main/wire.jsonl"}[agent]
     entry = next((value for path in home.glob(pattern)
                   if (value := native(path, agent)) and value["session"] == sid), None)
     if not entry:
@@ -372,7 +359,7 @@ def workspace(snapshot, cwd):
 
 
 def resume_command(entry):
-    binary = {"cursor": "agent"}.get(entry["agent"], entry["agent"])
+    binary = entry["agent"]
     flag = {"codex": "resume", "kimi": "--session"}.get(entry["agent"], "--resume")
     argv = [binary, flag, entry["session"]]
     cwd = Path(entry["cwd"])

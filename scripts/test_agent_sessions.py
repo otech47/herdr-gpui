@@ -105,14 +105,12 @@ class SessionsTest(unittest.TestCase):
         self.write(self.path, rows)
         self.assertEqual(sessions.catalog(self.home)[0]["title"], "Fix navigation")
 
-    def test_all_four_native_harnesses_are_discovered(self):
+    def test_all_three_native_harnesses_are_discovered(self):
         self.write(self.home / f".claude/projects/project/{SID}.jsonl", [
             {"type": "user", "cwd": "/project", "message": {"content": "Review the change"}}])
         kimi = self.home / f".kimi-code/sessions/wd_project/session_{SID}"
         self.write(kimi / "agents/main/wire.jsonl", [{"message": {"role": "user", "content": "Check tests"}}])
         (kimi / "state.json").write_text(json.dumps({"cwd": "/project"}))
-        self.write(self.home / f".cursor/sessions/{SID}.jsonl", [
-            {"event": "beforeSubmitPrompt", "cwd": "/project", "payload": {"prompt": "Fix the menu"}}])
         self.assertEqual({r["agent"] for r in sessions.catalog(self.home)}, sessions.KINDS)
 
     def test_watch_never_mutates_herdr_or_signals_worker(self):
