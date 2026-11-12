@@ -190,6 +190,16 @@ impl Monitoring {
         })
     }
 
+    /// Whether the Claude session in tab `tab` of `daemon` stopped on a
+    /// usage limit and has not been prompted since.
+    pub fn stopped(&self, daemon: &Daemon, tab: &str) -> bool {
+        self.monitors.get(daemon.host()).is_some_and(|monitor| {
+            monitor.reading.watchers.iter().any(|(owner, watched)| {
+                watched.stopped && owner.id == tab && daemon.owns(&owner.socket)
+            })
+        })
+    }
+
     /// Shows `watchers` for `host` as if a scan had found them, with no worker.
     #[cfg(any(test, feature = "integration-test"))]
     pub(crate) fn seed(&mut self, host: Host, watchers: Watchers) {

@@ -2,11 +2,13 @@ use super::*;
 use crate::usage::Host;
 
 #[gpui::test]
-fn a_used_up_plan_marks_its_agents_limited_on_its_own_host(cx: &mut gpui::TestAppContext) {
+fn an_agent_is_limited_only_while_it_waits_on_a_used_up_plan(cx: &mut gpui::TestAppContext) {
     let (view, cx) = cx.add_window_view(|window, cx| {
         let mut view = layout_tests::fixture_window(window, cx);
-        view.usage
-            .seed(Host::Local, &[("claude", 100.), ("codex", 99.)]);
+        view.usage.seed(
+            Host::Local,
+            &[("claude", 100.), ("codex", 100.), ("kimi", 99.)],
+        );
         view.endpoints.push(crate::endpoint::Endpoint::new(
             "ssh:test".into(),
             "Mini".into(),
@@ -23,25 +25,53 @@ fn a_used_up_plan_marks_its_agents_limited_on_its_own_host(cx: &mut gpui::TestAp
     assert_eq!(claude.agent.as_deref(), Some("claude"));
     let mut codex = claude.clone();
     codex.agent = Some("codex".into());
+    let mut kimi = claude.clone();
+    kimi.agent = Some("kimi".into());
     let mut unknown = claude.clone();
     unknown.agent = None;
+    let waiting = [AgentStatus::Idle, AgentStatus::Done, AgentStatus::Unknown];
+    let busy = [AgentStatus::Working, AgentStatus::Blocked];
     view.read_with(cx, |view, _| {
-        for status in [
-            AgentStatus::Working,
-            AgentStatus::Idle,
-            AgentStatus::Done,
-            AgentStatus::Unknown,
-        ] {
-            assert_eq!(view.mark(0, Some(&claude), status), Mark::Limited);
-            assert_eq!(view.mark(0, Some(&codex), status), Mark::Status(status));
+        for status in waiting {
+            assert_eq!(view.mark(0, Some(&claude), status), Mark::Status(status));
+            assert_eq!(view.mark(0, Some(&codex), status), Mark::Limited);
+            assert_eq!(view.mark(0, Some(&kimi), status), Mark::Status(status));
             assert_eq!(view.mark(0, Some(&unknown), status), Mark::Status(status));
             assert_eq!(view.mark(0, None, status), Mark::Status(status));
+        }
+        for status in busy {
+            assert_eq!(view.mark(0, Some(&codex), status), Mark::Status(status));
+        }
+    });
+    view.update(cx, |view, _| {
+        let tab = crate::monitoring::Tab {
+            id: claude.tab_id.clone(),
+            socket: String::new(),
+        };
+        let stopped = crate::monitoring::Watched {
+            stopped: true,
+            ..Default::default()
+        };
+        view.monitoring
+            .seed(Host::Local, [(tab, stopped)].into_iter().collect());
+    });
+    view.read_with(cx, |view, _| {
+        for status in waiting {
+            assert_eq!(view.mark(0, Some(&claude), status), Mark::Limited);
             // ssh:test was never read.
             assert_eq!(view.mark(1, Some(&claude), status), Mark::Status(status));
         }
+        for status in busy {
+            assert_eq!(view.mark(0, Some(&claude), status), Mark::Status(status));
+        }
+    });
+    view.update(cx, |view, _| {
+        view.usage.seed(Host::Local, &[("claude", 40.)]);
+    });
+    view.read_with(cx, |view, _| {
         assert_eq!(
-            view.mark(0, Some(&claude), AgentStatus::Blocked),
-            Mark::Status(AgentStatus::Blocked)
+            view.mark(0, Some(&claude), AgentStatus::Idle),
+            Mark::Status(AgentStatus::Idle)
         );
     });
 }

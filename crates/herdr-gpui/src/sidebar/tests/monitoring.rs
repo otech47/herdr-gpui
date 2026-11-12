@@ -16,6 +16,7 @@ fn watchers(entries: &[(&str, &str)]) -> Watchers {
                 Watched {
                     under: vec![under.into()],
                     disowned: false,
+                    stopped: false,
                 },
             )
         })
@@ -87,8 +88,11 @@ fn a_used_up_plan_outranks_a_shell_left_running(cx: &mut gpui::TestAppContext) {
     let (view, cx) = cx.add_window_view(|window, cx| {
         let mut view = layout_tests::fixture_window(window, cx);
         view.usage.seed(Host::Local, &[("claude", 100.)]);
-        view.monitoring
-            .seed(Host::Local, watchers(&[("t0", "claude")]));
+        let mut watched = watchers(&[("t0", "claude")]);
+        watched
+            .values_mut()
+            .for_each(|watched| watched.stopped = true);
+        view.monitoring.seed(Host::Local, watched);
         view
     });
     let claude = layout_tests::snapshot(1).agents[0].clone();

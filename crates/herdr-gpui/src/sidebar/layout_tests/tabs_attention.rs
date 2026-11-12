@@ -211,6 +211,7 @@ fn a_tab_whose_agent_left_a_shell_running_sorts_above_the_idle_ones(cx: &mut gpu
                 Watched {
                     under: vec!["claude".into()],
                     disowned: false,
+                    stopped: false,
                 },
             )]),
         );

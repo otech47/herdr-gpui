@@ -32,6 +32,9 @@ const MAX_DEPTH: usize = 64;
 /// pass; macOS has `ps -E`, which prints each environment after its command.
 /// An argument holding a newline spreads a process over several `ps` lines,
 /// so a line is a new process only when it opens with two numbers.
+/// Then `L <pid>` for each Claude process whose session's last exchange is
+/// a usage-limit error, found through the session file Claude keeps per
+/// process and the tail of that session's transcript.
 /// The step runs in a long-lived shell, so it must not `exit`.
 pub(crate) const COMMAND: &str = r#"PATH="$PATH:/usr/sbin:/sbin"
 if [ -r /proc/self/environ ]; then
@@ -69,6 +72,19 @@ elif ps -E -o pid= -p $$ >/dev/null 2>&1; then
 else
     echo N
 fi
+for herdr_file in "$HOME"/.claude/sessions/[0-9]*.json; do
+    [ -r "$herdr_file" ] || continue
+    herdr_session=$(sed -n '/"status":"busy"/q; s/.*"sessionId":"\([0-9a-fA-F-]\{8,64\}\)".*/\1/p' "$herdr_file")
+    [ -n "$herdr_session" ] || continue
+    herdr_pid=${herdr_file##*/}
+    herdr_pid=${herdr_pid%.json}
+    for herdr_log in "$HOME"/.claude/projects/*/"$herdr_session".jsonl; do
+        [ -r "$herdr_log" ] || continue
+        if tail -c 65536 "$herdr_log" | awk '/"type":"(user|assistant)"/ { last = $0 } END { exit index(last, "\"error\":\"rate_limit\"") == 0 }'; then
+            echo "L $herdr_pid"
+        fi
+    done
+done
 true"#;
 
 /// A tab of one daemon, as a process's environment names it: the tab id,
@@ -88,6 +104,9 @@ pub(crate) struct Watched {
     pub under: Vec<String>,
     /// A shell or python process of the tab outlived its parent.
     pub disowned: bool,
+    /// The tab's Claude session stopped on a usage limit and has not been
+    /// prompted since.
+    pub stopped: bool,
 }
 
 /// Every watched tab, by tab.
@@ -113,6 +132,7 @@ fn timer(name: &str) -> bool {
 pub(crate) fn parse(text: &str) -> Result<Watchers> {
     let mut processes: HashMap<u32, Process> = HashMap::new();
     let mut tabs: HashMap<u32, Tab> = HashMap::new();
+    let mut stopped: Vec<u32> = Vec::new();
     for line in text.lines() {
         let mut words = line.splitn(4, ' ');
         match words.next() {
@@ -135,6 +155,11 @@ pub(crate) fn parse(text: &str) -> Result<Watchers> {
                     .take(MAX_NAME)
                     .collect();
                 processes.insert(pid, Process { parent, name });
+            }
+            Some("L") if stopped.len() < MAX_PROCESSES => {
+                if let Some(Ok(pid)) = words.next().map(|pid| pid.trim_end().parse()) {
+                    stopped.push(pid);
+                }
             }
             Some("E") => {
                 let (Some(pid), Some(id)) = (words.next(), words.next()) else {
@@ -166,6 +191,9 @@ pub(crate) fn parse(text: &str) -> Result<Watchers> {
         }
     }
     let mut watchers = Watchers::new();
+    for tab in stopped.iter().filter_map(|pid| tabs.get(pid)) {
+        watchers.entry(tab.clone()).or_default().stopped = true;
+    }
     for (pid, tab) in &tabs {
         if let Some(process) = processes.get(pid)
             && process.parent == 1

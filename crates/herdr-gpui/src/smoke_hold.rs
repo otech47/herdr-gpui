@@ -126,6 +126,7 @@ fn watchers(entries: &[(&str, &str)]) -> Watchers {
                 Watched {
                     under: vec![under.into()],
                     disowned: false,
+                    stopped: false,
                 },
             )
         })

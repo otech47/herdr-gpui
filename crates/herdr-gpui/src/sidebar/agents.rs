@@ -19,9 +19,10 @@ pub(super) use herdr_board::{
 };
 
 impl HerdrWindow {
-    /// Limited once a window of the agent's provider on its host is used up,
-    /// unless the agent is blocked, which still needs an answer. Monitoring
-    /// while an idle agent has a shell running under it.
+    /// Limited while the agent waits with a window of its provider on its
+    /// host used up. A Claude session also has to have stopped on the limit
+    /// itself, since another model can carry on past a model's own limit.
+    /// Monitoring while an idle agent has a shell running under it.
     pub(crate) fn mark(
         &self,
         endpoint: usize,
@@ -35,7 +36,12 @@ impl HerdrWindow {
             return Mark::Status(status);
         };
         let target = &endpoint.connection.target;
-        if status != AgentStatus::Blocked && self.usage.limited(&Host::from(target), label) {
+        let waiting = !matches!(status, AgentStatus::Blocked | AgentStatus::Working);
+        let stopped = label != "claude"
+            || self
+                .monitoring
+                .stopped(&Daemon::from(target), &agent.tab_id);
+        if waiting && stopped && self.usage.limited(&Host::from(target), label) {
             Mark::Limited
         } else if status == AgentStatus::Idle
             && self

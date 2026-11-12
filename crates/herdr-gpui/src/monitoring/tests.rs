@@ -15,6 +15,7 @@ fn under(name: &str) -> Watched {
     Watched {
         under: vec![name.into()],
         disowned: false,
+        stopped: false,
     }
 }
 
@@ -110,6 +111,29 @@ fn a_disowned_timer_keeps_its_tab_watched_but_a_server_does_not() {
     assert!(monitoring.watching(&daemon, "w1:t1", "claude"));
     assert!(!monitoring.watching(&daemon, "w1:t2", "claude"));
     assert!(monitoring.watching(&daemon, "w1:t3", "codex"));
+}
+
+#[test]
+fn a_claude_session_stopped_on_a_limit_marks_its_tab_but_does_not_watch_it() {
+    // The stopped pid is named before its environment; one outside any
+    // tab is ignored.
+    let watchers = parse(
+        "P 1 0 launchd\n\
+         L 10\n\
+         L 20\n\
+         L x\n\
+         P 10 1 claude\n\
+         P 20 1 claude\n\
+         E 10 w1:t1\n",
+    )
+    .unwrap();
+    assert!(watchers[&tab("w1:t1")].stopped);
+    assert_eq!(watchers.len(), 1);
+    let monitoring = seeded(watchers);
+    let daemon = Daemon::from(&ConnectTarget::Local);
+    assert!(monitoring.stopped(&daemon, "w1:t1"));
+    assert!(!monitoring.stopped(&daemon, "w1:t2"));
+    assert!(!monitoring.watching(&daemon, "w1:t1", "claude"));
 }
 
 #[test]

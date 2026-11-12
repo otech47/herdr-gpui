@@ -12,8 +12,8 @@ use gpui::MouseButton;
 use herdr_client::protocol::AgentStatus;
 
 /// One device whose shown space holds six tabs, t0 to t5, with every status
-/// once: idle, working, blocked, done, unknown, and a working claude tab
-/// whose plan is used up.
+/// once: idle, working, blocked, done, unknown, and an idle claude tab that
+/// stopped on its used-up plan.
 fn six_tabs(cx: &mut gpui::TestAppContext) -> (Entity<HerdrWindow>, &mut gpui::VisualTestContext) {
     let (view, cx) = cx.add_window_view(|window, cx| {
         let mut view = fixture_window(window, cx);
@@ -27,7 +27,7 @@ fn six_tabs(cx: &mut gpui::TestAppContext) -> (Entity<HerdrWindow>, &mut gpui::V
             AgentStatus::Blocked,
             AgentStatus::Done,
             AgentStatus::Unknown,
-            AgentStatus::Working,
+            AgentStatus::Idle,
         ]
         .into_iter()
         .enumerate()
@@ -41,10 +41,20 @@ fn six_tabs(cx: &mut gpui::TestAppContext) -> (Entity<HerdrWindow>, &mut gpui::V
             tab
         })
         .collect();
-        // p0 runs claude on t5, and claude's plan on this host is used up.
+        // p0 runs claude on t5, which stopped on claude's used-up plan.
         local.agents.truncate(1);
         local.agents[0].tab_id = "t5".into();
         view.usage.seed(Host::Local, &[("claude", 100.)]);
+        let tab = crate::monitoring::Tab {
+            id: "t5".into(),
+            socket: String::new(),
+        };
+        let stopped = crate::monitoring::Watched {
+            stopped: true,
+            ..Default::default()
+        };
+        view.monitoring
+            .seed(Host::Local, [(tab, stopped)].into_iter().collect());
         view.live.snapshot = Some(Arc::new(local));
         view
     });
