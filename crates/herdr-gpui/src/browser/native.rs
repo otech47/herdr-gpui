@@ -194,6 +194,13 @@ impl Pages {
         // Window has an inherent `window_handle` of its own.
         let handle = HasWindowHandle::window_handle(window)?;
         let view = builder.build_as_child(&handle)?;
+        // A hidden page keeps its frame over the terminal and still takes
+        // files dropped there, so no page accepts drops.
+        #[cfg(target_os = "macos")]
+        {
+            use wry::WebViewExtMacOS as _;
+            view.webview().unregisterDraggedTypes();
+        }
         let page = cx.new(|cx| {
             let mut page = WebView::new(view, window, cx);
             // A new page appears only when the window presents it.
