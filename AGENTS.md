@@ -200,6 +200,6 @@ just test-perf
 
 ## Oscar's checkouts
 
-This fork runs on Oscar's two Macs. `.agents/operating.md` says what runs where, what a change needs before it takes effect, and how an agent offers and performs an app relaunch. Read it before changing anything on those machines.
+This fork runs on Oscar's three Macs. `.agents/operating.md` says what runs where, what a change needs before it takes effect, and how an agent offers and performs an app relaunch. Read it before changing anything on those machines.
 
 @.agents/operating.md

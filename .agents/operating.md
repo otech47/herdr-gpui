@@ -10,18 +10,21 @@ The app, `Herdr.app`, is this repository. It is a client of the daemon with bund
 
 Neither program is installed through Homebrew. Do not reinstall either with it.
 
-## Two Macs
+## Three Macs
 
 | machine | runs | where the app reaches it |
 | --- | --- | --- |
-| oz-mbp, the MacBook | the app, the daemon, both checkouts, the signing keychain | local sockets |
+| oz-mbp, the MacBook | the app, a daemon, the checkout this guide is for, the signing keychain | local sockets |
+| oz-ms, the Mac Studio | the daemon that runs nearly every agent session, from `~/.local/bin/herdr` | ssh alias `oz-studio`, saved in the app as device "Studio", endpoint id `ssh:b5b318656ee02cc992706a4dae809c32` |
 | oz-mac-mini | the daemon only, from a copy of the same `herdr` binary at `~/.local/bin/herdr` | ssh alias `oz-mini`, saved in the app as device "Mini", endpoint id `ssh:93d87f03a0dd2de8c4df77aa633270d0` |
 
-The Mini has no app, no checkout and no signing keychain. The app keeps ssh connections to it: one `herdr remote-client-bridge` per window plus helper shells. After a Mini reboot the first bridge starts the Mini's daemon, detached in its own session with its standard streams on `/dev/null`, so that daemon outlives the app and the ssh session that started it. Updating the Mini's daemon means copying a new binary there and restarting it, which Oscar does.
+The app runs only on the MacBook. The Studio and the Mini have no app and no signing keychain. The Studio has a checkout of this repository on upstream `main` with a `laptop` remote, and does not build the app. The app keeps ssh connections to each remote daemon: one `herdr remote-client-bridge` per window plus helper shells. After a reboot the first bridge starts that Mac's daemon, detached in its own session with its standard streams on `/dev/null`, so the daemon outlives the app and the ssh session that started it. Updating a remote daemon means copying a new binary there and restarting it, which Oscar does.
 
-A third device, "Devbox", is the SetLife dev box `devbox-netcup-01`, a NixOS server reached as the `oscar` account through the ssh alias `devbox` on this Mac only, endpoint id `ssh:de9962317477c8659860f2aea0a00031`. It runs the daemon from the official v0.9.3 `herdr-linux-x86_64` release binary at `~/.local/bin/herdr`, the same version as both Macs. A fourth device, "Devbox contributors", is the same box reached as the `contributors` account through the ssh alias `devbox-contributors`, endpoint id `ssh:c8678aa217fbfcd65bb63f367fa3b0fa`, with its own copy of that binary and its own daemon. A daemon runs as one account and its shells run as that account, so each account on a box is a separate device. The directories the launcher chords name, `~/tools`, `~/fedibtc/fedi` and `~/WorkSTEPS`, do not exist there. The `control-setlife-devbox` skill covers the machine itself.
+`device_order` in the local app config lists the Studio first, then this Mac, the Mini and the dev box, in the sidebar, the launcher's device prompt and the devices menu.
 
-Oscar keeps one macOS desktop per project and one app window per space: tools, fedi, setlife-network and worksteps on this Mac. Agent sessions run as tabs in those spaces, on either Mac.
+A fourth device, "Devbox contributors", is the SetLife dev box `devbox-netcup-01` reached as the `contributors` account through the ssh alias `devbox-contributors`, endpoint id `ssh:c8678aa217fbfcd65bb63f367fa3b0fa`. It runs the daemon from the official v0.9.3 `herdr-linux-x86_64` release binary at `~/.local/bin/herdr`. A daemon runs as one account and its shells run as that account, so each account on a box is a separate device. The directories the launcher chords name, `~/tools`, `~/fedibtc/fedi` and `~/WorkSTEPS`, do not exist there. The `control-setlife-devbox` skill covers the machine itself.
+
+Oscar keeps one macOS desktop per project and one app window per space: tools, fedi, setlife-network and worksteps. Agent sessions run as tabs in those spaces, mostly on the Studio.
 
 ## The repository
 
@@ -52,7 +55,7 @@ The fork is public. A commit never contains the signing keychain or its password
 | `~/.local/bin/herdr-launch` | the launcher script the ctrl-cmd chords run, read on every press | yes |
 | `~/Library/Keychains/herdr-local-signing.keychain-db` and `.password` | this Mac's signing identity, created by the first `just bundle` | never, never in git |
 
-The launcher chords are `[[launchers]]` entries in the local app config: ctrl-cmd with 2, 3, 4 for claude, q, w, e for codex and a, s, d for kimi, in tools, fedi and worksteps. A press asks for this Mac or the Mini, then runs the script through `sh -c` with `HERDR_LAUNCH_DEVICE`, `HERDR_LAUNCH_DEVICE_LABEL`, `HERDR_LAUNCH_HOST` for the Mini, `HERDR_ACTIVE_WORKSPACE_ID` and `HERDR_SOCKET_PATH` pointing at the JSON API socket. The script creates a tab in the named space, asks the app to show it with `/Applications/Herdr.app/Contents/MacOS/Herdr workspace focus <space id> [--tab TAB] [--device ENDPOINT]`, waits for the shell prompt and types the command. Chords 5 and 6 stay daemon key commands in `config.toml`.
+The launcher chords are `[[launchers]]` entries in the local app config: ctrl-cmd with 2, 3, 4 for claude, q, w, e for codex and a, s, d for kimi, in tools, fedi and worksteps. A press asks for a device, then runs the script through `sh -c` with `HERDR_LAUNCH_DEVICE`, `HERDR_LAUNCH_DEVICE_LABEL`, `HERDR_LAUNCH_HOST` for a remote device, `HERDR_ACTIVE_WORKSPACE_ID` and `HERDR_SOCKET_PATH` pointing at the JSON API socket. The script creates a tab in the named space, asks the app to show it with `/Applications/Herdr.app/Contents/MacOS/Herdr workspace focus <space id> [--tab TAB] [--device ENDPOINT]`, waits for the shell prompt and types the command. Chords 5 and 6 stay daemon key commands in `config.toml`.
 
 ## What a change needs
 
@@ -85,17 +88,17 @@ A visible change is verified on the real window, not only in headless layout tes
 
 ## Relaunching the app
 
-A relaunch quits the app and opens it again. Both daemons keep running with every space, tab, pane and agent process: the app's only child processes are its ssh connections to the Mini and helper shells, every agent process descends from `herdr server`, and both daemons are detached from any client. The windows come back at their saved bounds, each on its saved space and device, on the desktop currently visible on their display. Oscar drags them to their project desktops himself. Focus moves to the app for a moment, and the ssh connections to the Mini reconnect. A window's title can lag behind the space it shows, so the sidebar in a screenshot is the ground truth, not the title.
+A relaunch quits the app and opens it again. Every daemon keeps running with every space, tab, pane and agent process: the app's only child processes are its ssh connections to the remote daemons and helper shells, every agent process descends from `herdr server`, and every daemon is detached from any client. The windows come back at their saved bounds, each on its saved space and device, on the desktop currently visible on their display. Oscar drags them to their project desktops himself. Focus moves to the app for a moment, and the ssh connections to the Studio and the Mini reconnect. A window's title can lag behind the space it shows, so the sidebar in a screenshot is the ground truth, not the title.
 
 The protocol after installing a build:
 
 1. Ask one question, in these words: "Ready to relaunch Herdr now, yes or no?" Add the one-line basis: the daemons own every agent, the app owns nothing but its ssh connections. Never write "relaunch when you want", and never relaunch without the yes. A yes inside the request itself, such as "fix it and relaunch", counts.
-2. On yes, run `python3 .agents/relaunch.py <scratch run dir>` and report what it printed: both daemon pids unchanged, every agent process alive, the new pid running the installed binary and its hash, as many windows as saved entries, the screenshots. The script stops before quitting when the app owns anything beyond its helpers, or when it cannot read the local daemon and its agents. Then report what it found and ask.
-3. When a change needs more than an app relaunch, say what it needs and ask instead of doing it. That covers a daemon rebuild or restart on either Mac, a binary copy to the Mini, deleting the signing keychain, editing a state file, and anything that touches a pane or a tab. Oscar does those or says who does.
+2. On yes, run `python3 .agents/relaunch.py <scratch run dir>` and report what it printed: the local, Studio and Mini daemon pids unchanged, every agent process on this Mac and the Studio alive, the new pid running the installed binary and its hash, as many windows as saved entries, the screenshots. The script stops before quitting when the app owns anything beyond its helpers, or when it cannot read the local daemon and its agents. Then report what it found and ask.
+3. When a change needs more than an app relaunch, say what it needs and ask instead of doing it. That covers a daemon rebuild or restart on any Mac, a binary copy to the Studio or the Mini, deleting the signing keychain, editing a state file, and anything that touches a pane or a tab. Oscar does those or says who does.
 
 ## Never
 
-- Stop or restart `herdr server` on either Mac. `herdr server reload-config` is fine.
+- Stop or restart `herdr server` on any Mac. `herdr server reload-config` is fine.
 - Run `herdr integration install`. The session hooks live in `~/.agents/hooks`.
 - Use the word "demo" anywhere in Herdr: code, config, docs, UI text.
 - Edit a file under `~/.local/state/herdr/gpui` unless Oscar asks for it in that turn.
