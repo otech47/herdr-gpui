@@ -215,6 +215,15 @@ project_roots = []
 # label = "claude in tools"
 # command = "herdr-launch tools ~/tools claude"
 
+# Buttons after the sidebar toggle that open a page in the system browser.
+# `url` must start with http:// or https://. `label` is the hover text and
+# defaults to the url. `icon` is one of external (default), pulse, chart,
+# globe, bell, github, sessions or settings. At most eight.
+# [[links]]
+# label = "otech"
+# url = "http://127.0.0.1:7477"
+# icon = "pulse"
+
 # Preferences offers a searchable picker for all four families together or each row.
 # Platform default removes the local family override; fallback cascades remain active.
 [sidebar]

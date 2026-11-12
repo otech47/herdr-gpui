@@ -10,6 +10,7 @@ use crate::{
 mod files;
 mod fonts;
 mod layout;
+mod links;
 mod notifications;
 pub(crate) mod preferences;
 pub(crate) mod sidebar;
@@ -24,6 +25,7 @@ pub use fonts::symbol_fallbacks;
 pub use fonts::{FONT_SIZE_RANGE, FONT_SIZE_STEP, FontConfig};
 use layout::MAX_SIDEBAR_GAP;
 pub use layout::{Density, Layout, LayoutMode, Style};
+pub(crate) use links::Link;
 pub(crate) use notifications::NotificationDelivery;
 pub use notifications::{BellConfig, ClipboardToast, ClipboardToastPosition, NotificationConfig};
 use notifications::{ClipboardToastSettings, NotificationSettings};
@@ -112,6 +114,8 @@ pub struct Config {
     pub(crate) devices: BTreeMap<String, DeviceSettings>,
     /// The `[[launchers]]` chords, in file order.
     pub(crate) launchers: Vec<Launcher>,
+    /// The `[[links]]` buttons beside the sidebar toggle, in file order.
+    pub(crate) links: Vec<Link>,
     pub palette: crate::palette::PaletteConfig,
     /// Keys the file names that this build does not know, sorted. They are
     /// ignored, as Herdr ignores its own, so a config written by a newer
@@ -376,6 +380,7 @@ impl Default for Config {
             pane_keys: PaneKeys::new(),
             devices: BTreeMap::new(),
             launchers: Vec::new(),
+            links: Vec::new(),
             unknown_keys: Vec::new(),
             palette: crate::palette::PaletteConfig::default(),
             sidebar: font(monospace, 12.0),
@@ -421,6 +426,7 @@ struct Settings {
     pane_keys: PaneKeys,
     devices: BTreeMap<String, DeviceSettings>,
     launchers: Vec<LauncherSettings>,
+    links: Vec<links::LinkSettings>,
     palette: crate::palette::PaletteConfig,
 }
 
@@ -700,6 +706,7 @@ impl Config {
         }
         config.devices = settings.devices;
         config.launchers = launchers(settings.launchers, &config.keybindings)?;
+        config.links = links::links(settings.links)?;
         settings.palette.validate()?;
         config.palette = settings.palette;
         if let Some(theme) = settings.theme {

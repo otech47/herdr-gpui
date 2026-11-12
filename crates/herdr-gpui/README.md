@@ -2044,6 +2044,11 @@ Windows setup) nothing is saved and the window says so.
   or one that cannot be read, leaves the device on local keys, and the menu
   says why. Only keybindings follow the server; themes, sidebar, and toasts
   stay local, and no remote config file is read.
+- `[[links]]` entries in `config-gpui.local.toml` add buttons after the
+  sidebar toggle. Clicking one opens its `url` (http or https) in the system
+  browser. `label` is the hover text and defaults to the url; `icon` is one of
+  `external` (default), `pulse`, `chart`, `globe`, `bell`, `github`,
+  `sessions` or `settings`. A file may list up to eight.
 - `[[launchers]]` entries in `config-gpui.local.toml` are chords that start
   an agent session on a device of your choice. Each has a `key` (a keystroke
   with a cmd, ctrl, alt, or fn modifier that no keybinding, pane key, or

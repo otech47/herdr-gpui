@@ -8,6 +8,7 @@ mod fonts;
 mod github;
 mod keybindings;
 mod launchers;
+mod links;
 mod loading;
 mod notification_settings;
 mod preferences;

@@ -650,6 +650,14 @@ pub enum Error {
     EmptyLauncherCommand(String),
     #[error("[[launchers]] must list at most {0} entries")]
     TooManyLaunchers(usize),
+    #[error("links: {0:?} must start with http:// or https://")]
+    LinkUrl(String),
+    #[error(
+        "links: no icon named {0:?}; use external, pulse, chart, globe, bell, github, sessions or settings"
+    )]
+    UnknownLinkIcon(String),
+    #[error("[[links]] must list at most {0} entries")]
+    TooManyLinks(usize),
     #[error(
         "pane_keys: {0:?} needs a cmd, ctrl, alt, or fn modifier so typing still reaches the terminal"
     )]

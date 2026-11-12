@@ -1,5 +1,6 @@
 //! Native chrome and GitHub account access.
 mod decorations;
+mod links;
 mod status;
 mod tabs;
 
@@ -210,7 +211,7 @@ impl HerdrWindow {
     ) -> impl IntoElement {
         // The toggle leads the bar so it stays put whether or not the sidebar
         // below it is showing, and can always bring the sidebar back.
-        render(self.theme.surface, Some(self.sidebar_toggle(cx)), window)
+        render(self.theme.surface, Some(self.titlebar_leading(cx)), window)
             .child(
                 div()
                     .debug_selector(|| "titlebar-center".into())
