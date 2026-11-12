@@ -118,6 +118,13 @@ impl HerdrWindow {
         let mut tab_drop = None;
         let now = std::time::Instant::now();
         let mut sliding = false;
+        // A folded device with no rows in the tabs list shrinks to a small line.
+        let tabbed: Vec<usize> = if sidebar_tabs {
+            self.listed_tabs().iter().map(|row| row.endpoint).collect()
+        } else {
+            Vec::new()
+        };
+        let small_line = (line_height(font) * 0.8).round();
         for endpoint_index in self.device_order() {
             let endpoint = &self.endpoints[endpoint_index];
             if !self.device_visible(&endpoint.id) {
@@ -126,6 +133,7 @@ impl HerdrWindow {
             let selected = endpoint_index == self.selected_endpoint;
             let endpoint_id = endpoint.id.clone();
             if multi {
+                let small = sidebar_tabs && endpoint.collapsed && !tabbed.contains(&endpoint_index);
                 let collapse_id = endpoint_id.clone();
                 let select_id = endpoint_id.clone();
                 let menu_id = endpoint_id.clone();
@@ -161,9 +169,15 @@ impl HerdrWindow {
                     div()
                         .id(SharedString::from(format!("host-{endpoint_id}")))
                         .debug_selector(|| format!("host-{endpoint_id}"))
-                        .h(px(line_height(font)
-                            + 2. * layout.host_padding()
-                            + look.chrome_height()))
+                        .h(px(if small {
+                            small_line + 2.
+                        } else {
+                            line_height(font) + 2. * layout.host_padding() + look.chrome_height()
+                        }))
+                        .when(small, |row| {
+                            row.text_size(px((font.size * 0.85).round()))
+                                .line_height(px(small_line))
+                        })
                         .flex_none()
                         .relative()
                         .flex()
@@ -180,7 +194,7 @@ impl HerdrWindow {
                             },
                             theme,
                         ))
-                        .text_color(rgb(if endpoint.enabled {
+                        .text_color(rgb(if endpoint.enabled && !small {
                             theme.foreground
                         } else {
                             theme.muted
