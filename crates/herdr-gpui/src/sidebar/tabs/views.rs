@@ -31,14 +31,21 @@ impl HerdrWindow {
         let sources = self.sources();
         let across = self.config.show_sidebar_tabs && self.sidebar_tabs_view != TabsView::Device;
         let mut listed = herdr_board::listed_tabs(&sources, self.selected_endpoint, across);
-        if self.sidebar_tabs_sort == TabsSort::Attention {
+        let grouped = self.sidebar_tabs_view == TabsView::ByDevice;
+        let attention = self.sidebar_tabs_sort == TabsSort::Attention;
+        if attention {
             herdr_board::sort_by_attention(
                 &mut listed,
                 &sources,
                 &self.attention,
-                self.sidebar_tabs_view == TabsView::ByDevice,
+                grouped,
                 |row| self.listed_rank(row),
             );
+        }
+        // An ungrouped attention sort mixes devices, so it has no device order.
+        if grouped || !attention {
+            let order = self.device_order();
+            listed.sort_by_key(|row| order.iter().position(|&index| index == row.endpoint));
         }
         listed
     }

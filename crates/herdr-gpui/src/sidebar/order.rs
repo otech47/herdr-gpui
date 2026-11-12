@@ -13,9 +13,9 @@ pub(crate) type Row<'a> = (usize, &'a str);
 impl HerdrWindow {
     /// Each host the sidebar lists, with the snapshot it draws from.
     fn listed_hosts(&self) -> impl Iterator<Item = (usize, &ClientShellSnapshot)> {
-        self.endpoints
-            .iter()
-            .enumerate()
+        self.device_order()
+            .into_iter()
+            .map(|index| (index, &self.endpoints[index]))
             .filter(|(_, endpoint)| endpoint.enabled && self.device_visible(&endpoint.id))
             .filter_map(|(index, endpoint)| {
                 let live = if index == self.selected_endpoint {

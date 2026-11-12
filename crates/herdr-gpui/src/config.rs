@@ -72,6 +72,9 @@ pub struct Config {
     pub new_space_in_window: bool,
     /// CPU and memory of the selected host in the status bar.
     pub show_system_load: bool,
+    /// Device labels or ids in the order the sidebar, launcher prompt and
+    /// devices menu list them. Unnamed devices follow in catalog order.
+    pub device_order: Vec<String>,
     /// Snapshot a checkout's files each time one of its agents starts or
     /// finishes a turn, so they can be rolled back.
     pub agent_checkpoints: bool,
@@ -353,6 +356,7 @@ impl Default for Config {
             show_sidebar_tabs: false,
             new_space_in_window: false,
             show_system_load: true,
+            device_order: Vec::new(),
             agent_checkpoints: true,
             show_listening_ports: true,
             contrast: Contrast::default(),
@@ -395,6 +399,7 @@ struct Settings {
     show_sidebar_tabs: Option<bool>,
     new_space_in_window: Option<bool>,
     show_system_load: Option<bool>,
+    device_order: Option<Vec<String>>,
     agent_checkpoints: Option<bool>,
     show_listening_ports: Option<bool>,
     contrast: Contrast,
@@ -711,6 +716,7 @@ impl Config {
         config.show_sidebar_tabs = settings.show_sidebar_tabs.unwrap_or(false);
         config.new_space_in_window = settings.new_space_in_window.unwrap_or(false);
         config.show_system_load = settings.show_system_load.unwrap_or(true);
+        config.device_order = settings.device_order.unwrap_or_default();
         config.agent_checkpoints = settings.agent_checkpoints.unwrap_or(true);
         config.show_listening_ports = settings.show_listening_ports.unwrap_or(true);
         config.contrast = settings.contrast;

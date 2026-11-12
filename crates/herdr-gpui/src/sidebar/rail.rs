@@ -125,7 +125,8 @@ impl HerdrWindow {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll();
-        for (endpoint_index, endpoint) in self.endpoints.iter().enumerate() {
+        for endpoint_index in self.device_order() {
+            let endpoint = &self.endpoints[endpoint_index];
             if !self.device_visible(&endpoint.id) {
                 continue;
             }

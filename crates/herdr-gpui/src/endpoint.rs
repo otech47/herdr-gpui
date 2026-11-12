@@ -19,6 +19,7 @@ use std::{
 
 mod catalog;
 mod config_reload;
+mod order;
 mod polling;
 mod wake;
 

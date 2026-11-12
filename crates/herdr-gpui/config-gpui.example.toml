@@ -58,6 +58,10 @@ new_space_in_window = false
 # on its sidebar row. Connected remote hosts are read over SSH every couple of
 # seconds; false stops all sampling. Also under Settings > General.
 show_system_load = true
+# The order devices are listed in: the sidebar, the device a launcher asks for,
+# and the devices menu. Name each by its label, or "local" for this computer.
+# Devices left out follow in the order they were added.
+device_order = []
 # Checkpoint a worktree each time one of its agents starts or finishes a turn,
 # locally or over SSH, so its files can be rolled back from the workspace
 # menu's Checkpoints. Snapshots include untracked (not ignored) files, live in

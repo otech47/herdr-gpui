@@ -255,7 +255,9 @@ impl HerdrWindow {
             self.device_filter.is_none(),
             true,
         )];
-        rows.extend(self.endpoints.iter().map(|endpoint| {
+        let order = self.device_order();
+        rows.extend(order.iter().map(|&index| {
+            let endpoint = &self.endpoints[index];
             let detail = match &endpoint.connection.target {
                 ConnectTarget::Ssh { target, session } => format!("{target} · {session}"),
                 ConnectTarget::Socket(path) => path.display().to_string(),
@@ -292,7 +294,10 @@ impl HerdrWindow {
                     .child("DEVICES"),
             );
         for (index, (label, detail, checked, enabled)) in rows.into_iter().enumerate() {
-            let endpoint = index.checked_sub(1).and_then(|i| self.endpoints.get(i));
+            let endpoint = index
+                .checked_sub(1)
+                .and_then(|row| order.get(row))
+                .map(|&listed| &self.endpoints[listed]);
             view = view.child(
                 div()
                     .id(("device-row", index))
@@ -407,7 +412,12 @@ impl HerdrWindow {
             let filter = if index == 0 {
                 None
             } else {
-                let Some(endpoint) = self.endpoints.get(index - 1).filter(|e| e.enabled) else {
+                let Some(endpoint) = self
+                    .device_order()
+                    .get(index - 1)
+                    .map(|&listed| &self.endpoints[listed])
+                    .filter(|e| e.enabled)
+                else {
                     return;
                 };
                 Some(endpoint.id.clone())

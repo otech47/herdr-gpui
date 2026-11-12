@@ -125,11 +125,11 @@ impl HerdrWindow {
             .position(|launcher| crate::keymap::typed_matches(keystroke, &launcher.key))
     }
 
-    /// The devices a launcher can run for: this computer first, then every
-    /// enabled saved device, in sidebar order.
+    /// The enabled devices a launcher can run for, in sidebar order.
     pub(crate) fn launcher_choices(&self) -> Vec<Choice> {
-        self.endpoints
-            .iter()
+        self.device_order()
+            .into_iter()
+            .map(|index| &self.endpoints[index])
             .filter(|endpoint| endpoint.enabled)
             .map(|endpoint| Choice {
                 id: endpoint.id.clone(),

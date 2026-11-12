@@ -118,7 +118,8 @@ impl HerdrWindow {
         let mut tab_drop = None;
         let now = std::time::Instant::now();
         let mut sliding = false;
-        for (endpoint_index, endpoint) in self.endpoints.iter().enumerate() {
+        for endpoint_index in self.device_order() {
+            let endpoint = &self.endpoints[endpoint_index];
             if !self.device_visible(&endpoint.id) {
                 continue;
             }
