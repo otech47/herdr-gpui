@@ -3,6 +3,7 @@
 
 mod agents;
 mod cell;
+mod host_row;
 mod hover;
 mod layout;
 mod layouts;

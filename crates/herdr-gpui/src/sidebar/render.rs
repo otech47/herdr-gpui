@@ -3,13 +3,13 @@
 //! caches only.
 
 use super::{
-    HOST_ARROW_WIDTH, HOST_GAP, STATUS_WIDTH, SidebarDrag, agent_name,
+    SidebarDrag, agent_name,
     agents::{Indicators, Mark, agent_place, state_label, status_text},
     agents_sort,
-    cell::{AgentRow, Cell, Fold, RowContext, RowData, RowState, WorkspaceRow, layout_for},
+    cell::{AgentRow, Cell, Fold, RowContext, RowData, WorkspaceRow, layout_for},
     label_text, layout, line_height,
     reorder::{self, Plan},
-    row::{RowIcon, RowLift, RowTree, removing_dot},
+    row::{RowIcon, RowLift, RowTree},
     sections::header_height,
     sidebar_width, sorted_agents, tab_reorder,
     tokens::{self, SpaceContext},
@@ -34,11 +34,7 @@ impl HerdrWindow {
         // The row a workspace menu was opened for keeps looking hovered while
         // the pointer is over the menu.
         let menu_target = self.workspace_menu_target();
-        let layout = look.density;
         let content_x = look.content_x();
-        // The label yields room to the arrow and to the trailing status dot.
-        let host_label_width =
-            (look.content_width(width) - HOST_ARROW_WIDTH - 2. * HOST_GAP - STATUS_WIDTH).max(0.);
         let view = cx.entity().downgrade();
         let font = &self.config.sidebar;
         let agents_custom = self.config.usage.inline
@@ -124,7 +120,6 @@ impl HerdrWindow {
         } else {
             Vec::new()
         };
-        let small_line = (line_height(font) * 0.8).round();
         for endpoint_index in self.device_order() {
             let endpoint = &self.endpoints[endpoint_index];
             if !self.device_visible(&endpoint.id) {
@@ -134,162 +129,7 @@ impl HerdrWindow {
             let endpoint_id = endpoint.id.clone();
             if multi {
                 let small = sidebar_tabs && endpoint.collapsed && !tabbed.contains(&endpoint_index);
-                let collapse_id = endpoint_id.clone();
-                let select_id = endpoint_id.clone();
-                let menu_id = endpoint_id.clone();
-                let removing = self.menu.removing_devices.contains(&endpoint.id);
-                let host = crate::usage::Host::from(&endpoint.connection.target);
-                let load = self
-                    .config
-                    .show_system_load
-                    .then(|| self.system_load.get(&host))
-                    .flatten();
-                // The removal pulse and the load take their room from the
-                // label, not from the status.
-                let name_room = (host_label_width
-                    - if removing {
-                        STATUS_WIDTH + HOST_GAP
-                    } else {
-                        0.
-                    }
-                    - HOST_GAP)
-                    .max(0.);
-                let load_size = (font.size * 0.85).round();
-                let load_view = load.map(|reading| {
-                    crate::system_load::compact(
-                        reading,
-                        theme,
-                        load_size,
-                        super::metrics::glyph_width(font) * load_size / font.size,
-                    )
-                });
-                let label_width =
-                    (name_room - load_view.as_ref().map_or(-HOST_GAP, |(width, _)| *width)).max(0.);
-                spaces = spaces.child(
-                    div()
-                        .id(SharedString::from(format!("host-{endpoint_id}")))
-                        .debug_selector(|| format!("host-{endpoint_id}"))
-                        .h(px(if small {
-                            small_line + 2.
-                        } else {
-                            line_height(font) + 2. * layout.host_padding() + look.chrome_height()
-                        }))
-                        .when(small, |row| {
-                            row.text_size(px((font.size * 0.85).round()))
-                                .line_height(px(small_line))
-                        })
-                        .flex_none()
-                        .relative()
-                        .flex()
-                        .flex_col()
-                        .justify_center()
-                        .px(px(content_x))
-                        // Hosts mark selection only; they do not join the rows'
-                        // hover group.
-                        .child(look.highlight(
-                            &format!("host-{endpoint_id}"),
-                            RowState {
-                                selected,
-                                ..RowState::default()
-                            },
-                            theme,
-                        ))
-                        .text_color(rgb(if endpoint.enabled && !small {
-                            theme.foreground
-                        } else {
-                            theme.muted
-                        }))
-                        .cursor_pointer()
-                        .on_mouse_down(
-                            MouseButton::Right,
-                            cx.listener(move |this, event: &MouseDownEvent, window, cx| {
-                                cx.stop_propagation();
-                                this.open_host_menu(&menu_id, event.position, window, cx);
-                                this.menu.opening_right_click =
-                                    this.menu.page == Some(crate::menu::Page::Host);
-                            }),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(HOST_GAP))
-                                .child(
-                                    div()
-                                        .id(SharedString::from(format!(
-                                            "collapse-host-{endpoint_id}"
-                                        )))
-                                        .debug_selector(|| format!("collapse-host-{endpoint_id}"))
-                                        .w(px(HOST_ARROW_WIDTH))
-                                        .flex_none()
-                                        .child(label_text(if endpoint.collapsed {
-                                            "\u{25b8}"
-                                        } else {
-                                            "\u{25be}"
-                                        }))
-                                        .on_click(cx.listener(move |this, _, _, cx| {
-                                            cx.stop_propagation();
-                                            if let Some(endpoint) = this
-                                                .endpoints
-                                                .iter_mut()
-                                                .find(|e| e.id == collapse_id)
-                                            {
-                                                endpoint.collapsed = !endpoint.collapsed;
-                                            }
-                                            cx.notify();
-                                        })),
-                                )
-                                .when(removing, |row| {
-                                    row.child(removing_dot("host-removing", theme))
-                                })
-                                .child(
-                                    div()
-                                        // As with workspace labels, avoid zero-basis text measurement.
-                                        .w(px(label_width))
-                                        .flex_none()
-                                        .overflow_hidden()
-                                        .child(
-                                            div()
-                                                .w(px(label_width))
-                                                .truncate()
-                                                .child(label_text(&endpoint.label)),
-                                        ),
-                                )
-                                .when_some(load_view, |row, (_, view)| {
-                                    row.child(
-                                        div()
-                                            .id(SharedString::from(format!(
-                                                "host-load-{endpoint_id}"
-                                            )))
-                                            .debug_selector(|| format!("host-load-{endpoint_id}"))
-                                            .flex_none()
-                                            .child(view)
-                                            .tooltip(crate::system_load::tooltip(
-                                                cx.weak_entity(),
-                                                host.clone(),
-                                                theme,
-                                            ))
-                                            .tooltip_show_delay(std::time::Duration::ZERO),
-                                    )
-                                })
-                                .child(
-                                    div()
-                                        .debug_selector(|| format!("host-status-{endpoint_id}"))
-                                        .size(px(STATUS_WIDTH))
-                                        .flex_none()
-                                        .rounded_full()
-                                        .bg(rgb(if endpoint.live.status.is_connected() {
-                                            crate::menu::online(theme)
-                                        } else {
-                                            theme.muted
-                                        })),
-                                ),
-                        )
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            this.select_endpoint(&select_id, cx);
-                            window.focus(&this.focus, cx);
-                        })),
-                );
+                spaces = spaces.child(self.host_row(endpoint_index, small, look, width, cx));
                 space_rows += 1;
             }
             let row_cx = RowContext {
