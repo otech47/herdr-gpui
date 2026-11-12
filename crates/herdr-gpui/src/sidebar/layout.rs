@@ -28,6 +28,11 @@ pub(super) trait SidebarDensity {
     fn host_padding(&self) -> f32;
     fn footer_padding(&self) -> f32;
 
+    /// The rounded style's room around a row's highlight, above and below.
+    fn trim(&self) -> f32 {
+        (self.gap() / 3.).round()
+    }
+
     fn tree_gutter(&self) -> f32 {
         self.padding() + STATUS_WIDTH + self.gap()
     }
@@ -128,9 +133,9 @@ impl SidebarDensity for Compact {
     }
 }
 
-/// One line per row, the branch on it, no row padding. Horizontal metrics
-/// stay the base density's, so the labels line up with the tab rows under
-/// the spaces.
+/// One line per row, the branch on it, no row padding, and device rows as
+/// tall as space rows. Horizontal metrics stay the base density's, so the
+/// labels line up with the tab rows under the spaces.
 pub(super) struct Tight(Density);
 
 impl Tight {
@@ -162,7 +167,10 @@ impl SidebarDensity for Tight {
         self.base().header_padding()
     }
     fn host_padding(&self) -> f32 {
-        self.base().host_padding()
+        0.
+    }
+    fn trim(&self) -> f32 {
+        1.
     }
     fn footer_padding(&self) -> f32 {
         self.base().footer_padding()
@@ -235,7 +243,7 @@ pub(super) struct Rounded;
 
 impl Rounded {
     fn trim(density: &dyn SidebarDensity) -> f32 {
-        (density.gap() / 3.).round()
+        density.trim()
     }
 }
 

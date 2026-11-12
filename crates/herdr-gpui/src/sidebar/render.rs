@@ -3,7 +3,7 @@
 //! caches only.
 
 use super::{
-    SidebarDrag, agent_name,
+    HOST_ARROW_WIDTH, HOST_GAP, SidebarDrag, agent_name,
     agents::{Indicators, Mark, agent_place, state_label, status_text},
     agents_sort,
     cell::{AgentRow, Cell, Fold, RowContext, RowData, WorkspaceRow, layout_for},
@@ -129,7 +129,14 @@ impl HerdrWindow {
             let endpoint_id = endpoint.id.clone();
             if multi {
                 let small = sidebar_tabs && endpoint.collapsed && !tabbed.contains(&endpoint_index);
-                spaces = spaces.child(self.host_row(endpoint_index, small, look, width, cx));
+                spaces = spaces.child(self.host_row(
+                    endpoint_index,
+                    small,
+                    look,
+                    spaces_look,
+                    width,
+                    cx,
+                ));
                 space_rows += 1;
             }
             let row_cx = RowContext {
@@ -141,8 +148,16 @@ impl HerdrWindow {
                 host: (multi && endpoint_id != crate::endpoint::LOCAL)
                     .then_some(endpoint.label.as_str()),
             };
+            // Under a device row, one-line space rows start where the
+            // device's name does.
+            let nest = if multi && sidebar_tabs {
+                HOST_ARROW_WIDTH + HOST_GAP
+            } else {
+                0.
+            };
             let spaces_cx = RowContext {
                 look: spaces_look,
+                width: width - nest,
                 ..row_cx
             };
             let daemon = crate::listening_ports::Daemon::from(&endpoint.connection.target);
@@ -457,6 +472,8 @@ impl HerdrWindow {
                 })
                 .when(carried, |row| row.cursor_grabbing())
                 .when(gap > 0., |row| row.mt(px(gap)))
+                // A full width would push the indented row past the list's edge.
+                .when(nest > 0., |row| row.w_auto().ml(px(nest)))
                 .when(shift != px(0.), |row| row.top(shift))
                 .into_any_element();
                 spaces = if carried {

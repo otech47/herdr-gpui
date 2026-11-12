@@ -25,6 +25,21 @@ fn a_folded_device_without_listed_tabs_is_a_small_line(cx: &mut gpui::TestAppCon
 }
 
 #[gpui::test]
+fn space_rows_nest_under_the_device_name_at_its_height(cx: &mut gpui::TestAppContext) {
+    let (view, cx) = two_devices(cx);
+    view.update(cx, |view, _| view.endpoints[0].collapsed = false);
+    draw(cx);
+    let host = cx.debug_bounds("host-local").unwrap();
+    let space = cx.debug_bounds("workspace-local-w0").unwrap();
+    assert_eq!(space.size.height, host.size.height);
+    assert_eq!(
+        space.left() - host.left(),
+        px(super::super::HOST_ARROW_WIDTH + super::super::HOST_GAP)
+    );
+    assert_eq!(space.right(), host.right());
+}
+
+#[gpui::test]
 fn the_device_order_leads_the_sidebar_tabs_and_launcher(cx: &mut gpui::TestAppContext) {
     let (view, cx) = two_devices(cx);
     view.update(cx, |view, _| {

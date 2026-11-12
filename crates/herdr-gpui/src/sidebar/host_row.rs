@@ -13,6 +13,7 @@ impl HerdrWindow {
         endpoint_index: usize,
         small: bool,
         look: SidebarLook,
+        spaces_look: SidebarLook,
         width: f32,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
@@ -62,7 +63,9 @@ impl HerdrWindow {
             .h(px(if small {
                 small_line + 2.
             } else {
-                line_height(font) + 2. * look.density.host_padding() + look.chrome_height()
+                line_height(font)
+                    + 2. * spaces_look.density.host_padding()
+                    + spaces_look.chrome_height()
             }))
             .when(small, |row| {
                 row.text_size(px((font.size * 0.85).round()))
@@ -76,7 +79,7 @@ impl HerdrWindow {
             .px(px(look.content_x()))
             // Hosts mark selection only; they do not join the rows'
             // hover group.
-            .child(look.highlight(
+            .child(spaces_look.highlight(
                 &format!("host-{endpoint_id}"),
                 RowState {
                     selected,

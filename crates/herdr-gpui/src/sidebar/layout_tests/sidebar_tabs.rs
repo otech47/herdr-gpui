@@ -37,11 +37,11 @@ fn spaces_take_one_line_each_under_a_tabs_list(cx: &mut gpui::TestAppContext) {
     draw(cx);
     let line = view.read_with(cx, |view, _| view.config.sidebar.size * 4. / 3.);
     // Comfortable rounded rows: a trim of 3 inside the highlight and twice
-    // that between rows. The spaces drop the density's own 4 and their
-    // branch line; the tab rows under them keep both.
+    // that between rows, and the density's own 4. The spaces keep a trim
+    // of 1 and drop the 4 and their branch line.
     let (trim, comfortable) = (3., 4.);
     let row = cx.debug_bounds("row-herdr").unwrap();
-    assert_eq!(row.size.height, px(line + 2. * trim + 2. * trim));
+    assert_eq!(row.size.height, px(line + 4.));
     assert!(cx.debug_bounds("detail-herdr").is_none());
     let tab = cx.debug_bounds("row-tab-t0").unwrap();
     assert_eq!(
