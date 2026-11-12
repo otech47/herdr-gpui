@@ -3,7 +3,7 @@
 //! the tabs that want attention first. And which tabs wait on an answer
 //! somewhere the list does not show.
 
-use crate::{AttentionLedger, agent_name, text::clipped};
+use crate::{AttentionLedger, agent_name, agent_names, text::clipped};
 use herdr_protocol::{AgentStatus, ClientShellAgent, ClientShellSnapshot, ClientShellTab};
 use std::cmp::Reverse;
 
@@ -173,14 +173,18 @@ pub fn tab_agent<'a>(
     snapshot.agents.iter().find(|agent| agent.tab_id == tab_id)
 }
 
-/// What a tab is called in a list: its own name when renamed, else its
-/// agent's terminal title, else the agent, else the shell's directory.
+/// What a tab is called in a list: its agent's own terminal title, else the
+/// tab's name when renamed, else the agent, else the shell's directory.
 pub fn tab_title(tab: &ClientShellTab, snapshot: &ClientShellSnapshot) -> String {
+    let agent = tab_agent(snapshot, &tab.tab_id);
+    if let Some(title) = agent.and_then(agent_title) {
+        return title;
+    }
     if tab.custom_label {
         return tab.label.clone();
     }
-    if let Some(agent) = tab_agent(snapshot, &tab.tab_id) {
-        return agent_title(agent).unwrap_or_else(|| agent_name(agent).to_owned());
+    if let Some(agent) = agent {
+        return agent_name(agent).to_owned();
     }
     let cwd = snapshot
         .panes
@@ -196,11 +200,15 @@ pub fn tab_title(tab: &ClientShellTab, snapshot: &ClientShellSnapshot) -> String
     }
 }
 
+/// Agents set a default title such as "Claude Code" until a session is named,
+/// and a tab name says more than that.
+const DEFAULT_TITLES: [&str; 4] = ["claude code", "codex", "kimi code", "kimi"];
+
 fn agent_title(agent: &ClientShellAgent) -> Option<String> {
-    agent
-        .terminal_title_stripped
-        .as_deref()
-        .map(str::trim)
-        .filter(|title| !title.is_empty())
-        .map(str::to_owned)
+    let title = agent.terminal_title_stripped.as_deref()?.trim();
+    let default = DEFAULT_TITLES
+        .into_iter()
+        .chain(agent_names(agent).into_iter().flatten())
+        .any(|name| title.eq_ignore_ascii_case(name.trim()));
+    (!title.is_empty() && !default).then(|| title.to_owned())
 }

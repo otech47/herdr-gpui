@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn a_tab_is_named_by_its_own_label_then_its_agent_then_its_directory() {
+fn a_tab_is_named_by_its_agent_then_its_own_label_then_its_directory() {
     let mut snapshot = device(
         &[("w1", "tools")],
         &[
@@ -22,10 +22,20 @@ fn a_tab_is_named_by_its_own_label_then_its_agent_then_its_directory() {
     assert_eq!(title(&snapshot, 2), "inner");
     snapshot.panes.clear();
     assert_eq!(title(&snapshot, 2), "tab 3");
-    // A renamed tab keeps its name over everything else.
+    // An agent's own title wins over a tab label, unless it is a default one.
     snapshot.tabs[0].custom_label = true;
     snapshot.tabs[0].label = "release".into();
+    assert_eq!(title(&snapshot, 0), "fix the build");
+    snapshot.agents[0].terminal_title_stripped = Some("Claude Code".into());
     assert_eq!(title(&snapshot, 0), "release");
+    snapshot.tabs[1].custom_label = true;
+    snapshot.tabs[1].label = "review".into();
+    assert_eq!(title(&snapshot, 1), "review");
+    snapshot.agents[1].terminal_title_stripped = Some("Codex".into());
+    assert_eq!(title(&snapshot, 1), "review");
+    snapshot.tabs[2].custom_label = true;
+    snapshot.tabs[2].label = "logs".into();
+    assert_eq!(title(&snapshot, 2), "logs");
 }
 
 #[test]
