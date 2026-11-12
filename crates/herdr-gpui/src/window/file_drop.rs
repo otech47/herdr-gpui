@@ -23,7 +23,9 @@ impl HerdrWindow {
     ) {
         // GPUI translates the platform Submit position into window mouse state
         // before invoking on_drop; the payload itself carries no coordinates.
-        if self.drop_paths(paths.paths(), window.mouse_position(), window, cx) {
+        let position = window.mouse_position();
+        tracing::info!(paths = paths.paths().len(), ?position, "Files dropped");
+        if self.drop_paths(paths.paths(), position, window, cx) {
             cx.stop_propagation();
         }
     }
@@ -38,6 +40,12 @@ impl HerdrWindow {
     #[cfg(target_os = "macos")]
     pub(super) fn poll_file_promises(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         for drop in promise::take(window.window_handle().window_id()) {
+            tracing::info!(
+                paths = drop.paths.len(),
+                errors = drop.errors.len(),
+                position = ?drop.position,
+                "Promised files arrived"
+            );
             if let Some(error) = drop.errors.first() {
                 self.local_error = Some(format!("Files not pasted: {error}"));
                 cx.notify();
@@ -57,9 +65,19 @@ impl HerdrWindow {
         cx: &mut Context<Self>,
     ) -> bool {
         if self.active_session_tab(cx).is_some() {
+            tracing::info!("Drop ignored on an agent session page");
             return false;
         }
         let Some(target) = self.file_drop_target(position) else {
+            tracing::info!(
+                menu = self.menu.page.is_some(),
+                connected = self.live.status.is_connected(),
+                activated = self.surface_activation_ready(),
+                sized = self.surface_matches_options(),
+                toast = self.pending_toast.is_some(),
+                inside = self.bounds.contains(&position),
+                "Drop reached no pane"
+            );
             return false;
         };
         if paths.is_empty() {
@@ -70,13 +88,20 @@ impl HerdrWindow {
                 && let [path] = paths
                 && let Some(source) = super::image_source::from_path(path)
             {
+                tracing::info!("Drop sent through the remote image bridge");
                 self.start_remote_image(target.clone(), source, Some(text), cx);
                 return Ok(());
             }
             if self.accepts_remote_images() {
+                tracing::info!("Drop uploading over SSH");
                 self.start_file_transfer(target.clone(), paths.to_vec(), cx);
                 return Ok(());
             }
+            tracing::info!(
+                remote = self.selected_is_remote(),
+                mouse_focus = self.mouse_focus_pending(),
+                "Drop pasting local paths"
+            );
             let endpoint = &self.endpoints[self.selected_endpoint];
             let handle = endpoint
                 .connection
@@ -95,6 +120,7 @@ impl HerdrWindow {
         match result {
             Ok(()) => window.focus(&self.focus, cx),
             Err(error) => {
+                tracing::warn!(%error, "Drop not pasted");
                 self.local_error = Some(format!("Files not pasted: {error}"));
                 cx.notify();
             }

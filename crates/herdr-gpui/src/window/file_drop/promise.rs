@@ -203,6 +203,23 @@ unsafe fn promise<'a>(
     .then_some((window, info))
 }
 
+/// # Safety
+///
+/// `info` must be the dragging info AppKit passed to the current callback.
+unsafe fn log_types(info: *mut AnyObject) {
+    // SAFETY: AppKit passes an object conforming to NSDraggingInfo that lives
+    // for the duration of the callback.
+    let Some(info) = (unsafe { info.cast::<ProtocolObject<dyn NSDraggingInfo>>().as_ref() }) else {
+        return;
+    };
+    let types: Vec<String> = info
+        .draggingPasteboard()
+        .types()
+        .map(|types| types.iter().map(|kind| kind.to_string()).collect())
+        .unwrap_or_default();
+    tracing::info!(?types, "Drag released on a window");
+}
+
 unsafe extern "C-unwind" fn dragging_entered(
     native: *mut AnyObject,
     selector: Sel,
@@ -238,6 +255,8 @@ unsafe extern "C-unwind" fn perform_drag_operation(
     selector: Sel,
     info: *mut AnyObject,
 ) -> Bool {
+    // SAFETY: AppKit calls this with its own dragging info.
+    unsafe { log_types(info) };
     // SAFETY: AppKit calls this with its own dragging info.
     if let Some((window, info)) = unsafe { promise(native, info) } {
         // SAFETY: AppKit sends this selector to the GPUIWindow, an NSWindow.
