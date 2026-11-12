@@ -22,6 +22,7 @@ APP_LOG = Path.home() / ".local/state/herdr/gpui/logs/herdr-gpui.jsonl"
 APP_BINARY = Path("/Applications/Herdr.app/Contents/MacOS/Herdr")
 HERDR = Path.home() / ".local/bin/herdr"
 MINI = "oz-mini"
+STUDIO = "oz-ms"
 AGENT = re.compile(r"(^|/)(claude|codex|kimi-code|kimi|agent)$")
 HELPERS = ("ssh", "sh")
 
@@ -45,9 +46,12 @@ def mini_server_pid():
     return int(out[0]) if out else None
 
 
-def process_table():
+def process_table(host=None):
+    command = ("ps", "-axo", "pid=,ppid=,comm=")
+    if host:
+        command = ("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", host, " ".join(command))
     table = {}
-    for row in run("ps", "-axo", "pid=,ppid=,comm=").stdout.splitlines():
+    for row in run(*command).stdout.splitlines():
         parts = row.split(None, 2)
         if len(parts) == 3:
             table[int(parts[0])] = (int(parts[1]), parts[2])
@@ -67,6 +71,17 @@ def descendants(root, table):
 
 def agent_pids(root, table):
     return {pid for pid in descendants(root, table) if AGENT.search(table[pid][1])}
+
+
+def studio_server():
+    """The Studio daemon's pid and its agent processes, or (None, set()) when it does not answer."""
+    table = process_table(STUDIO)
+    servers = [pid for pid, (_, comm) in table.items() if comm.endswith("/herdr")]
+    for pid in servers:
+        agents = agent_pids(pid, table)
+        if agents:
+            return pid, agents
+    return (servers[0] if servers else None), set()
 
 
 def app_children(app, table):
@@ -145,12 +160,16 @@ def main():
     local_server = local_server_pid()
     mini_server = mini_server_pid()
     agents_before = agent_pids(local_server, table) if local_server else set()
+    studio_before, studio_agents = studio_server()
     status_before = server_status()
     saved = len(json.loads(STATE.read_text()))
     print(f"local server pid: {local_server}, mini server pid: {mini_server or 'unreachable'}")
-    print(f"agent processes under the local server: {len(agents_before)}")
-    print(f"saved windows: {saved}, titled windows now: {len(windows())}")
-    if local_server is None or not agents_before:
+    print(f"studio server pid: {studio_before or 'unreachable'}")
+    print(f"agent processes under the local server: {len(agents_before)}, under the studio server: {len(studio_agents)}")
+    # Window titles need Screen Recording, which an ssh session does not have.
+    titled = len(windows())
+    print(f"saved windows: {saved}, titled windows now: {titled}")
+    if local_server is None or not (agents_before or studio_agents):
         print("could not read the local daemon or its agents, stopping", file=sys.stderr)
         return 1
 
@@ -167,13 +186,15 @@ def main():
     new_app = app_pids()[0]
     print(f"app pid after: {new_app}")
 
-    if not wait(lambda: len(windows()) >= saved, 60, step=0.5):
+    if not titled:
+        print("window titles are unreadable from this session, so windows are not checked or screenshotted")
+    elif not wait(lambda: len(windows()) >= saved, 60, step=0.5):
         failures.append(f"windows did not come back: {len(windows())} titled of {saved} saved")
     # A title lags behind the space its window shows, so the screenshots prove the spaces.
-    rows = windows()
+    rows = windows() if titled else []
     for row in rows:
         print("  ", "\t".join(row))
-    if scratch:
+    if scratch and rows:
         screenshot(rows, scratch)
 
     open_files = run("lsof", "-p", str(new_app), "-a", "-d", "txt").stdout
@@ -188,6 +209,13 @@ def main():
     mini_after = mini_server_pid()
     print(f"local server pid after: {local_after}, mini server pid after: {mini_after or 'unreachable'}")
     print(f"agent processes still alive: {len(agents_before - lost)} of {len(agents_before)}")
+    studio_after, _ = studio_server()
+    studio_lost = studio_agents - set(process_table(STUDIO)) if studio_after else set()
+    print(f"studio server pid after: {studio_after or 'unreachable'}, studio agents still alive: {len(studio_agents - studio_lost)} of {len(studio_agents)}")
+    if studio_before and studio_after != studio_before:
+        failures.append("the studio server pid changed")
+    if studio_lost:
+        failures.append(f"studio agent processes gone: {sorted(studio_lost)}")
     if local_after != local_server:
         failures.append("the local server pid changed")
     if mini_server and mini_after and mini_after != mini_server:
