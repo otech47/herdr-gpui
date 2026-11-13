@@ -174,7 +174,8 @@ impl Notice {
 
 #[cfg(test)]
 mod tests {
-    use super::{Duration, Instant, MAX_SECONDS, Outcome, RESTARTING_FOR, State};
+    use super::{Duration, Instant, MAX_SECONDS, Notice, Outcome, RESTARTING_FOR, State};
+    use gpui::{Modifiers, px, size};
 
     #[test]
     fn a_countdown_counts_whole_seconds_then_proceeds() {
@@ -201,6 +202,27 @@ mod tests {
         let now = Instant::now();
         assert_eq!(State::counting(0, now).left(), Some(1));
         assert_eq!(State::counting(600, now).left(), Some(MAX_SECONDS));
+    }
+
+    #[gpui::test]
+    fn cancel_on_the_card_stops_the_countdown(cx: &mut gpui::TestAppContext) {
+        let (_, cx) = cx.add_window_view(crate::sidebar::layout_tests::fixture_window);
+        cx.simulate_resize(size(px(800.), px(600.)));
+        cx.update(|window, cx| {
+            Notice::start(5, Some("Installs the model card."), cx);
+            window.draw(cx).clear(cx);
+        });
+        assert!(cx.debug_bounds("relaunch-notice").is_some());
+        let Some(cancel) = cx.debug_bounds("relaunch-cancel") else {
+            panic!("the card has no cancel button");
+        };
+        cx.simulate_click(cancel.center(), Modifiers::default());
+        assert_eq!(
+            cx.update(|_, cx| Notice::tick(cx)),
+            Some(Outcome::Cancelled)
+        );
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert!(cx.debug_bounds("relaunch-notice").is_none());
     }
 
     impl State {
