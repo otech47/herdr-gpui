@@ -10,6 +10,8 @@ The app, `Herdr.app`, is this repository. It is a client of the daemon with bund
 
 Neither program is installed through Homebrew. Do not reinstall either with it.
 
+The Mini also runs `herdr-board-server` from this repository, as the launch agent `dev.oscar.herdr.board` on port 7480. It serves the sidebar's devices, tab titles, states and order as JSON, and Jarvis shows them on Oscar's phone. It computes them with the same `herdr-board` crate as the sidebar, so the phone matches the desktop only while the Mini runs the board code the app was built from.
+
 ## Three Macs
 
 | machine | runs | where the app reaches it |
@@ -66,6 +68,7 @@ The launcher chords are `[[launchers]]` entries in the local app config: ctrl-cm
 | `config.toml` key commands | after `herdr server reload-config` |
 | a menu shortcut override with `defaults write so.pen.herdr-gpui.dev NSUserKeyEquivalents` | within a minute |
 | any code in this repository | after `just bundle release`, the install, and an app relaunch |
+| `crates/herdr-board`, `crates/herdr-board-server` or the crates they use | on the phone after `python3 .agents/deploy-board.py`, which rebuilds the Mini's board server and restarts it |
 | daemon code in `~/tools/herdr` | after `herdr server stop` and reopening the app, on each Mac, by Oscar |
 | a deleted signing keychain | after Oscar grants App Management and Full Disk Access again |
 
@@ -77,6 +80,8 @@ just ci
 just bundle release
 ditto target/release/Herdr.app /Applications/Herdr.app
 ```
+
+After the install, run `python3 .agents/deploy-board.py` without asking. It does nothing when the board code has not changed since the Mini's build, and `relaunch.py` prints whether the Mini is behind.
 
 `just ci` runs the format check, the file size limit, clippy and the workspace tests. `cargo nextest` is not installed. A focused run is `cargo test --locked -p herdr-gpui --bin herdr-gpui -- <filter>`. The test `login_env::unix::tests::timeout_kills_shell_and_descendant_group` fails now and then under the full suite's load and passes alone, so rerun it alone before calling the gate red. After editing `config-gpui.example.toml`, rerun the provider settings test with `HERDR_BLESS_EXAMPLE=1`.
 
@@ -110,7 +115,7 @@ The protocol after installing a build:
 
 1. Relaunch without asking. Run `python3 .agents/relaunch.py --reason "<what the build changes, one short sentence>" <scratch run dir>` in the background where the CLI supports it. Every window shows a five second countdown with a Cancel button and the reason. When Oscar cancels, the script asks again five minutes later, up to twelve times, and exits 3 when he cancelled every one. Only one relaunch runs on a Mac at a time, and a relaunch is skipped when the app already started from the installed build.
 2. Report what it printed: the local, Studio and Mini daemon pids unchanged, every agent process on this Mac and the Studio alive, the new pid running the installed binary and its hash, as many windows as saved entries, how many went back to their desktops, the screenshots. The script stops before quitting when the app owns anything beyond its helpers, or when it cannot read the local daemon and its agents. Then report what it found and ask.
-3. When a change needs more than an app relaunch, say what it needs and ask instead of doing it. That covers a daemon rebuild or restart on any Mac, a binary copy to the Studio or the Mini, deleting the signing keychain, editing a state file, and anything that touches a pane or a tab. Oscar does those or says who does.
+3. When a change needs more than an app relaunch, say what it needs and ask instead of doing it. That covers a daemon rebuild or restart on any Mac, a binary copy to the Studio or the Mini other than the board server's, deleting the signing keychain, editing a state file, and anything that touches a pane or a tab. Oscar does those or says who does.
 
 ## Never
 

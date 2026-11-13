@@ -8,6 +8,7 @@ the script waits five minutes and asks again, up to twelve times. One relaunch r
 Mac, and a relaunch is skipped when the running app already started from the installed build.
 --no-countdown is only for a running app that predates the countdown.
 
+It first says whether the board server on the Mini is behind this checkout.
 With a scratch run dir, each reopened window is screenshotted into its screenshots/ folder.
 Exit 0 when every check passed or the app was already current, 1 when a check before the quit
 stopped the relaunch, 2 when a check after it failed, 3 when Oscar cancelled every countdown.
@@ -212,7 +213,9 @@ def main():
     parser.add_argument("scratch", nargs="?")
     args = parser.parse_args()
     scratch = Path(args.scratch).resolve() if args.scratch else None
-    on_studio = run("scutil", "--get", "LocalHostName").stdout.strip() == STUDIO
+    board = run(sys.executable, str(REPO / ".agents/deploy-board.py"), "--check", timeout=60)
+    print((board.stdout or board.stderr).strip(), flush=True)
+    on_studio =run("scutil", "--get", "LocalHostName").stdout.strip() == STUDIO
     lock = take_lock()
     tries = 0
     while True:
