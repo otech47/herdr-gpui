@@ -89,7 +89,10 @@ impl HerdrWindow {
                 )
                 .row()
                 .id(SharedString::from(key))
-                .when_some(model, |row, model| row.tooltip(model))
+                .when_some(model, |row, model| {
+                    row.tooltip(model)
+                        .tooltip_show_delay(crate::agent_models::SHOW_DELAY)
+                })
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.show_waiting(device.clone(), workspace.clone(), tab.clone(), cx);
                 }))

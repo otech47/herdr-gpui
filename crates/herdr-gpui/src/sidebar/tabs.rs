@@ -224,7 +224,10 @@ impl HerdrWindow {
                 row.child(trailing.place(self.tab_close_button(&close_id, cx)))
             })
             .id(SharedString::from(format!("tab-{endpoint_id}-{id}")))
-            .when_some(model, |row, model| row.tooltip(model))
+            .when_some(model, |row, model| {
+                row.tooltip(model)
+                    .tooltip_show_delay(crate::agent_models::SHOW_DELAY)
+            })
             .when(own, |row| {
                 row.on_mouse_down(
                     MouseButton::Right,

@@ -28,6 +28,7 @@ const HELPER: &str = include_str!("../../../scripts/agent_models.py");
 const INTERVAL: Duration = Duration::from_secs(10);
 const RETRY: Duration = Duration::from_secs(30);
 const STEP_TIMEOUT: Duration = Duration::from_secs(20);
+pub(crate) const SHOW_DELAY: Duration = Duration::ZERO;
 /// Daemons are few; an unbounded endpoint list still cannot start more workers.
 const SOURCE_LIMIT: usize = 16;
 /// Bytes of a refusal kept for the log.

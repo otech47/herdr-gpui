@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::agent_models::{Model, Source};
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 
 fn tabs_with_models<'a>(
     panes: &[(&str, &str, &str)],
@@ -43,7 +43,6 @@ fn tabs_with_models<'a>(
 fn hover(selector: &'static str, cx: &mut gpui::VisualTestContext) {
     let row = cx.debug_bounds(selector).unwrap();
     cx.simulate_mouse_move(row.center(), None, Modifiers::default());
-    cx.executor().advance_clock(Duration::from_secs(1));
     cx.run_until_parked();
     cx.update(|window, cx| full_draw(window, cx).clear(cx));
 }

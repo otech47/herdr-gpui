@@ -553,7 +553,10 @@ impl HerdrWindow {
                     .row()
                     .when(gap > 0., |row| row.mt(px(gap)))
                     .id(SharedString::from(format!("agent-{endpoint_id}-{id}")))
-                    .when_some(model, |row, model| row.tooltip(model))
+                    .when_some(model, |row, model| {
+                        row.tooltip(model)
+                            .tooltip_show_delay(crate::agent_models::SHOW_DELAY)
+                    })
                     .when(multi, |row| {
                         row.debug_selector(|| format!("agent-{endpoint_id}-{id}"))
                     })

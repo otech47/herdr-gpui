@@ -304,10 +304,11 @@ impl HerdrWindow {
                     place.as_deref(),
                     agent_status_word(agent, mark).as_deref(),
                 );
-                let tooltip: Tooltip = match self
+                let model = self
                     .agent_models
-                    .get(&self.endpoints[endpoint_index].connection.target, &id)
-                {
+                    .get(&self.endpoints[endpoint_index].connection.target, &id);
+                let delay = model.map(|_| crate::agent_models::SHOW_DELAY);
+                let tooltip: Tooltip = match model {
                     Some(model) => Box::new(crate::agent_models::tooltip(Some(text), model, theme)),
                     None => Box::new(hint.with(text)),
                 };
@@ -352,6 +353,7 @@ impl HerdrWindow {
                     .debug_selector(|| key)
                     .cursor_pointer()
                     .tooltip(tooltip)
+                    .when_some(delay, |row, delay| row.tooltip_show_delay(delay))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.navigate_endpoint(&navigate_endpoint, NavigationTarget::Pane(&id), cx);
                         window.focus(&this.focus, cx);
