@@ -1,6 +1,6 @@
 # Operating Herdr on Oscar's Macs
 
-This file is for an agent session asked to change Herdr: fix a bug, add a feature, adjust a launcher or a key. It says what runs where, what a change needs before Oscar sees it, and how a relaunch is offered and performed. The engineering rules stay in `AGENTS.md`.
+This file is for an agent session asked to change Herdr: fix a bug, add a feature, adjust a launcher or a key. It says what runs where, what a change needs before Oscar sees it, and how a relaunch is performed. The engineering rules stay in `AGENTS.md`.
 
 ## Two programs
 
@@ -104,12 +104,12 @@ A visible change is verified on the real window, not only in headless layout tes
 
 ## Relaunching the app
 
-A relaunch quits the app and opens it again. Every daemon keeps running with every space, tab, pane and agent process: the app's only child processes are its ssh connections to the remote daemons and helper shells, every agent process descends from `herdr server`, and every daemon is detached from any client. The windows come back at their saved bounds, each on its saved space and device, on the desktop currently visible on their display. Oscar drags them to their project desktops himself. Focus moves to the app for a moment, and the ssh connections to the Studio and the Mini reconnect. A window's title can lag behind the space it shows, so the sidebar in a screenshot is the ground truth, not the title.
+A relaunch quits the app and opens it again. Every daemon keeps running with every space, tab, pane and agent process: the app's only child processes are its ssh connections to the remote daemons and helper shells, every agent process descends from `herdr server`, and every daemon is detached from any client. The windows come back at their saved bounds, each on its saved space and device and on the macOS desktop it was on at quit. Focus moves to the app for a moment, and the ssh connections to the Studio and the Mini reconnect. A window's title can lag behind the space it shows, so the sidebar in a screenshot is the ground truth, not the title.
 
 The protocol after installing a build:
 
-1. Ask one question, in these words: "Ready to relaunch Herdr now, yes or no?" Add the one-line basis: the daemons own every agent, the app owns nothing but its ssh connections. Never write "relaunch when you want", and never relaunch without the yes. A yes inside the request itself, such as "fix it and relaunch", counts.
-2. On yes, run `python3 .agents/relaunch.py <scratch run dir>` and report what it printed: the local, Studio and Mini daemon pids unchanged, every agent process on this Mac and the Studio alive, the new pid running the installed binary and its hash, as many windows as saved entries, the screenshots. The script stops before quitting when the app owns anything beyond its helpers, or when it cannot read the local daemon and its agents. Then report what it found and ask.
+1. Relaunch without asking. Run `python3 .agents/relaunch.py --reason "<what the build changes, one short sentence>" <scratch run dir>` in the background where the CLI supports it. Every window shows a five second countdown with a Cancel button and the reason. When Oscar cancels, the script asks again five minutes later, up to twelve times, and exits 3 when he cancelled every one. Only one relaunch runs on a Mac at a time, and a relaunch is skipped when the app already started from the installed build.
+2. Report what it printed: the local, Studio and Mini daemon pids unchanged, every agent process on this Mac and the Studio alive, the new pid running the installed binary and its hash, as many windows as saved entries, how many went back to their desktops, the screenshots. The script stops before quitting when the app owns anything beyond its helpers, or when it cannot read the local daemon and its agents. Then report what it found and ask.
 3. When a change needs more than an app relaunch, say what it needs and ask instead of doing it. That covers a daemon rebuild or restart on any Mac, a binary copy to the Studio or the Mini, deleting the signing keychain, editing a state file, and anything that touches a pane or a tab. Oscar does those or says who does.
 
 ## Never
@@ -120,6 +120,6 @@ The protocol after installing a build:
 - Edit a file under `~/.local/state/herdr/gpui` unless Oscar asks for it in that turn.
 - Drive the mouse or keyboard while Oscar is active. A scripted native step runs only after 60 seconds of idle, and a scripted press of a launcher chord is never a proof that the launcher runs.
 - Close, resize or act on the tab or pane the session itself runs in.
-- Relaunch the app unasked, or leave the relaunch to Oscar after he said yes.
+- Quit the app any way other than `.agents/relaunch.py`, or leave the relaunch to Oscar.
 - Modify `~/tools/herdr`, or reinstall either program through Homebrew.
 - Create a worktree inside or beside the repository. Worktrees live under `~/.agents/worktrees`.
