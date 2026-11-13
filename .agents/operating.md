@@ -14,11 +14,11 @@ Neither program is installed through Homebrew. Do not reinstall either with it.
 
 | machine | runs | where the app reaches it |
 | --- | --- | --- |
-| oz-mbp, the MacBook | the app, a daemon, the checkout this guide is for, the signing keychain | local sockets |
-| oz-ms, the Mac Studio | the daemon that runs nearly every agent session, from `~/.local/bin/herdr` | ssh alias `oz-studio`, saved in the app as device "Studio", endpoint id `ssh:b5b318656ee02cc992706a4dae809c32` |
+| oz-mbp, the MacBook | the app, a daemon, the checkout this guide is for, a signing keychain | local sockets |
+| oz-ms, the Mac Studio | the daemon that runs nearly every agent session, from `~/.local/bin/herdr`, and a second copy of the app with its own signing keychain | ssh alias `oz-studio`, saved in the app as device "Studio", endpoint id `ssh:b5b318656ee02cc992706a4dae809c32` |
 | oz-mac-mini | the daemon only, from a copy of the same `herdr` binary at `~/.local/bin/herdr` | ssh alias `oz-mini`, saved in the app as device "Mini", endpoint id `ssh:93d87f03a0dd2de8c4df77aa633270d0` |
 
-The app runs only on the MacBook. The Studio and the Mini have no app and no signing keychain. The Studio has a checkout of this repository on upstream `main` with a `laptop` remote, and does not build the app. The app keeps ssh connections to each remote daemon: one `herdr remote-client-bridge` per window plus helper shells. After a reboot the first bridge starts that Mac's daemon, detached in its own session with its standard streams on `/dev/null`, so the daemon outlives the app and the ssh session that started it. Updating a remote daemon means copying a new binary there and restarting it, which Oscar does.
+The app runs on the MacBook, where Oscar works, and on the Studio, where he watches the Studio's daemon on its own screen. The Studio's app is opened on demand and is not a login item. It shows the Studio's daemon as the device "Local". The MacBook's daemon, started by the app on 2026-10-05, reports no detached-daemon support, so `herdr machine add oz-mbp` on the Studio refuses it until that daemon restarts. The Mini has no app and no signing keychain. The Studio's checkout of this repository is on upstream `main` with a `laptop` remote, and the Studio builds the app in a worktree from the commit the MacBook runs. The app keeps ssh connections to each remote daemon: one `herdr remote-client-bridge` per window plus helper shells. After a reboot the first bridge starts that Mac's daemon, detached in its own session with its standard streams on `/dev/null`, so the daemon outlives the app and the ssh session that started it. Updating a remote daemon means copying a new binary there and restarting it, which Oscar does.
 
 `device_order` in the local app config lists the Studio first, then this Mac, the Mini and the dev box, in the sidebar, the launcher's device prompt and the devices menu.
 
@@ -33,7 +33,7 @@ Oscar keeps one macOS desktop per project and one app window per space: tools, f
 | origin | `otech47/herdr-gpui`, public | Oscar's fork, where work is pushed |
 | upstream | `penso/herdr-gpui` | the project this client is forked from |
 
-Local `main` holds Oscar's work. It is pushed with `git -C /Users/oscarlafarga/tools/herdr-gpui push origin main:ol/main`, because the fork's `main` on GitHub is upstream's untouched copy and only Oscar replaces or renames it. Finished work is committed and pushed in the same turn. Every git command runs as `git -C <absolute path> <subcommand>` in its own call, never behind `cd`. The commit message is written to a file and committed with `git commit -q -F <file>`. No amend, no force push, no AI attribution lines.
+Local `main` holds Oscar's work. It is pushed with `git -C /Users/oscarlafarga/tools/herdr-gpui push origin main:ol/main`, because the fork's `main` on GitHub is upstream's untouched copy and only Oscar replaces or renames it. The Studio also pushes to `ol/main`, and local `main` tracks upstream, so start work with `git -C /Users/oscarlafarga/tools/herdr-gpui pull --ff-only origin ol/main`. Finished work is committed and pushed in the same turn. Every git command runs as `git -C <absolute path> <subcommand>` in its own call, never behind `cd`. The commit message is written to a file and committed with `git commit -q -F <file>`. No amend, no force push, no AI attribution lines.
 
 The fork is public. A commit never contains the signing keychain or its password file, a token, machine-local state, or terminal output.
 
@@ -43,7 +43,7 @@ The fork is public. A commit never contains the signing keychain or its password
 | --- | --- | --- |
 | `~/.config/herdr/config.toml` | the daemon's config: its key commands, `version_check` off | yes, then `herdr server reload-config` |
 | `~/.config/herdr/config-gpui.toml` | the app's managed defaults, rewritten on every start and reload | never |
-| `~/.config/herdr/config-gpui.local.toml` | the app's overrides: layout, the three sidebar settings, keybindings, `[[launchers]]` | yes, it reloads on save |
+| `~/.config/herdr/config-gpui.local.toml` | the app's overrides: layout, the three sidebar settings, keybindings, `[[launchers]]`. studio-hub keeps it equal on every Mac, newest copy wins | yes, it reloads on save |
 | `~/.config/herdr/herdr.sock` | the daemon's JSON API socket, used by the `herdr` command | no |
 | `~/.config/herdr/herdr-client.sock` | the daemon's binary client socket, used by the app | no |
 | `~/.config/herdr/session.json` | the daemon's spaces, tabs and panes, restored when it starts | no |
@@ -52,7 +52,7 @@ The fork is public. A commit never contains the signing keychain or its password
 | `~/.local/state/herdr/gpui/local-<hash>.json` | sidebar chrome: width, split, folded sections, tabs view | only when Oscar asks |
 | `~/.local/state/herdr/gpui/browser-tabs.json`, `editor-groups.json` | the app's browser tabs and editor groups | no |
 | `~/.local/state/herdr/gpui/logs/herdr-gpui.jsonl` | the app's log | no |
-| `~/.local/bin/herdr-launch` | the launcher script the ctrl-cmd chords run, read on every press | yes |
+| `~/.local/bin/herdr-launch` | the launcher script the ctrl-cmd chords run, read on every press. studio-hub copies the Studio's version to the other Macs | yes, on the Studio |
 | `~/Library/Keychains/herdr-local-signing.keychain-db` and `.password` | this Mac's signing identity, created by the first `just bundle` | never, never in git |
 
 The launcher chords are `[[launchers]]` entries in the local app config: ctrl-cmd with 2, 3, 4 for claude, q, w, e for codex and a, s, d for kimi, in tools, fedi and worksteps. A press asks for a device, then runs the script through `sh -c` with `HERDR_LAUNCH_DEVICE`, `HERDR_LAUNCH_DEVICE_LABEL`, `HERDR_LAUNCH_HOST` for a remote device, `HERDR_ACTIVE_WORKSPACE_ID` and `HERDR_SOCKET_PATH` pointing at the JSON API socket. The script creates a tab in the named space, asks the app to show it with `/Applications/Herdr.app/Contents/MacOS/Herdr workspace focus <space id> [--tab TAB] [--device ENDPOINT]`, waits for the shell prompt and types the command. Chords 5 and 6 stay daemon key commands in `config.toml`.
@@ -81,6 +81,15 @@ ditto target/release/Herdr.app /Applications/Herdr.app
 `just ci` runs the format check, the file size limit, clippy and the workspace tests. `cargo nextest` is not installed. A focused run is `cargo test --locked -p herdr-gpui --bin herdr-gpui -- <filter>`. The test `login_env::unix::tests::timeout_kills_shell_and_descendant_group` fails now and then under the full suite's load and passes alone, so rerun it alone before calling the gate red. After editing `config-gpui.example.toml`, rerun the provider settings test with `HERDR_BLESS_EXAMPLE=1`.
 
 `just bundle` signs the bundle with this Mac's own certificate, so the app's privacy grants survive a reinstall. The executable inside the bundle is `Contents/MacOS/Herdr`.
+
+On the Studio, `cargo` on PATH ignores `rust-toolchain.toml`, so the build runs with the pinned toolchain first on PATH:
+
+```sh
+T=~/.rustup/toolchains/1.96.1-aarch64-apple-darwin/bin
+env PATH="$T:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin" just bundle release
+```
+
+No app on the Studio holds the screen recording grant, so `screencapture` from an agent there fails with "could not create image from window".
 
 Run embedded browser checks from the signed app bundle. A bare Cargo executable does not exercise the bundle's App Transport Security policy. Include an HTTP report and its interactive content in the native check.
 
