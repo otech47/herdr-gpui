@@ -27,6 +27,7 @@ mod control;
 mod controls;
 mod copy_mode;
 mod daemon;
+mod desktop;
 mod diagnostics;
 mod dialog_input;
 mod endpoint;

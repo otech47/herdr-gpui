@@ -5,13 +5,20 @@
 //! every display at origin (0, 0), so a position is only meaningful together
 //! with its display. Each window records its display's persistent UUID and is
 //! reopened on that display, falling back to the primary one when it is gone.
-use crate::state_file;
+//! On macOS it also records the desktop it shows, and a reopened window moves
+//! back there once it is on screen.
+use crate::{
+    desktop::{self, Desktop, Move},
+    state_file,
+};
 use gpui::{App, Bounds, Context, DisplayId, Global, Pixels, Window, WindowId, point, px, size};
 use serde::{Deserialize, Serialize};
-use std::{collections::VecDeque, path::Path};
+use std::{collections::VecDeque, path::Path, time::Duration};
 use uuid::Uuid;
 
 const MAX_WINDOWS: usize = 64;
+const DESKTOP_TRIES: u32 = 12;
+const DESKTOP_RETRY: Duration = Duration::from_millis(250);
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct Geometry {
@@ -27,6 +34,8 @@ struct Geometry {
     /// The saved device that space belongs to; none for the local daemon.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     device: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    desktop: Option<Desktop>,
 }
 
 /// The space a restored window reopens on, and its device when saved.
@@ -34,6 +43,13 @@ struct Geometry {
 pub(crate) struct Shown {
     pub workspace: String,
     pub device: Option<String>,
+}
+
+pub(crate) struct Placement {
+    pub bounds: Bounds<Pixels>,
+    pub display: Option<DisplayId>,
+    pub shown: Option<Shown>,
+    pub desktop: Option<Desktop>,
 }
 
 impl Geometry {
@@ -69,6 +85,7 @@ impl Geometry {
             display: None,
             workspace: None,
             device: None,
+            desktop: None,
         }
     }
 }
@@ -162,6 +179,7 @@ impl WindowState {
     pub(crate) fn install(self, cx: &mut App) {
         cx.set_global(self);
         cx.on_app_quit(|cx| {
+            Self::note_desktops(cx);
             let writer = cx.global_mut::<Self>().shutdown();
             cx.background_executor().spawn(async move {
                 if let Some(writer) = writer {
@@ -178,18 +196,22 @@ impl WindowState {
     }
 
     /// Chooses the next main window's bounds and the display they refer to.
-    pub(crate) fn placement(
-        default: Bounds<Pixels>,
-        cx: &mut App,
-    ) -> (Bounds<Pixels>, Option<DisplayId>, Option<Shown>) {
+    pub(crate) fn placement(default: Bounds<Pixels>, cx: &mut App) -> Placement {
         if !cx.has_global::<Self>() {
-            return (default, None, None);
+            return Placement {
+                bounds: default,
+                display: None,
+                shown: None,
+                desktop: None,
+            };
         }
         let state = cx.global_mut::<Self>();
         let geometry = state.restored.pop_front().unwrap_or_else(|| {
             if let Some((_, mut geometry)) = state.live.last().cloned() {
                 geometry.x += 28.;
                 geometry.y += 28.;
+                // A new window opens on the desktop in front.
+                geometry.desktop = None;
                 geometry
             } else {
                 Geometry::from_bounds(default)
@@ -206,8 +228,14 @@ impl WindowState {
             workspace,
             device: geometry.device.clone(),
         });
+        let desktop = geometry.desktop.clone();
         let bounds = fit(geometry, display.as_ref().map(|display| display.bounds())).bounds();
-        (bounds, display.map(|display| display.id()), shown)
+        Placement {
+            bounds,
+            display: display.map(|display| display.id()),
+            shown,
+            desktop,
+        }
     }
 
     fn save(&self) {
@@ -227,10 +255,11 @@ impl WindowState {
             return;
         }
         if let Some((_, old)) = self.live.iter_mut().find(|(key, _)| *key == id) {
-            // A bounds observation names no space; the noted one stays.
+            // A bounds observation names no space or desktop; the noted ones stay.
             let geometry = Geometry {
                 workspace: old.workspace.clone(),
                 device: old.device.clone(),
+                desktop: old.desktop.clone(),
                 ..geometry
             };
             if *old == geometry {
@@ -271,6 +300,64 @@ impl WindowState {
         }
     }
 
+    fn set_desktop(&mut self, id: WindowId, desktop: Desktop) {
+        if self.quitting {
+            return;
+        }
+        if let Some((_, geometry)) = self.live.iter_mut().find(|(key, _)| *key == id)
+            && geometry.desktop.as_ref() != Some(&desktop)
+        {
+            geometry.desktop = Some(desktop);
+            self.save();
+        }
+    }
+
+    /// Reads every window's desktop before the final save. A window moved to
+    /// another desktop reports no change of bounds.
+    fn note_desktops(cx: &mut App) {
+        let found: Vec<_> = cx
+            .windows()
+            .into_iter()
+            .filter_map(|handle| {
+                let desktop = handle
+                    .update(cx, |_, window, _| desktop::of(window))
+                    .ok()??;
+                Some((handle.window_id(), desktop))
+            })
+            .collect();
+        let state = cx.global_mut::<Self>();
+        for (id, desktop) in found {
+            state.set_desktop(id, desktop);
+        }
+    }
+
+    fn restore_desktop<T: 'static>(desktop: Desktop, window: &Window, cx: &mut Context<T>) {
+        cx.spawn_in(window, async move |_, cx| {
+            for _ in 0..DESKTOP_TRIES {
+                cx.background_executor().timer(DESKTOP_RETRY).await;
+                let Ok(moved) = cx.update(|window, _| desktop::move_to(window, &desktop)) else {
+                    return;
+                };
+                match moved {
+                    Move::Done => {
+                        tracing::info!(desktop = desktop.id, "Window back on its desktop");
+                        return;
+                    }
+                    Move::Missing => {
+                        tracing::info!(desktop = desktop.id, "Saved desktop no longer exists");
+                        return;
+                    }
+                    Move::Retry => {}
+                }
+            }
+            tracing::warn!(
+                desktop = desktop.id,
+                "Window did not move to its saved desktop"
+            );
+        })
+        .detach();
+    }
+
     /// Records the space `window` shows, so it reopens there.
     pub(crate) fn note_workspace(window: &Window, shown: Option<Shown>, cx: &mut App) {
         if !cx.has_global::<Self>() {
@@ -280,13 +367,26 @@ impl WindowState {
         cx.global_mut::<Self>().set_workspace(id, shown);
     }
 
-    pub(crate) fn observe<T: 'static>(window: &mut Window, cx: &mut Context<T>) {
+    pub(crate) fn observe<T: 'static>(
+        window: &mut Window,
+        restore: Option<Desktop>,
+        cx: &mut Context<T>,
+    ) {
         let id = window.window_handle().window_id();
         if !cx.has_global::<Self>() {
             return;
         }
         let geometry = Geometry::from_window(window, cx);
         cx.global_mut::<Self>().update(id, geometry);
+        if let Some(desktop) = restore {
+            Self::restore_desktop(desktop, window, cx);
+        }
+        cx.observe_window_activation(window, move |_, window, cx| {
+            if let Some(desktop) = desktop::of(window) {
+                cx.global_mut::<Self>().set_desktop(id, desktop);
+            }
+        })
+        .detach();
         cx.observe_window_bounds(window, move |_, window, cx| {
             let geometry = Geometry::from_window(window, cx);
             cx.global_mut::<Self>().update(id, geometry);
@@ -314,6 +414,7 @@ mod tests {
             display: None,
             workspace: None,
             device: None,
+            desktop: None,
         }
     }
 
@@ -475,6 +576,34 @@ mod tests {
             saved[0].device.as_deref(),
             Some("ssh:0123456789abcdef0123456789abcdef")
         );
+    }
+
+    #[test]
+    fn a_noted_desktop_survives_moves_and_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("windows.json");
+        let mut state = WindowState {
+            restored: VecDeque::new(),
+            live: Vec::new(),
+            writer: Some(Writer::start("window-state", path.clone()).unwrap()),
+            quitting: false,
+        };
+        let id = WindowId::from(1);
+        let project = Desktop {
+            uuid: "E8B9D942-0000-4000-8000-000000000009".into(),
+            id: 9,
+        };
+        state.update(id, geometry(0.));
+        state.set_desktop(id, project.clone());
+        state.update(id, geometry(300.));
+        state.shutdown().unwrap().finish();
+        let saved = read(&path).unwrap();
+        assert_eq!(
+            (saved[0].x, saved[0].desktop.as_ref()),
+            (300., Some(&project))
+        );
+        fs::write(&path, br#"[{"x":1,"y":2,"width":900,"height":700}]"#).unwrap();
+        assert_eq!(read(&path).unwrap()[0].desktop, None);
     }
 
     #[test]

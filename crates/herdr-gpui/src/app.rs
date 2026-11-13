@@ -97,11 +97,16 @@ pub(crate) fn open_window(
     let step = px(28. * existing.min(6) as f32);
     let mut bounds = Bounds::centered(None, size(px(1200.), px(780.)), cx);
     bounds.origin += point(step, step);
-    let (bounds, display_id, shown) = crate::window_state::WindowState::placement(bounds, cx);
+    let crate::window_state::Placement {
+        bounds,
+        display,
+        shown,
+        desktop,
+    } = crate::window_state::WindowState::placement(bounds, cx);
     cx.open_window(
         WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
-            display_id,
+            display_id: display,
             window_min_size: Some(size(px(640.), px(400.))),
             titlebar: Some(titlebar::options(WINDOW_TITLE)),
             app_owns_titlebar_drag: cfg!(target_os = "macos"),
@@ -125,7 +130,7 @@ pub(crate) fn open_window(
                         device: shown.device,
                     });
                 }
-                crate::window_state::WindowState::observe(window, cx);
+                crate::window_state::WindowState::observe(window, desktop, cx);
                 view
             })
         },
