@@ -107,7 +107,18 @@ impl HerdrWindow {
         }
     }
 
-    fn show_session_terminal(
+    pub(crate) fn active_session_page(&self, cx: &App) -> Option<(Slot, Pick)> {
+        let group = self.active_group()?;
+        let pick = self.group_pick(group)?;
+        let session = self.session_for_pick(&pick, cx)?;
+        let slot = self
+            .group_slots()
+            .into_iter()
+            .find(|slot| slot.id == group)?;
+        (pick != session).then_some((slot, session))
+    }
+
+    pub(crate) fn show_session_terminal(
         &mut self,
         slot: Slot,
         session: Pick,

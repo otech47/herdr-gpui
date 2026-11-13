@@ -59,6 +59,28 @@ fn session_pages_restore_the_last_page_and_an_explicit_terminal_choice(
 }
 
 #[gpui::test]
+fn the_first_tab_number_shows_a_reports_terminal_before_the_first_tab(
+    cx: &mut gpui::TestAppContext,
+) {
+    let (view, cx) = window(cx);
+    draw(cx);
+    let page = add_page(&view, cx, Pick::Herdr("t0".into()));
+    cx.update(|window, cx| {
+        view.update(cx, |view, cx| {
+            view.show_browser_tab(page, window, cx);
+            assert!(view.active_session_page(cx).is_some());
+            view.command(crate::controls::Command::TabNumber(1), window, cx);
+        })
+    });
+    draw(cx);
+    assert_eq!(pick(&view, cx), Some(Pick::Herdr("t0".into())));
+    cx.update(|_, cx| assert!(view.read(cx).active_session_page(cx).is_none()));
+    choose(&view, cx, "t1");
+    choose(&view, cx, "t0");
+    assert_eq!(pick(&view, cx), Some(Pick::Herdr("t0".into())));
+}
+
+#[gpui::test]
 fn closing_a_session_page_never_selects_another_sessions_report(cx: &mut gpui::TestAppContext) {
     let (view, cx) = window(cx);
     draw(cx);

@@ -434,6 +434,13 @@ impl HerdrWindow {
                 window.focus(&self.focus, cx);
                 return;
             }
+            // From a report, the first number goes to its terminal, the strip's first entry.
+            Command::TabNumber(1) if self.active_session_page(cx).is_some() => {
+                if let Some((slot, session)) = self.active_session_page(cx) {
+                    self.show_session_terminal(slot, session, window, cx);
+                }
+                return;
+            }
             // The sidebar's number, when its list counts across devices.
             Command::TabNumber(number) if self.listed_tab(number).is_some() => {
                 if let Some((endpoint, tab)) = self.listed_tab(number) {
