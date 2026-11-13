@@ -19,6 +19,8 @@ use herdr_client::{ConnectOptions, ConnectTarget};
 use std::sync::Arc;
 
 #[cfg(test)]
+mod agent_models;
+#[cfg(test)]
 mod agent_rows;
 #[cfg(test)]
 mod configured_rows;
@@ -475,6 +477,7 @@ pub(crate) fn fixture_window(window: &mut Window, cx: &mut Context<HerdrWindow>)
         port_forwards: Default::default(),
         listening_ports: Default::default(),
         monitoring: Default::default(),
+        agent_models: Default::default(),
         tunnels: Default::default(),
         sidebar_visible: true,
         sidebar_start_pending: true,

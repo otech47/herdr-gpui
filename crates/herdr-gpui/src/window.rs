@@ -208,6 +208,8 @@ pub(crate) struct HerdrWindow {
     pub(crate) listening_ports: crate::listening_ports::ListeningPorts,
     /// Tabs whose agent left a shell running while it waits.
     pub(crate) monitoring: crate::monitoring::Monitoring,
+    /// The model and effort of each agent, for the sidebar's hover cards.
+    pub(crate) agent_models: crate::agent_models::AgentModels,
     /// SSH tunnels to remote ports that listen on their host's loopback only.
     pub(crate) tunnels: crate::listening_ports::Tunnels,
     pub(crate) install_warning_shown: bool,
@@ -508,6 +510,13 @@ impl HerdrWindow {
         if self.monitoring.poll(self.watched_hosts()) {
             cx.notify();
         }
+        let models = self
+            .watched_targets()
+            .filter_map(crate::agent_models::Source::of)
+            .collect::<Vec<_>>();
+        if self.agent_models.poll(models) {
+            cx.notify();
+        }
         if self.live.missing_installation && !self.install_warning_shown {
             self.install_warning_shown = true;
             self.show_install_modal(window, cx);
@@ -574,6 +583,12 @@ impl HerdrWindow {
     /// host while it is connected, so a dropped host is not dialled every
     /// few seconds.
     fn watched_hosts(&self) -> Vec<crate::usage::Host> {
+        self.watched_targets()
+            .map(crate::usage::Host::from)
+            .collect()
+    }
+
+    fn watched_targets(&self) -> impl Iterator<Item = &ConnectTarget> {
         self.endpoints
             .iter()
             .enumerate()
@@ -587,8 +602,7 @@ impl HerdrWindow {
                     && (live.status.is_connected()
                         || !matches!(endpoint.connection.target, ConnectTarget::Ssh { .. }))
             })
-            .map(|(_, endpoint)| crate::usage::Host::from(&endpoint.connection.target))
-            .collect()
+            .map(|(_, endpoint)| &endpoint.connection.target)
     }
 
     /// Agent turns are watched on every enabled, connected host this client
@@ -813,6 +827,7 @@ impl HerdrWindow {
             port_forwards: Default::default(),
             listening_ports: Default::default(),
             monitoring: Default::default(),
+            agent_models: Default::default(),
             tunnels: Default::default(),
             install_warning_shown: false,
             version_notice_shown: false,

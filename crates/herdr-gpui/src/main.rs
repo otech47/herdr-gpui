@@ -3,6 +3,7 @@
 
 mod about;
 mod actions;
+mod agent_models;
 mod agent_notes;
 mod agent_sessions;
 mod agent_skill;

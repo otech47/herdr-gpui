@@ -57,6 +57,12 @@ impl HerdrWindow {
                 .agents
                 .iter()
                 .find(|agent| agent.tab_id == row.tab.tab_id);
+            let model = agent
+                .and_then(|agent| {
+                    self.agent_models
+                        .get(&endpoint.connection.target, &agent.pane_id)
+                })
+                .map(|model| crate::agent_models::tooltip(None, model, &self.theme));
             let key = format!("waiting-{}-{}", endpoint.id, row.tab.tab_id);
             let device = endpoint.id.clone();
             let workspace = row.tab.workspace_id.clone();
@@ -83,6 +89,7 @@ impl HerdrWindow {
                 )
                 .row()
                 .id(SharedString::from(key))
+                .when_some(model, |row, model| row.tooltip(model))
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.show_waiting(device.clone(), workspace.clone(), tab.clone(), cx);
                 }))

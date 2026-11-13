@@ -453,6 +453,13 @@ pub enum Error {
     MonitoringTool,
     #[error("Processes cannot be listed on this platform.")]
     MonitoringUnsupported,
+    #[error("Could not read which model each agent runs on.")]
+    AgentModels(#[source] Box<Error>),
+    /// What the helper printed, bounded.
+    #[error("The agent model reader refused: {0}")]
+    AgentModelsRefused(String),
+    #[error("The agent model reader's answer was not understood.")]
+    AgentModelsAnswer(#[source] serde_json::Error),
     #[error("No free local port for an SSH tunnel.")]
     TunnelPort(#[source] io::Error),
     #[error("Could not start ssh for a tunnel.")]

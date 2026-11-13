@@ -136,6 +136,12 @@ impl HerdrWindow {
                 .agents
                 .iter()
                 .find(|agent| agent.tab_id == row.tab.tab_id);
+            let model = agent
+                .and_then(|agent| {
+                    self.agent_models
+                        .get(&endpoint.connection.target, &agent.pane_id)
+                })
+                .map(|model| crate::agent_models::tooltip(None, model, &self.theme));
             let id = row.tab.tab_id.clone();
             let endpoint_id = endpoint.id.clone();
             let context_id = id.clone();
@@ -218,6 +224,7 @@ impl HerdrWindow {
                 row.child(trailing.place(self.tab_close_button(&close_id, cx)))
             })
             .id(SharedString::from(format!("tab-{endpoint_id}-{id}")))
+            .when_some(model, |row, model| row.tooltip(model))
             .when(own, |row| {
                 row.on_mouse_down(
                     MouseButton::Right,

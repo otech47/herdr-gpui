@@ -298,6 +298,19 @@ impl HerdrWindow {
                     Some(tab) => format!("{workspace} / {tab}"),
                     None => workspace.to_owned(),
                 });
+                let text = describe(
+                    host,
+                    agent_name(agent),
+                    place.as_deref(),
+                    agent_status_word(agent, mark).as_deref(),
+                );
+                let tooltip: Tooltip = match self
+                    .agent_models
+                    .get(&self.endpoints[endpoint_index].connection.target, &id)
+                {
+                    Some(model) => Box::new(crate::agent_models::tooltip(Some(text), model, theme)),
+                    None => Box::new(hint.with(text)),
+                };
                 agents = agents.child(
                     rail_row(
                         &key,
@@ -338,12 +351,7 @@ impl HerdrWindow {
                     .id(SharedString::from(key.clone()))
                     .debug_selector(|| key)
                     .cursor_pointer()
-                    .tooltip(hint.with(describe(
-                        host,
-                        agent_name(agent),
-                        place.as_deref(),
-                        agent_status_word(agent, mark).as_deref(),
-                    )))
+                    .tooltip(tooltip)
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.navigate_endpoint(&navigate_endpoint, NavigationTarget::Pane(&id), cx);
                         window.focus(&this.focus, cx);
@@ -511,6 +519,8 @@ pub(super) fn describe(
     }
     text.into()
 }
+
+type Tooltip = Box<dyn Fn(&mut Window, &mut App) -> AnyView>;
 
 #[derive(Clone, Copy)]
 struct Hint {

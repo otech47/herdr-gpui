@@ -522,6 +522,10 @@ impl HerdrWindow {
                 let id = agent.pane_id.clone();
                 let navigate_endpoint = endpoint_id.clone();
                 let mark = self.mark(endpoint_index, Some(agent), agent.agent_status);
+                let model = self
+                    .agent_models
+                    .get(&self.endpoints[endpoint_index].connection.target, &id)
+                    .map(|model| crate::agent_models::tooltip(None, model, &self.theme));
                 agents = agents.child(
                     Cell::new(
                         rows,
@@ -549,6 +553,7 @@ impl HerdrWindow {
                     .row()
                     .when(gap > 0., |row| row.mt(px(gap)))
                     .id(SharedString::from(format!("agent-{endpoint_id}-{id}")))
+                    .when_some(model, |row, model| row.tooltip(model))
                     .when(multi, |row| {
                         row.debug_selector(|| format!("agent-{endpoint_id}-{id}"))
                     })
