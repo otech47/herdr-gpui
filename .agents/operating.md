@@ -18,7 +18,7 @@ Neither program is installed through Homebrew. Do not reinstall either with it.
 | oz-ms, the Mac Studio | the daemon that runs nearly every agent session, from `~/.local/bin/herdr`, and a second copy of the app with its own signing keychain | ssh alias `oz-studio`, saved in the app as device "Studio", endpoint id `ssh:b5b318656ee02cc992706a4dae809c32` |
 | oz-mac-mini | the daemon only, from a copy of the same `herdr` binary at `~/.local/bin/herdr` | ssh alias `oz-mini`, saved in the app as device "Mini", endpoint id `ssh:93d87f03a0dd2de8c4df77aa633270d0` |
 
-The app runs on the MacBook, where Oscar works, and on the Studio, where he watches the Studio's daemon on its own screen. The Studio's app is opened on demand and is not a login item. It shows the Studio's daemon as the device "Local". The MacBook's daemon, started by the app on 2026-10-05, reports no detached-daemon support, so `herdr machine add oz-mbp` on the Studio refuses it until that daemon restarts. The Mini has no app and no signing keychain. The Studio's checkout of this repository is on upstream `main` with a `laptop` remote, and the Studio builds the app in a worktree from the commit the MacBook runs. The app keeps ssh connections to each remote daemon: one `herdr remote-client-bridge` per window plus helper shells. After a reboot the first bridge starts that Mac's daemon, detached in its own session with its standard streams on `/dev/null`, so the daemon outlives the app and the ssh session that started it. Updating a remote daemon means copying a new binary there and restarting it, which Oscar does.
+The app runs on the MacBook, where Oscar works, and on the Studio, where he watches the Studio's daemon on its own screen. The Studio's app is opened on demand and is not a login item. It shows the Studio's daemon as the device "Local". The MacBook's daemon, started by the app on 2026-10-05, reports no detached-daemon support, so `herdr machine add oz-mbp` on the Studio refuses it until that daemon restarts. The Mini has no app and no signing keychain. The Studio's checkout of this repository is on upstream `main` with a `laptop` remote, and the Studio builds the app in the plain clone `~/.agents/worktrees/herdr-gpui/studio-app`, detached at the commit the MacBook runs. The app keeps ssh connections to each remote daemon: one `herdr remote-client-bridge` per window plus helper shells. After a reboot the first bridge starts that Mac's daemon, detached in its own session with its standard streams on `/dev/null`, so the daemon outlives the app and the ssh session that started it. Updating a remote daemon means copying a new binary there and restarting it, which Oscar does.
 
 `device_order` in the local app config lists the Studio first, then this Mac, the Mini and the dev box, in the sidebar, the launcher's device prompt and the devices menu.
 
@@ -87,6 +87,13 @@ On the Studio, `cargo` on PATH ignores `rust-toolchain.toml`, so the build runs 
 ```sh
 T=~/.rustup/toolchains/1.96.1-aarch64-apple-darwin/bin
 env PATH="$T:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin" just bundle release
+```
+
+A build from a linked worktree draws a yellow strip with its branch name under the titlebar, so the Studio's app is built in its plain clone. The clone borrows the objects of the Studio's checkout, so a fetch there is enough to move it to the MacBook's commit:
+
+```sh
+git -C ~/tools/herdr-gpui fetch origin ol/main
+git -C ~/.agents/worktrees/herdr-gpui/studio-app checkout -q --detach <commit>
 ```
 
 No app on the Studio holds the screen recording grant, so `screencapture` from an agent there fails with "could not create image from window".
