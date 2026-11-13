@@ -36,6 +36,10 @@ fn answer_timeout(request: &Request) -> Duration {
         Request::Feedback(feedback) => {
             ANSWER_TIMEOUT + Duration::from_secs(feedback.wait_seconds.min(MAX_WAIT_SECONDS))
         }
+        Request::Relaunch(relaunch) => {
+            ANSWER_TIMEOUT
+                + Duration::from_secs(relaunch.seconds.min(crate::relaunch_notice::MAX_SECONDS))
+        }
         _ => ANSWER_TIMEOUT,
     }
 }

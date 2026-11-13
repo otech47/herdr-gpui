@@ -11,6 +11,8 @@ pub enum LaunchMode {
     Browser(BrowserCommand),
     /// Ask the running app to show a space, then exit without starting GPUI.
     Workspace(WorkspaceCommand),
+    /// Ask the running app to count down to a relaunch, then exit.
+    Relaunch(RelaunchCommand),
     /// Show the UI variants compiled in from `HERDR_MOCKUP_FILE`.
     #[cfg(feature = "mockup")]
     Mockup(MockupOptions),
@@ -49,6 +51,16 @@ pub enum WorkspaceCommand {
         tab: Option<String>,
         /// The endpoint ID the workspace belongs to, when not any.
         device: Option<String>,
+    },
+    Help,
+}
+
+/// `herdr-gpui relaunch ...`, answered by the running app.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RelaunchCommand {
+    Countdown {
+        seconds: u64,
+        reason: Option<String>,
     },
     Help,
 }
@@ -108,6 +120,14 @@ pub enum CliError {
     MissingWorkspaceCommand,
     #[error("Unknown workspace command: {}", .0.to_string_lossy())]
     UnknownWorkspaceCommand(OsString),
+    #[error("relaunch requires a command: countdown, or --help")]
+    MissingRelaunchCommand,
+    #[error("Unknown relaunch command: {}", .0.to_string_lossy())]
+    UnknownRelaunchCommand(OsString),
+    #[error("--seconds requires a number")]
+    InvalidSeconds,
+    #[error("--reason requires text")]
+    MissingReason,
     #[cfg(feature = "mockup")]
     #[error("{0} requires a path")]
     MissingMockupPath(&'static str),
@@ -185,6 +205,34 @@ fn parse_workspace(mut args: impl Iterator<Item = OsString>) -> Result<Workspace
             })
         }
         _ => Err(CliError::UnknownWorkspaceCommand(command)),
+    }
+}
+
+fn parse_relaunch(mut args: impl Iterator<Item = OsString>) -> Result<RelaunchCommand, CliError> {
+    let command = args.next().ok_or(CliError::MissingRelaunchCommand)?;
+    match command.to_str() {
+        Some("--help" | "-h") => Ok(RelaunchCommand::Help),
+        Some("countdown") => {
+            let (mut seconds, mut reason) = (5, None);
+            while let Some(arg) = args.next() {
+                match arg.to_str() {
+                    Some("--help" | "-h") => return Ok(RelaunchCommand::Help),
+                    Some("--seconds") => {
+                        seconds = args
+                            .next()
+                            .and_then(|value| value.to_str()?.parse().ok())
+                            .ok_or(CliError::InvalidSeconds)?;
+                    }
+                    Some("--reason") => {
+                        let value = args.next().filter(|value| !value.is_empty());
+                        reason = Some(utf8(value.ok_or(CliError::MissingReason)?)?);
+                    }
+                    _ => return Err(CliError::UnexpectedArgument(arg)),
+                }
+            }
+            Ok(RelaunchCommand::Countdown { seconds, reason })
+        }
+        _ => Err(CliError::UnknownRelaunchCommand(command)),
     }
 }
 
@@ -299,6 +347,13 @@ impl LaunchOptions {
             return Ok(Self {
                 target: ConnectTarget::Local,
                 mode: LaunchMode::Workspace(parse_workspace(args)?),
+            });
+        }
+        if args.peek().is_some_and(|arg| arg == "relaunch") {
+            args.next();
+            return Ok(Self {
+                target: ConnectTarget::Local,
+                mode: LaunchMode::Relaunch(parse_relaunch(args)?),
             });
         }
         #[cfg(feature = "mockup")]

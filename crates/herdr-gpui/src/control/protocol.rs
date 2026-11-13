@@ -24,6 +24,19 @@ pub(crate) enum Request {
     /// The same, then select one tab of that workspace in that window alone.
     #[serde(rename = "tab.focus")]
     FocusTab(TabFocus),
+    /// Count down in every window, then answer whether the user let the
+    /// relaunch go ahead.
+    #[serde(rename = "app.relaunch")]
+    Relaunch(RelaunchRequest),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RelaunchRequest {
+    pub seconds: u64,
+    /// What the relaunch installs, shown on the countdown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,6 +135,10 @@ pub(crate) enum Response {
     /// Notes the user sent to the caller, or `None` when there are none.
     Feedback {
         text: Option<String>,
+    },
+    /// False when the user cancelled the countdown.
+    Relaunch {
+        proceed: bool,
     },
     Error {
         code: ErrorCode,

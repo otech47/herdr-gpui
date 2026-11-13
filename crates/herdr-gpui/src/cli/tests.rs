@@ -421,3 +421,48 @@ fn test_modes_are_exclusive() {
         );
     }
 }
+
+#[test]
+fn relaunch_countdown_takes_seconds_and_a_reason() {
+    let mode = |args: &[&str]| LaunchOptions::parse(args.iter().copied()).map(|o| o.mode);
+    assert_eq!(
+        mode(&["relaunch", "countdown"]).unwrap(),
+        LaunchMode::Relaunch(RelaunchCommand::Countdown {
+            seconds: 5,
+            reason: None,
+        })
+    );
+    assert_eq!(
+        mode(&["relaunch", "countdown", "--seconds", "8", "--reason", "x"]).unwrap(),
+        LaunchMode::Relaunch(RelaunchCommand::Countdown {
+            seconds: 8,
+            reason: Some("x".into()),
+        })
+    );
+    assert_eq!(
+        mode(&["relaunch", "--help"]).unwrap(),
+        LaunchMode::Relaunch(RelaunchCommand::Help)
+    );
+    let rejected: [(&[&str], CliError); 5] = [
+        (&["relaunch"], CliError::MissingRelaunchCommand),
+        (
+            &["relaunch", "now"],
+            CliError::UnknownRelaunchCommand("now".into()),
+        ),
+        (
+            &["relaunch", "countdown", "--seconds", "soon"],
+            CliError::InvalidSeconds,
+        ),
+        (
+            &["relaunch", "countdown", "--reason"],
+            CliError::MissingReason,
+        ),
+        (
+            &["relaunch", "countdown", "x"],
+            CliError::UnexpectedArgument("x".into()),
+        ),
+    ];
+    for (args, expected) in rejected {
+        assert_eq!(mode(args).unwrap_err(), expected, "{args:?}");
+    }
+}

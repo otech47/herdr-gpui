@@ -209,6 +209,9 @@ pub(crate) fn run() -> std::process::ExitCode {
     if let LaunchMode::Workspace(command) = mode {
         return crate::control::run_workspace(command);
     }
+    if let LaunchMode::Relaunch(command) = mode {
+        return crate::control::run_relaunch(command);
+    }
     // A separate app of its own: no daemon, control socket, stores, or updater.
     #[cfg(feature = "mockup")]
     if let LaunchMode::Mockup(options) = mode {

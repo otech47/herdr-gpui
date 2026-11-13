@@ -5,6 +5,7 @@
 //! can reach it: an agent on an SSH host has no path to this machine's socket.
 
 mod protocol;
+mod relaunch;
 #[cfg(unix)]
 mod socket;
 
@@ -23,6 +24,7 @@ use protocol::{
     BrowserOpen, Caller, FeedbackRequest, MAX_WAIT_SECONDS, OpenedIn, Page, Request, Response,
     TabFocus,
 };
+pub(crate) use relaunch::run as run_relaunch;
 #[cfg(unix)]
 use std::path::PathBuf;
 use std::{path::Path, process::ExitCode};
@@ -399,6 +401,7 @@ pub(crate) fn install(cx: &mut App) {
     let timer = cx.background_executor().clone();
     cx.spawn(async move |cx| {
         let mut waiters = Vec::new();
+        let mut relaunching = Vec::new();
         loop {
             timer.timer(std::time::Duration::from_millis(50)).await;
             cx.update(|cx| {
@@ -419,9 +422,13 @@ pub(crate) fn install(cx: &mut App) {
                         Request::Feedback(request) => {
                             feedback(&request, incoming, &mut waiters, cx);
                         }
+                        Request::Relaunch(request) => {
+                            relaunch::ask(&request, incoming, &mut relaunching, cx);
+                        }
                     }
                 }
                 serve_waiters(&mut waiters, cx);
+                relaunch::serve(&mut relaunching, cx);
             });
         }
     })

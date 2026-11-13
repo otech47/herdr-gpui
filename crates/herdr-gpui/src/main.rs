@@ -72,6 +72,7 @@ mod presentation;
 mod processes;
 mod progress;
 mod pull_request;
+mod relaunch_notice;
 mod release_notes;
 mod reorder;
 mod repo_items;
