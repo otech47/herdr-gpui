@@ -1,5 +1,6 @@
 use crate::{
     Error, HerdrWindow, Result,
+    browser::{Pick, Store, TabId},
     config::preferences::Preference,
     controls::{self, Command},
     menu::Page,
@@ -17,6 +18,8 @@ pub(super) struct CloseConfirmation {
     workspace: String,
     tab: String,
     pane: Option<String>,
+    /// A watched conversation, which this window closes without the daemon.
+    page: Option<TabId>,
     label: String,
     confirm_selected: bool,
     /// Pane closes only: confirming also saves `confirm_close_pane = false`.
@@ -44,7 +47,23 @@ impl CloseConfirmation {
             workspace: tab.workspace_id.clone(),
             tab: tab.tab_id.clone(),
             pane: None,
+            page: None,
             label: tab.label.clone(),
+            confirm_selected: false,
+            do_not_ask_again: false,
+            error: None,
+        })
+    }
+
+    fn capture_page(id: TabId, cx: &App) -> Option<Self> {
+        let tab = cx.try_global::<Store>()?.get(id)?;
+        Some(Self {
+            boot: String::new(),
+            workspace: tab.workspace_id.clone(),
+            tab: String::new(),
+            pane: None,
+            page: Some(id),
+            label: tab.title.clone(),
             confirm_selected: false,
             do_not_ask_again: false,
             error: None,
@@ -75,6 +94,7 @@ impl CloseConfirmation {
             workspace: tab.workspace_id.clone(),
             tab: tab.tab_id.clone(),
             pane: pane.map(|pane| pane.pane_id.clone()),
+            page: None,
             label: pane
                 .map(|pane| pane.label.clone().unwrap_or_else(|| pane.pane_id.clone()))
                 .unwrap_or_else(|| tab.label.clone()),
@@ -137,7 +157,24 @@ impl HerdrWindow {
             .snapshot
             .as_ref()
             .and_then(|snapshot| CloseConfirmation::capture_tab(snapshot, id));
-        self.show_close(close, window, cx);
+        self.show_close(close, false, window, cx);
+    }
+
+    pub(super) fn ask_session_close(
+        &mut self,
+        session: Pick,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let close = match session {
+            Pick::Herdr(tab) => self
+                .live
+                .snapshot
+                .as_ref()
+                .and_then(|snapshot| CloseConfirmation::capture_tab(snapshot, &tab)),
+            Pick::Page(id) => CloseConfirmation::capture_page(id, cx),
+        };
+        self.show_close(close, true, window, cx);
     }
 
     pub(super) fn open_close_confirmation(
@@ -151,16 +188,19 @@ impl HerdrWindow {
             .snapshot
             .as_ref()
             .and_then(|snapshot| CloseConfirmation::capture(command, snapshot));
-        self.show_close(close, window, cx);
+        self.show_close(close, true, window, cx);
     }
 
     /// Opens the confirmation, or closes straight away when confirmation is
-    /// turned off for the target kind or a tab has no agent mid-task. The
-    /// immediate close still goes through `confirm_close`, so its connection
-    /// and target checks hold and a refusal stays visible in the dialog.
+    /// turned off for the target kind or, unless `ask` is set, a tab has no
+    /// agent mid-task. `ask` is for shortcuts, which are easy to press by
+    /// accident. The immediate close still goes through `confirm_close`, so
+    /// its connection and target checks hold and a refusal stays visible in
+    /// the dialog.
     fn show_close(
         &mut self,
         close: Option<CloseConfirmation>,
+        ask: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -171,11 +211,12 @@ impl HerdrWindow {
             !self.config.confirm_close_pane
         } else {
             !self.config.confirm_close_tab
-                || !self
-                    .live
-                    .snapshot
-                    .as_ref()
-                    .is_some_and(|snapshot| close.interrupts_agent(snapshot))
+                || (!ask
+                    && !self
+                        .live
+                        .snapshot
+                        .as_ref()
+                        .is_some_and(|snapshot| close.interrupts_agent(snapshot)))
         };
         if !self.open_menu(window, cx) {
             return;
@@ -201,6 +242,11 @@ impl HerdrWindow {
         cx: &mut Context<Self>,
     ) -> Option<Preference> {
         let close = self.menu.close.as_ref()?;
+        if let Some(page) = close.page {
+            self.dismiss_menu(window, cx);
+            self.close_browser_tab(page, window, cx);
+            return None;
+        }
         let result = (|| {
             if !self.menu_target_current() || !self.input_ready() {
                 return Err(Error::StaleConnection);
@@ -289,6 +335,8 @@ impl HerdrWindow {
             .child(div().child(close.label.clone()))
             .child(div().text_color(rgb(theme.subtext())).child(if close.pane.is_some() {
                 "This terminates the pane and its running processes. This cannot be undone."
+            } else if close.page.is_some() {
+                "This closes the read-only view. The conversation stays saved on its device."
             } else { "This terminates every pane and running process in this tab. This cannot be undone." }))
             .when_some(close.error.clone(), |panel, error| panel.child(div().bg(rgb(theme.active)).p(px(8.)).child(error)))
             .when(close.pane.is_some(), |panel| panel.child(div().id("close-do-not-ask").debug_selector(|| "close-do-not-ask".into())

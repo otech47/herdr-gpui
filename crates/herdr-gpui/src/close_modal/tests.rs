@@ -4,6 +4,7 @@ use core::prelude::v1::test;
 use std::sync::Arc;
 
 mod pane_option;
+mod shortcut;
 
 #[gpui::test]
 fn skipping_tab_confirmation_keeps_connection_checks_and_pane_prompt(cx: &mut TestAppContext) {
@@ -176,7 +177,7 @@ fn only_a_working_or_blocked_agent_holds_a_tab_close() -> anyhow::Result<()> {
 }
 
 #[gpui::test]
-fn idle_tab_closes_without_asking_but_panes_still_ask(cx: &mut TestAppContext) {
+fn idle_tab_closes_from_its_cross_but_the_shortcut_and_panes_ask(cx: &mut TestAppContext) {
     let (view, cx) = cx.add_window_view(|window, cx| {
         let mut view = crate::sidebar::layout_tests::fixture_window(window, cx);
         let mut snapshot: ClientShellSnapshot = serde_json::from_str(include_str!(
@@ -196,7 +197,7 @@ fn idle_tab_closes_without_asking_but_panes_still_ask(cx: &mut TestAppContext) {
             assert!(view.menu.close.as_ref().unwrap().error.is_some());
             view.dismiss_menu(window, cx);
             view.open_close_confirmation(Command::CloseTab, window, cx);
-            assert!(view.menu.close.as_ref().unwrap().error.is_some());
+            assert!(view.menu.close.as_ref().unwrap().error.is_none());
             view.dismiss_menu(window, cx);
             view.open_close_confirmation(Command::ClosePane, window, cx);
             assert!(view.menu.close.as_ref().unwrap().error.is_none());

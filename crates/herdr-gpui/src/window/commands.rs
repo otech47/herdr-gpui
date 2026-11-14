@@ -257,10 +257,9 @@ impl HerdrWindow {
                 open_additional_window(self.endpoints[0].connection.target.clone(), cx);
                 return;
             }
-            // A page has no panes, so either close closes its tab, as in
-            // a web browser; nothing runs in it that needs confirming. A group
-            // standing in for a tab closes that tab, and an empty group of a
-            // split closes, as an editor group does.
+            // A page has no panes, so either close closes it at once, as in
+            // a web browser. A session, shown or stood in for, always asks
+            // first, and an empty group of a split closes, as an editor group does.
             Command::ClosePane | Command::CloseTab => {
                 let Some(group) = self.active_group() else {
                     self.open_close_confirmation(command, window, cx);
@@ -271,7 +270,14 @@ impl HerdrWindow {
                         self.open_close_confirmation(command, window, cx)
                     }
                     crate::browser::Shown::Page(_) | crate::browser::Shown::Elsewhere(_) => {
-                        self.close_group_tab(group, window, cx)
+                        match self.group_pick(group) {
+                            Some(pick)
+                                if self.session_for_pick(&pick, cx).as_ref() == Some(&pick) =>
+                            {
+                                self.ask_session_close(pick, window, cx)
+                            }
+                            _ => self.close_group_tab(group, window, cx),
+                        }
                     }
                     crate::browser::Shown::Empty => self.close_group(group, window, cx),
                 }
