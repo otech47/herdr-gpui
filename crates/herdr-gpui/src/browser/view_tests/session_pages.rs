@@ -2,6 +2,7 @@ use super::*;
 #[cfg(unix)]
 use crate::browser::Shown;
 use crate::browser::{Pick, TabId};
+use crate::controls::Command;
 
 fn add_page(view: &Entity<HerdrWindow>, cx: &mut VisualTestContext, session: Pick) -> TabId {
     cx.update(|_, cx| {
@@ -58,26 +59,40 @@ fn session_pages_restore_the_last_page_and_an_explicit_terminal_choice(
     assert_eq!(pick(&view, cx), Some(Pick::Herdr("t0".into())));
 }
 
+fn command(view: &Entity<HerdrWindow>, cx: &mut VisualTestContext, command: Command) {
+    cx.update(|window, cx| view.update(cx, |view, cx| view.command(command, window, cx)));
+    draw(cx);
+}
+
+fn strip_entry(view: &Entity<HerdrWindow>, cx: &mut VisualTestContext, number: u8) -> Option<Pick> {
+    cx.update(|_, cx| {
+        view.read(cx)
+            .session_strip_entry(number, cx)
+            .map(|(_, entry)| entry)
+    })
+}
+
 #[gpui::test]
-fn the_first_tab_number_shows_a_reports_terminal_before_the_first_tab(
-    cx: &mut gpui::TestAppContext,
-) {
+fn tab_numbers_count_a_sessions_strip_before_the_sidebar(cx: &mut gpui::TestAppContext) {
     let (view, cx) = window(cx);
     draw(cx);
-    let page = add_page(&view, cx, Pick::Herdr("t0".into()));
-    cx.update(|window, cx| {
-        view.update(cx, |view, cx| {
-            view.show_browser_tab(page, window, cx);
-            assert!(view.active_session_page(cx).is_some());
-            view.command(crate::controls::Command::TabNumber(1), window, cx);
-        })
-    });
-    draw(cx);
-    assert_eq!(pick(&view, cx), Some(Pick::Herdr("t0".into())));
-    cx.update(|_, cx| assert!(view.read(cx).active_session_page(cx).is_none()));
+    let session = Pick::Herdr("t0".into());
+    assert_eq!(pick(&view, cx), Some(session.clone()));
+    assert_eq!(strip_entry(&view, cx, 2), None);
+    let first = add_page(&view, cx, session.clone());
+    let second = add_page(&view, cx, session.clone());
+    command(&view, cx, Command::TabNumber(2));
+    assert_eq!(pick(&view, cx), Some(Pick::Page(first)));
+    command(&view, cx, Command::TabNumber(3));
+    assert_eq!(pick(&view, cx), Some(Pick::Page(second)));
+    assert_eq!(strip_entry(&view, cx, 3), None);
+    assert_eq!(strip_entry(&view, cx, 4), None);
+    command(&view, cx, Command::TabNumber(1));
+    assert_eq!(pick(&view, cx), Some(session.clone()));
+    assert_eq!(strip_entry(&view, cx, 1), None);
     choose(&view, cx, "t1");
     choose(&view, cx, "t0");
-    assert_eq!(pick(&view, cx), Some(Pick::Herdr("t0".into())));
+    assert_eq!(pick(&view, cx), Some(session));
 }
 
 #[gpui::test]

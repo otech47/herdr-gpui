@@ -1,4 +1,4 @@
-use super::{Location, Pick, Scope, Slot, Store, Tab, view::store};
+use super::{Location, Pick, Scope, Slot, Store, Tab, TabId, view::store};
 use crate::HerdrWindow;
 use gpui::{prelude::*, *};
 
@@ -107,15 +107,42 @@ impl HerdrWindow {
         }
     }
 
-    pub(crate) fn active_session_page(&self, cx: &App) -> Option<(Slot, Pick)> {
+    /// `None` leaves the number to the sidebar: no reports, a shorter strip,
+    /// or that entry already shows.
+    pub(crate) fn session_strip_entry(&self, number: u8, cx: &App) -> Option<(Slot, Pick)> {
         let group = self.active_group()?;
         let pick = self.group_pick(group)?;
         let session = self.session_for_pick(&pick, cx)?;
+        let (scope, workspace) = self.browser_key()?;
+        let pages: Vec<TabId> = store(cx)?
+            .session_pages(&scope, &workspace, &session)
+            .map(|tab| tab.id)
+            .collect();
+        let entry = match usize::from(number) {
+            _ if pages.is_empty() => return None,
+            1 => session,
+            number => Pick::Page(*pages.get(number.checked_sub(2)?)?),
+        };
         let slot = self
             .group_slots()
             .into_iter()
             .find(|slot| slot.id == group)?;
-        (pick != session).then_some((slot, session))
+        (pick != entry).then_some((slot, entry))
+    }
+
+    pub(crate) fn show_session_strip_entry(
+        &mut self,
+        slot: Slot,
+        entry: Pick,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match entry {
+            Pick::Page(id) if self.session_for_pick(&entry, cx) != Some(entry.clone()) => {
+                self.show_browser_tab_in(Some(slot.id), id, window, cx);
+            }
+            session => self.show_session_terminal(slot, session, window, cx),
+        }
     }
 
     pub(crate) fn show_session_terminal(

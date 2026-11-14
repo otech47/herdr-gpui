@@ -434,10 +434,10 @@ impl HerdrWindow {
                 window.focus(&self.focus, cx);
                 return;
             }
-            // From a report, the first number goes to its terminal, the strip's first entry.
-            Command::TabNumber(1) if self.active_session_page(cx).is_some() => {
-                if let Some((slot, session)) = self.active_session_page(cx) {
-                    self.show_session_terminal(slot, session, window, cx);
+            // A session with reports numbers its strip first: its terminal, then each report.
+            Command::TabNumber(number) if self.session_strip_entry(number, cx).is_some() => {
+                if let Some((slot, entry)) = self.session_strip_entry(number, cx) {
+                    self.show_session_strip_entry(slot, entry, window, cx);
                 }
                 return;
             }
