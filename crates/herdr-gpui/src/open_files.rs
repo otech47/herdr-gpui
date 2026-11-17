@@ -1,15 +1,12 @@
-//! The open-file limit. macOS starts an app with a soft limit of 256, and
-//! every window keeps a connection, helper shells and their pipes per device,
-//! which passes 256 with a few windows and devices.
+//! macOS gives apps a soft open-file limit of 256, which a few windows on
+//! several devices exceed.
 
-/// The highest soft limit tried; well above what a session of windows uses.
 #[cfg(unix)]
 const CEILING: u64 = 1 << 20;
 
-/// Raises the soft open-file limit as far as the hard limit and the kernel
-/// allow. macOS refuses a soft limit above `kern.maxfilesperproc` even under
-/// an unlimited hard limit, so each refused value is halved and tried again.
-/// Child processes, the local daemon among them, inherit the raised limit.
+/// Raises the soft open-file limit as far as the hard limit and kernel allow.
+/// macOS refuses a value above `kern.maxfilesperproc` even under an unlimited
+/// hard limit, so a refused value is halved and tried again.
 #[cfg(unix)]
 pub(crate) fn raise() -> Option<u64> {
     use rustix::process::{Resource, Rlimit, getrlimit, setrlimit};
