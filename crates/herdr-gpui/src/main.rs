@@ -61,6 +61,7 @@ mod monitoring;
 mod motion;
 mod navigation;
 mod notifications;
+mod open_files;
 mod osc52;
 mod palette;
 mod pane_menu;

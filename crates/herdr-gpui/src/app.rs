@@ -190,6 +190,7 @@ pub(crate) fn open_window_for(
 
 pub(crate) fn run() -> std::process::ExitCode {
     use cli::{LaunchMode, LaunchOptions};
+    crate::open_files::raise();
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     if let Some(exit) = updater::run_helper(&args) {
         return exit;
