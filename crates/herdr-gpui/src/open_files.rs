@@ -5,8 +5,8 @@
 const CEILING: u64 = 1 << 20;
 
 /// Raises the soft open-file limit as far as the hard limit and kernel allow.
-/// macOS refuses a value above `kern.maxfilesperproc` even under an unlimited
-/// hard limit, so a refused value is halved and tried again.
+/// macOS refuses values above `kern.maxfilesperproc`, so the value is halved
+/// until accepted.
 #[cfg(unix)]
 pub(crate) fn raise() -> Option<u64> {
     use rustix::process::{Resource, Rlimit, getrlimit, setrlimit};
