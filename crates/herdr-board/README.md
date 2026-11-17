@@ -136,7 +136,7 @@ Every answer closes its connection. Long polls and streams are limited to 64 at 
 | `pane_id` | The pane the row stands for: its agent's pane, else the tab's focused pane. `null` when the tab reports no pane. |
 | `terminal_id` | What `herdr terminal session control` and `observe` take to open the row's terminal on its device. `null` when `pane_id` is. |
 | `number` | The daemon's number for the tab, the one its terminal client shows. |
-| `title` | The row's text: the tab's own name when the user gave one, else its agent's terminal title, else the agent's name, else the name of the shell's directory, else the tab's label. |
+| `title` | The row's text: its agent's terminal title unless that is only the agent's name, else the tab's own name when the user gave one, else the agent's name, else the name of the shell's directory, else the tab's label. |
 | `agent` | `null` for a tab with no agent. `id` is the agent's kind, such as `claude` or `codex`, and names its icon. It can be `null`. `name` is the agent's display name. |
 | `state` | `blocked`, `limited`, `working`, `done`, `monitoring`, `idle` or `unknown`. |
 | `state_text` | The words to show for the state. The agent's own words when it gave any, else the same as `state`. |
