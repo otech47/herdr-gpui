@@ -1,6 +1,4 @@
-//! Requests sent to agents from outside Herdr, such as a message on a phone,
-//! read from a JSON list that a server keeps at `requests_url`. Each request
-//! names the tab of the agent session working on it.
+//! Requests from outside Herdr, read from a JSON list at `requests_url`.
 use serde::Deserialize;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
@@ -89,7 +87,6 @@ impl Requests {
         self.items.iter().filter(|r| r.open()).count()
     }
 
-    /// Asks for the list on the next poll.
     pub(crate) fn refresh(&mut self) {
         self.next = None;
     }

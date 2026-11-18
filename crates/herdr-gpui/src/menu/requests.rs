@@ -1,6 +1,5 @@
-//! The requests popup, opened from the titlebar: each request sent to an agent
-//! from outside Herdr, newest first, with how it stands. A request with a tab
-//! opens that tab, on whichever device runs it.
+//! Requests sent to agents from outside Herdr, newest first. A request with a
+//! tab opens that tab on the device that runs it.
 
 use super::Page;
 use crate::{HerdrWindow, navigation::NavigationTarget, requests::Request};
