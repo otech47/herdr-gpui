@@ -93,10 +93,13 @@ impl HerdrWindow {
                         == Some((source.scope.clone(), source.workspace.clone()))
                         && this.active_group() == group
                         && group.and_then(|group| this.group_pick(group)) == selected;
-                    let id =
+                    let opened =
                         Store::update(cx, |store| store.open_session_location(&source, location));
-                    if current && let Some(id) = id {
-                        this.show_browser_tab_in(group, id, window, cx);
+                    if let Some((id, reused)) = opened {
+                        this.reload_reopened_tab(id, reused, cx);
+                        if current {
+                            this.show_browser_tab_in(group, id, window, cx);
+                        }
                     }
                     cx.notify();
                 }

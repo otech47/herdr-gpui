@@ -62,19 +62,20 @@ pub(crate) fn report_urls(output: &str) -> Vec<WebUrl> {
 impl Store {
     pub(crate) fn open_session_page(&mut self, source: &PageSource, url: WebUrl) -> Option<TabId> {
         self.open_session_location(source, Location::Web { url })
+            .map(|(id, _)| id)
     }
 
     pub(crate) fn open_session_location(
         &mut self,
         source: &PageSource,
         location: Location,
-    ) -> Option<TabId> {
+    ) -> Option<(TabId, bool)> {
         if let Some(id) = self
             .session_pages(&source.scope, &source.workspace, &source.session)
             .find(|tab| tab.location.as_ref() == Some(&location))
             .map(|tab| tab.id)
         {
-            return Some(id);
+            return Some((id, true));
         }
         let id = self.open(
             source.scope.clone(),
@@ -83,7 +84,7 @@ impl Store {
             source.pane.clone(),
         )?;
         self.attach_to_session(id, source.session.clone());
-        Some(id)
+        Some((id, false))
     }
 }
 
@@ -106,9 +107,22 @@ impl HerdrWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(id) = Store::update(cx, |store| store.open_session_page(source, url)) {
+        let opened = Store::update(cx, |store| {
+            store.open_session_location(source, Location::Web { url })
+        });
+        if let Some((id, reused)) = opened {
+            self.reload_reopened_tab(id, reused, cx);
             self.show_browser_tab(id, window, cx);
         }
+    }
+
+    pub(crate) fn reload_reopened_tab(&mut self, id: TabId, reused: bool, cx: &mut Context<Self>) {
+        #[cfg(any(target_os = "macos", windows))]
+        if reused {
+            self.browser.pages.reload(id, cx);
+        }
+        #[cfg(not(any(target_os = "macos", windows)))]
+        let _ = (id, reused, cx);
     }
 }
 

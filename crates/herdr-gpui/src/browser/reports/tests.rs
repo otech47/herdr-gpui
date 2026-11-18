@@ -29,3 +29,23 @@ fn two_sessions_can_review_the_same_report_independently() {
     source.pane = Some("p2".into());
     assert_ne!(store.open_session_page(&source, url), Some(first));
 }
+
+#[test]
+fn opening_a_session_page_again_says_it_was_already_open() {
+    let mut store = Store::default();
+    let source = PageSource {
+        scope: Scope::endpoint("local"),
+        workspace: "w1".into(),
+        session: Pick::Herdr("t1".into()),
+        pane: Some("p1".into()),
+    };
+    let page = || Location::Web {
+        url: WebUrl::try_from("http://host.tail123.ts.net:8788/report.html").unwrap(),
+    };
+    let (first, reused) = store.open_session_location(&source, page()).unwrap();
+    assert!(!reused);
+    assert_eq!(
+        store.open_session_location(&source, page()),
+        Some((first, true))
+    );
+}
