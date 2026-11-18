@@ -77,6 +77,7 @@ mod relaunch_notice;
 mod release_notes;
 mod reorder;
 mod repo_items;
+mod requests;
 mod review;
 mod scrollback;
 mod search_input;

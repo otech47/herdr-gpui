@@ -570,6 +570,18 @@ local port is free. Windows clients
 do not scan this machine. Set top-level `show_listening_ports = false`, or
 turn off **Show listening ports** in Settings, to hide them and stop scanning.
 
+Top-level `requests_url` names a JSON list of requests sent to agents from
+outside Herdr, such as messages from a phone. The app reads it every 20 seconds
+and whenever the list opens. A bell in the titlebar counts the requests not yet
+done or closed, and turns red while one is blocked on an answer or failed to
+start. Each row shows the request, its state, its age, the device and tab
+title, and the agent's report. Clicking a row opens the tab of the agent
+working on it, on the device whose saved name matches the request's
+`host_name`, or on this computer when none does. The list is an object with a
+`requests` array whose items carry `id`, `created` in seconds since the epoch,
+`text`, `state`, and optionally `summary`, `error`, `host_name`, `tab_id` and
+`title`, plus an optional top-level `error`.
+
 `[notifications]` in `config-gpui.local.toml` overrides shared toast preferences
 for GUI-local in-app delivery, independently per key. `enabled = true` shows
 in-app toasts even when shared delivery is `system`; `enabled = false` leaves

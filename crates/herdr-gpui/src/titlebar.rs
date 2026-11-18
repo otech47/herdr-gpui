@@ -204,6 +204,66 @@ impl HerdrWindow {
         )
     }
 
+    /// The requests popup's button: a bell, and how many requests are still
+    /// open, red while one waits on an answer.
+    fn render_requests_button(&self, cx: &mut Context<Self>) -> Option<Div> {
+        if !self.requests.enabled() {
+            return None;
+        }
+        let theme = &self.theme;
+        let font = &self.config.ui;
+        let open = self.requests.open_count();
+        let color = if self.requests.items.iter().any(|r| r.wants_you()) {
+            theme.ink(theme.palette[1])
+        } else if open > 0 {
+            theme.foreground
+        } else {
+            theme.muted
+        };
+        let background = rgb(theme.surface).blend(rgba(0xffffff1a));
+        Some(
+            div()
+                .flex()
+                .items_center()
+                .flex_none()
+                .h_full()
+                .pr(px(2.))
+                .child(
+                    div()
+                        .id("titlebar-requests")
+                        .debug_selector(|| "titlebar-requests".into())
+                        .flex()
+                        .items_center()
+                        .gap(px(4.))
+                        .h(px(24.))
+                        .px(px(6.))
+                        .rounded(px(crate::config::corners::CONTROL))
+                        .cursor_pointer()
+                        .text_font(font)
+                        .text_size(px(font.size))
+                        .text_color(rgb(color))
+                        .hover(|button| {
+                            button.bg(background.blend(rgba((theme.foreground << 8) | 0x14)))
+                        })
+                        .child(
+                            svg()
+                                .path("icons/bell.svg")
+                                .size(px(14.))
+                                .flex_none()
+                                .text_color(rgb(color)),
+                        )
+                        .when(open > 0, |button| button.child(open.to_string()))
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                                cx.stop_propagation();
+                                this.open_requests(event.position, window, cx);
+                            }),
+                        ),
+                ),
+        )
+    }
+
     pub(super) fn render_titlebar(
         &self,
         window: &mut Window,
@@ -256,6 +316,7 @@ impl HerdrWindow {
             .flex()
             .flex_none()
             .items_center()
+            .children(self.render_requests_button(cx))
             .children(self.render_git_button(cx))
             .child(
                 div()
