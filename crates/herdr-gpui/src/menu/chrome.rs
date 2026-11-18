@@ -275,7 +275,6 @@ impl HerdrWindow {
                 | Page::Host
                 | Page::RemoveDevice
                 | Page::Git
-                | Page::Requests
                 | Page::GitCommit
                 | Page::PrReview
                 | Page::PrComment
@@ -346,12 +345,7 @@ impl HerdrWindow {
             .when(
                 matches!(
                     page,
-                    Page::Git
-                        | Page::Requests
-                        | Page::GitCommit
-                        | Page::PrReview
-                        | Page::PrComment
-                        | Page::PrMerge
+                    Page::Git | Page::GitCommit | Page::PrReview | Page::PrComment | Page::PrMerge
                 ),
                 |panel| {
                     panel
@@ -359,7 +353,7 @@ impl HerdrWindow {
                             .max(px(0.))
                             .min(px(if page == Page::Git { 340. } else { 420. })))
                         .max_h((viewport.height - px(24.)).max(px(0.)))
-                        .when(matches!(page, Page::Git | Page::Requests), |panel| {
+                        .when(page == Page::Git, |panel| {
                             let top = crate::titlebar::HEIGHT
                                 + crate::worktree_banner::reserved(
                                     env!("HERDR_BUILD_WORKTREE") == "1",
@@ -581,8 +575,6 @@ impl HerdrWindow {
             panel = panel.child(self.render_fan_out(cx));
         } else if page == Page::Git {
             panel = panel.child(self.render_git_menu(cx));
-        } else if page == Page::Requests {
-            panel = panel.child(self.render_requests(cx));
         } else if page == Page::GitCommit {
             panel = panel.child(self.render_git_commit(cx));
         } else if page == Page::PrReview {
@@ -743,7 +735,7 @@ impl HerdrWindow {
             .on_key_down(cx.listener(Self::menu_key_down))
             .child(if pointer_anchored {
                 anchored()
-                    .position(if matches!(page, Page::Git | Page::Requests) {
+                    .position(if page == Page::Git {
                         point(
                             self.menu.anchor.x,
                             px(crate::titlebar::HEIGHT

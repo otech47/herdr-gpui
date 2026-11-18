@@ -75,10 +75,6 @@ agent_checkpoints = true
 # Hosts are scanned every five seconds with ss or lsof, a remote one over
 # SSH; false stops all scanning. Also under Settings > General.
 show_listening_ports = true
-# A JSON list of requests sent to agents from outside Herdr, read every 20
-# seconds. A bell in the titlebar counts the open ones and opens the list, and
-# a request opens the tab of the agent working on it. Unset hides the bell.
-# requests_url = "http://jarvis.example:8787/v1/whatsapp/requests"
 # macOS only: whether Option-letter reaches a pane as an Alt shortcut (Alt-P
 # for Option-P) or types the character the keyboard layout puts there. "auto"
 # sends Alt on the U.S. and ABC layouts and types elsewhere, so layouts that

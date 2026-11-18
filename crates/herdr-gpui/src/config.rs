@@ -85,9 +85,6 @@ pub struct Config {
     /// How far the app's own marks and labels stand off its chrome.
     pub contrast: Contrast,
     pub usage: crate::usage::UsageConfig,
-    /// A JSON list of requests sent to agents from outside Herdr, shown from
-    /// the titlebar. None hides the list.
-    pub requests_url: Option<String>,
     pub option_as_alt: OptionAsAlt,
     pub open_links_in: LinkTarget,
     /// Whether a terminal selection stays highlighted, and readable by
@@ -368,7 +365,6 @@ impl Default for Config {
             show_listening_ports: true,
             contrast: Contrast::default(),
             usage: crate::usage::UsageConfig::default(),
-            requests_url: None,
             option_as_alt: OptionAsAlt::default(),
             open_links_in: LinkTarget::default(),
             keep_selection_after_copy: true,
@@ -413,7 +409,6 @@ struct Settings {
     show_listening_ports: Option<bool>,
     contrast: Contrast,
     usage: crate::usage::UsageConfig,
-    requests_url: Option<String>,
     option_as_alt: OptionAsAlt,
     open_links_in: LinkTarget,
     keep_selection_after_copy: Option<bool>,
@@ -733,7 +728,6 @@ impl Config {
         config.show_listening_ports = settings.show_listening_ports.unwrap_or(true);
         config.contrast = settings.contrast;
         config.usage = settings.usage;
-        config.requests_url = settings.requests_url;
         config.option_as_alt = settings.option_as_alt;
         config.open_links_in = settings.open_links_in;
         config.keep_selection_after_copy = settings.keep_selection_after_copy.unwrap_or(true);

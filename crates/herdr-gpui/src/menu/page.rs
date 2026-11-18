@@ -61,8 +61,6 @@ pub(crate) enum Page {
     FanOut,
     /// Which device a `[[launchers]]` chord runs its command for.
     Launcher,
-    /// Requests sent to agents from outside Herdr, from the titlebar.
-    Requests,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

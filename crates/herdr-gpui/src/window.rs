@@ -252,7 +252,6 @@ pub(crate) struct HerdrWindow {
     /// including after a config reload, as upstream's manual override does.
     pub(crate) agent_sort_modified: bool,
     pub(crate) avatars: Option<avatars::Avatars>,
-    pub(crate) requests: crate::requests::Requests,
     #[cfg(feature = "integration-test")]
     pub(crate) input_probe: smoke::InputProbe,
     /// Spaces, agents, and tabs lists, in that order.
@@ -399,12 +398,6 @@ impl HerdrWindow {
             cx.notify();
         }
         if self.avatars.as_mut().is_some_and(|avatars| avatars.poll()) {
-            cx.notify();
-        }
-        if self.requests.url() != self.config.requests_url.as_deref() {
-            self.requests.set_url(self.config.requests_url.clone());
-        }
-        if self.requests.poll(std::time::Instant::now()) {
             cx.notify();
         }
         if let Some(chrome) = self.sidebar_preferences.as_mut().and_then(|p| p.loaded()) {
@@ -861,7 +854,6 @@ impl HerdrWindow {
             agent_sort: preferences::AgentSort::default(),
             agent_sort_modified: false,
             avatars: None,
-            requests: Default::default(),
             #[cfg(feature = "integration-test")]
             input_probe: smoke::InputProbe::default(),
             sidebar_scroll: Default::default(),
