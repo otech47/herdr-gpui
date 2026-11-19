@@ -68,6 +68,7 @@ impl Global for Notice {}
 impl Notice {
     /// Starts a countdown, or leaves one already running as it is, so two
     /// callers asking at once share it.
+    #[cfg_attr(not(any(unix, test)), expect(dead_code))]
     pub(crate) fn start(seconds: u64, reason: Option<&str>, cx: &mut App) {
         let notice = cx.default_global::<Self>();
         if matches!(notice.state, State::Counting { .. }) {
@@ -89,6 +90,7 @@ impl Notice {
         }
     }
 
+    #[cfg_attr(not(any(unix, test)), expect(dead_code))]
     pub(crate) fn tick(cx: &mut App) -> Option<Outcome> {
         let state = cx.try_global::<Self>()?.state;
         let (next, outcome) = state.next(Instant::now());

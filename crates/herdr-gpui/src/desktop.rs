@@ -9,6 +9,7 @@ pub(crate) struct Desktop {
     pub id: u64,
 }
 
+#[cfg_attr(not(target_os = "macos"), expect(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Move {
     Done,
