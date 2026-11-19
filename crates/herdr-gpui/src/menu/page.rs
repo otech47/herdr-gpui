@@ -61,6 +61,8 @@ pub(crate) enum Page {
     FanOut,
     /// Which device a `[[launchers]]` chord runs its command for.
     Launcher,
+    /// The device, agent and space of a new tab, when `[new_tab]` is set.
+    NewTab,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

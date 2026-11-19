@@ -284,13 +284,18 @@ impl HerdrWindow {
             .id("menu-panel")
             .debug_selector(|| "menu-panel".into())
             .when(
-                matches!(page, Page::Workspace | Page::Dialog(_) | Page::Launcher),
+                matches!(
+                    page,
+                    Page::Workspace | Page::Dialog(_) | Page::Launcher | Page::NewTab
+                ),
                 |panel| {
                     panel
                         .w(px(if page == Page::Workspace {
                             340.
                         } else if page == Page::Dialog(WorkspaceAction::DeleteWorktree) {
                             480.
+                        } else if page == Page::NewTab {
+                            500.
                         } else if settled {
                             // A listing needs room for a title and its branch.
                             560.
@@ -407,7 +412,7 @@ impl HerdrWindow {
                 !footer_anchored
                     && !matches!(page, Page::Usage(_))
                     && !pointer_anchored
-                    && !matches!(page, Page::Dialog(_) | Page::Launcher),
+                    && !matches!(page, Page::Dialog(_) | Page::Launcher | Page::NewTab),
                 |panel| {
                     panel
                         .w((viewport.width - px(32.)).max(px(0.)).min(px(
@@ -609,6 +614,8 @@ impl HerdrWindow {
             panel = panel.child(self.render_close_confirmation(cx));
         } else if page == Page::Launcher {
             panel = panel.child(self.render_launcher(cx));
+        } else if page == Page::NewTab {
+            panel = panel.child(self.render_new_tab(cx));
         } else if page == Page::Preferences {
             panel = panel.child(self.render_preferences(cx));
         } else if page == Page::AppUpdate {

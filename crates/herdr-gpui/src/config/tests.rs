@@ -10,6 +10,7 @@ mod keybindings;
 mod launchers;
 mod links;
 mod loading;
+mod new_tab;
 mod notification_settings;
 mod preferences;
 mod sidebar_settings;

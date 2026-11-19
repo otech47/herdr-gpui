@@ -657,6 +657,18 @@ pub enum Error {
     EmptyLauncherCommand(String),
     #[error("[[launchers]] must list at most {0} entries")]
     TooManyLaunchers(usize),
+    #[error("new_tab: command is empty")]
+    EmptyNewTabCommand,
+    #[error("new_tab: each list needs 1 to {0} entries")]
+    TooManyNewTabEntries(usize),
+    #[error("new_tab: space {0:?} needs a label and a dir")]
+    NewTabSpace(String),
+    #[error("new_tab: space {0:?} is listed twice")]
+    DuplicateNewTabSpace(String),
+    #[error("new_tab: agent key {0:?} must be one lowercase letter")]
+    NewTabAgentKey(String),
+    #[error("new_tab: agent key {0:?} is listed twice")]
+    DuplicateNewTabAgentKey(String),
     #[error("links: {0:?} must start with http:// or https://")]
     LinkUrl(String),
     #[error(

@@ -7,7 +7,7 @@ mod render;
 #[cfg(test)]
 mod tests;
 
-use crate::{HerdrWindow, config::Launcher, menu::Page};
+use crate::{HerdrWindow, menu::Page};
 use gpui::{Context, KeyDownEvent, Keystroke, Window};
 use herdr_client::ConnectTarget;
 use std::path::{Path, PathBuf};
@@ -51,7 +51,7 @@ pub(crate) fn api_socket(client: &Path) -> Option<PathBuf> {
 /// commands get. The local daemon's API socket is named so the script
 /// reaches the daemon this window shows.
 pub(crate) fn plan(
-    launcher: &Launcher,
+    command: &str,
     choice: &Choice,
     workspace: Option<&str>,
     socket: Option<&str>,
@@ -70,7 +70,7 @@ pub(crate) fn plan(
         env.push(("HERDR_SOCKET_PATH".to_owned(), socket.to_owned()));
     }
     LaunchPlan {
-        command: launcher.command.clone(),
+        command: command.to_owned(),
         env,
     }
 }
@@ -239,6 +239,20 @@ impl HerdrWindow {
         let Some(launcher) = self.config.launchers.get(index) else {
             return;
         };
+        let (workspace, socket) = self.launch_context(choice);
+        let plan = plan(
+            &launcher.command,
+            choice,
+            workspace.as_deref(),
+            socket.as_deref(),
+        );
+        let label = launcher.label.clone();
+        self.run_plan(plan, &label, cx);
+    }
+
+    /// The focused space of `choice`'s daemon, and for this computer the API
+    /// socket of the daemon the window reaches.
+    pub(crate) fn launch_context(&self, choice: &Choice) -> (Option<String>, Option<String>) {
         let endpoint = self
             .endpoints
             .iter()
@@ -262,15 +276,18 @@ impl HerdrWindow {
                 .and_then(|path| path.to_str().map(str::to_owned)),
             _ => None,
         };
-        let plan = plan(launcher, choice, workspace.as_deref(), socket.as_deref());
+        (workspace, socket)
+    }
+
+    pub(crate) fn run_plan(&mut self, plan: LaunchPlan, label: &str, cx: &mut Context<Self>) {
         #[cfg(test)]
         {
             self.launched.push(plan);
-            let _ = cx;
+            let _ = (label, cx);
         }
         #[cfg(not(test))]
         if let Err(error) = spawn(&plan) {
-            self.local_error = Some(format!("{}: {error}", launcher.label));
+            self.local_error = Some(format!("{label}: {error}"));
             cx.notify();
         }
     }

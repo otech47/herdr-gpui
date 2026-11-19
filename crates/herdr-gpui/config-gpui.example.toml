@@ -215,6 +215,27 @@ project_roots = []
 # label = "claude in tools"
 # command = "herdr-launch tools ~/tools claude"
 
+# With [new_tab], a new tab first asks which device, agent and space it is
+# for. The digits pick the device, each agent's letter picks the agent, and
+# the left and right arrows step through the spaces. Every row starts on a
+# guess: the window's device and space, and the agent last opened in that
+# space. A shell in the window's own space and device is an ordinary new tab.
+# Anything else runs `command` as `command <space> <dir> [<agent command>]`
+# with the device in its environment, as a [[launchers]] command gets it.
+# `wrap` goes before every agent command in that space. Without
+# [[new_tab.agents]], the agents are Shell, Claude, Codex and Kimi on q, w,
+# e and r.
+# [new_tab]
+# command = "herdr-launch"
+# [[new_tab.spaces]]
+# label = "fedi"
+# dir = "~/fedibtc/fedi"
+# wrap = "nix develop -c"
+# [[new_tab.agents]]
+# key = "w"
+# label = "Claude"
+# command = "claude"
+
 # Buttons after the sidebar toggle that open a page in the system browser.
 # `url` must start with http:// or https://. `label` is the hover text and
 # defaults to the url. `icon` is one of external (default), pulse, chart,

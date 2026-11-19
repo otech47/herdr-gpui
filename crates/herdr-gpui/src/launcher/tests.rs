@@ -63,7 +63,7 @@ fn press(view: &gpui::Entity<HerdrWindow>, cx: &mut VisualTestContext, key: &str
 fn the_plan_names_the_device_and_its_host() {
     let launcher = launcher("ctrl-cmd-2", true);
     let local = plan(
-        &launcher,
+        &launcher.command,
         &Choice {
             id: "local".into(),
             label: "Local".into(),
@@ -84,7 +84,7 @@ fn the_plan_names_the_device_and_its_host() {
         Some("/tmp/herdr.sock")
     );
     let remote = plan(
-        &launcher,
+        &launcher.command,
         &Choice {
             id: MINI.into(),
             label: "Mini".into(),

@@ -80,6 +80,7 @@ pub(crate) struct MenuState {
     pub(crate) palette: Option<crate::palette::Palette>,
     pub(crate) close: Option<crate::close_modal::CloseConfirmation>,
     pub(crate) launcher: Option<crate::launcher::Prompt>,
+    pub(crate) new_tab: Option<crate::new_tab::Prompt>,
     pub(crate) tab: Option<crate::tab_menu::TabMenu>,
     pub(crate) group: Option<crate::group_menu::GroupMenu>,
     pub(crate) host: Option<super::devices::HostMenu>,
@@ -253,6 +254,7 @@ impl MenuState {
             palette: None,
             close: None,
             launcher: None,
+            new_tab: None,
             pr: Default::default(),
             pr_cache: Default::default(),
             pr_cache_connection: None,
@@ -309,6 +311,7 @@ impl MenuState {
         self.worktree_open = None;
         self.close = None;
         self.launcher = None;
+        self.new_tab = None;
         self.worktree = None;
         self.pr.clear();
         self.pr_connection = None;

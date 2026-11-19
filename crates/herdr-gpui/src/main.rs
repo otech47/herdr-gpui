@@ -60,6 +60,7 @@ mod mockup;
 mod monitoring;
 mod motion;
 mod navigation;
+mod new_tab;
 mod notifications;
 mod open_files;
 mod osc52;

@@ -320,6 +320,11 @@ impl HerdrWindow {
                 );
                 return;
             }
+            // Ahead of the name prompt, which the new tab prompt opens itself.
+            Command::Tab if self.config.new_tab.is_some() => {
+                self.open_new_tab(window, cx);
+                return;
+            }
             // Every interactive creation path ends here, so Herdr's name prompt
             // covers buttons, menus, shortcuts, and the palette alike.
             Command::Tab | Command::Workspace if self.open_name_prompt(command, window, cx) => {
@@ -472,6 +477,15 @@ impl HerdrWindow {
             }
             _ => {}
         }
+        self.request_command(command, window, cx);
+    }
+
+    pub(crate) fn request_command(
+        &mut self,
+        command: Command,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.activation_deadline.is_some()
             || !self.endpoints[self.selected_endpoint].surface_requested()
         {
