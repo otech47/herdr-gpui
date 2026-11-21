@@ -9,8 +9,9 @@ mod tests;
 
 use crate::{
     Error, Result,
+    monitor_shell::{MonitorKind, MonitorShell},
     system_load::Stop,
-    usage::{Host, Shell},
+    usage::Host,
 };
 use herdr_client::{ConnectTarget, shell_quote};
 pub(crate) use render::tooltip;
@@ -93,7 +94,7 @@ struct Answer {
     known: serde_json::Value,
 }
 
-fn ask(shell: &mut Shell, source: &Source, known: &serde_json::Value) -> Result<Answer> {
+fn ask(shell: &mut MonitorShell, source: &Source, known: &serde_json::Value) -> Result<Answer> {
     let request = serde_json::json!({ "herdr": source.cli(), "known": known });
     let step = format!(
         "python3 -c {} {}",
@@ -142,12 +143,14 @@ fn spawn(source: Source) -> Option<Worker> {
 }
 
 fn run(source: &Source, stop: &Stop, results: &mpsc::SyncSender<Result<Panes>>) {
-    let mut shell: Option<Shell> = None;
+    let mut shell: Option<MonitorShell> = None;
     let mut known = serde_json::Value::Null;
     loop {
         let opened = match shell.take() {
             Some(shell) => Ok(shell),
-            None => crate::listening_ports::open(&source.host).map_err(failed),
+            None => {
+                crate::listening_ports::open(&source.host, MonitorKind::AgentModels).map_err(failed)
+            }
         };
         let result = opened.and_then(|mut opened| {
             let answer = ask(&mut opened, source, &known);

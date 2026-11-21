@@ -26,7 +26,7 @@ mod tests;
 pub(crate) use access::KeychainGrants;
 pub(crate) use model::{Host, Provider};
 pub(crate) use panel::PANEL_WIDTH;
-pub(crate) use probe::Shell;
+pub(crate) use probe::{Output, Shell};
 pub(crate) use render::Hint;
 pub use settings::UsageConfig;
 

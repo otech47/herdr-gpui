@@ -55,13 +55,38 @@ fn new_window_adds_one_client_of_the_same_target_without_disturbing_the_first(
 }
 
 #[gpui::test]
-fn inactive_windows_stop_background_host_monitors(cx: &mut gpui::TestAppContext) {
-    let (view, cx) = cx.add_window_view(fixture_window);
+fn inactive_windows_keep_background_host_monitors(cx: &mut gpui::TestAppContext) {
+    let (view, cx) = cx.add_window_view(|window, cx| {
+        let mut view = fixture_window(window, cx);
+        let mut remote = crate::endpoint::Endpoint::new(
+            "ssh:box".into(),
+            "Box".into(),
+            herdr_client::ConnectTarget::Ssh {
+                target: "unused".into(),
+                session: "default".into(),
+            },
+            true,
+        );
+        remote.live.status = crate::state::ConnectionStatus::Connected;
+        view.live = remote.live.clone();
+        view.endpoints = vec![remote];
+        view
+    });
     view.update(cx, |view, _| {
-        view.active = true;
-        assert_eq!(view.watched_hosts().len(), 1);
+        let host = crate::usage::Host::Ssh("unused".into());
+        let ports =
+            crate::listening_ports::parse("L 42 127.0.0.1:5173 node\nE 42 w1 /unused/herdr.sock")
+                .unwrap();
+        view.listening_ports.seed(host.clone(), ports);
+        let key = crate::listening_ports::TunnelKey {
+            target: "unused".into(),
+            port: 5173,
+        };
+        assert_eq!(view.tunnels.begin(&key), Some(None));
         view.active = false;
-        assert!(view.watched_hosts().is_empty());
+        view.update_listening_ports();
+        assert!(view.listening_ports.listening(&host, 5173));
+        assert!(view.tunnels.begin(&key).is_none());
     });
 }
 

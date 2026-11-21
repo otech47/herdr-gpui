@@ -13,7 +13,8 @@ mod tests;
 
 use crate::{
     Error, Result,
-    usage::{Host, Shell},
+    monitor_shell::{MonitorKind, MonitorShell},
+    usage::Host,
 };
 pub(crate) use render::{compact, tooltip};
 use sample::{Memory, Os, Sample, Ticks};
@@ -43,7 +44,7 @@ enum Source {
         primed: bool,
     },
     Remote {
-        shell: Shell,
+        shell: MonitorShell,
         os: Os,
         ticks: Option<Ticks>,
     },
@@ -57,7 +58,8 @@ impl Source {
                 primed: false,
             }),
             Host::Ssh(target) => {
-                let mut shell = Shell::connect(target).map_err(remote)?;
+                let mut shell =
+                    MonitorShell::remote(target, MonitorKind::SystemLoad).map_err(remote)?;
                 let uname = shell.run("uname -s", STEP_TIMEOUT).map_err(remote)?;
                 let os = Os::from_uname(&uname.stdout).ok_or_else(|| {
                     Error::SystemLoadUnsupported(uname.stdout.trim().chars().take(32).collect())

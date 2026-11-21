@@ -16,8 +16,9 @@ mod tests;
 use crate::{
     Error, Result,
     listening_ports::Daemon,
+    monitor_shell::{MonitorKind, MonitorShell},
     system_load::Stop,
-    usage::{Host, Shell},
+    usage::Host,
 };
 #[cfg(any(test, feature = "integration-test"))]
 pub(crate) use scan::{Tab, Watched};
@@ -50,15 +51,15 @@ fn runs(agent: &str, name: &str) -> bool {
         || (agent == "cursor" && name == "agent")
 }
 
-fn open(host: &Host) -> Result<Shell> {
+fn open(host: &Host) -> Result<MonitorShell> {
     #[cfg(windows)]
     if *host == Host::Local {
         return Err(Error::MonitoringUnsupported);
     }
-    crate::listening_ports::open(host).map_err(failed)
+    crate::listening_ports::open(host, MonitorKind::Monitoring).map_err(failed)
 }
 
-fn scan(shell: &mut Shell) -> Result<Watchers> {
+fn scan(shell: &mut MonitorShell) -> Result<Watchers> {
     let output = shell.run(scan::COMMAND, STEP_TIMEOUT).map_err(failed)?;
     parse(&output.stdout)
 }
@@ -96,7 +97,7 @@ fn spawn(host: Host) -> Option<Worker> {
 }
 
 fn run(host: &Host, stop: &Stop, results: &mpsc::SyncSender<Result<Watchers>>) {
-    let mut shell: Option<Shell> = None;
+    let mut shell: Option<MonitorShell> = None;
     loop {
         let opened = match shell.take() {
             Some(shell) => Ok(shell),

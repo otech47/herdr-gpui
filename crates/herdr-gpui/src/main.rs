@@ -57,6 +57,7 @@ mod menu;
 mod menus;
 #[cfg(feature = "mockup")]
 mod mockup;
+mod monitor_shell;
 mod monitoring;
 mod motion;
 mod navigation;

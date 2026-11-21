@@ -217,6 +217,8 @@ fn this_machine_answers_with_memory_then_cpu() {
 #[cfg(unix)]
 #[test]
 fn a_remote_shell_is_sampled_with_the_host_command() {
+    use crate::monitor_shell::MonitorShell;
+
     // A local `sh` stands in for SSH, as the usage shell tests do.
     let mut command = std::process::Command::new("/bin/sh");
     command
@@ -226,7 +228,7 @@ fn a_remote_shell_is_sampled_with_the_host_command() {
         .stderr(std::process::Stdio::null());
     let shell = crate::usage::Shell::start(command).unwrap();
     let mut source = Source::Remote {
-        shell,
+        shell: MonitorShell::local(shell),
         os: if cfg!(target_os = "macos") {
             Os::MacOs
         } else {

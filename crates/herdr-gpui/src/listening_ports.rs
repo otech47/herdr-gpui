@@ -16,6 +16,7 @@ mod tests;
 
 use crate::{
     Error, Result,
+    monitor_shell::{MonitorKind, MonitorShell},
     system_load::Stop,
     usage::{Host, Shell},
 };
@@ -29,6 +30,8 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+#[cfg(test)]
+pub(crate) use tunnel::Key as TunnelKey;
 pub(crate) use tunnel::Tunnels;
 
 /// Ports open and close at human pace; `lsof` is not free on a busy machine.
@@ -108,10 +111,10 @@ fn session_name(api: &Path) -> Option<&str> {
 }
 
 /// The shell a host is scanned through, here and by the process scanners.
-pub(crate) fn open(host: &Host) -> Result<Shell> {
+pub(crate) fn open(host: &Host, kind: MonitorKind) -> Result<MonitorShell> {
     match host {
-        Host::Local => local_shell(),
-        Host::Ssh(target) => Shell::connect(target),
+        Host::Local => local_shell().map(MonitorShell::local),
+        Host::Ssh(target) => MonitorShell::remote(target, kind),
     }
 }
 
@@ -154,7 +157,7 @@ struct Scan {
     origin: Origin,
 }
 
-fn scan(shell: &mut Shell) -> Result<Ports> {
+fn scan(shell: &mut MonitorShell) -> Result<Ports> {
     let output = shell.run(scan::COMMAND, STEP_TIMEOUT).map_err(failed)?;
     parse(&output.stdout)
 }
@@ -193,11 +196,11 @@ fn spawn(host: Host) -> Option<Worker> {
 
 fn run(host: &Host, stop: &Stop, results: &mpsc::SyncSender<Result<Scan>>) {
     let origin = origin(host);
-    let mut shell: Option<Shell> = None;
+    let mut shell: Option<MonitorShell> = None;
     loop {
         let opened = match shell.take() {
             Some(shell) => Ok(shell),
-            None => open(host).map_err(failed),
+            None => open(host, MonitorKind::ListeningPorts).map_err(failed),
         };
         let result = opened.and_then(|mut opened| {
             let ports = scan(&mut opened);
