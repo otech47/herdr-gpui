@@ -143,7 +143,7 @@ disable remain available through `herdr machine`.
 
 ### Agent conversations
 
-Choose **sessions** beside **new tab**, or **open agent session** from the sidebar menu. Search by task, project, agent, source or device. Jarvis and Roboz tasks appear first, followed by recent Claude Code, Codex, Kimi Code and Cursor conversations. The picker keeps its search and cached results while refreshing enabled devices.
+Choose **sessions** beside **new tab**, or **open agent session** from the sidebar menu. Search by task, project, agent, source or device. Tasks from the Jarvis mobile app and the Roboz Slack bot appear first, followed by recent Claude Code, Codex, Kimi Code and Cursor conversations. The picker keeps its search and cached results while refreshing enabled devices.
 
 Select an available conversation to open its original agent, session and working directory. Running sessions open as read-only tabs in the Tabs list. You can switch away, reopen them and keep working elsewhere. Typing, paste and interrupt shortcuts cannot reach the worker, including an agent already running in another Herdr tab.
 
