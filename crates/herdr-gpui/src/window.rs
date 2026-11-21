@@ -579,9 +579,7 @@ impl HerdrWindow {
         changed
     }
 
-    /// The machines background monitors watch: this one always, a remote
-    /// host while it is connected, so a dropped host is not dialled every
-    /// few seconds.
+    /// Active windows monitor this machine and connected remote hosts; inactive ones stop their workers.
     fn watched_hosts(&self) -> Vec<crate::usage::Host> {
         self.watched_targets()
             .map(crate::usage::Host::from)
@@ -598,7 +596,8 @@ impl HerdrWindow {
                 } else {
                     &endpoint.live
                 };
-                endpoint.enabled
+                self.active
+                    && endpoint.enabled
                     && (live.status.is_connected()
                         || !matches!(endpoint.connection.target, ConnectTarget::Ssh { .. }))
             })

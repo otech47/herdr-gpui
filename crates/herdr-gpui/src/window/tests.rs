@@ -55,6 +55,17 @@ fn new_window_adds_one_client_of_the_same_target_without_disturbing_the_first(
 }
 
 #[gpui::test]
+fn inactive_windows_stop_background_host_monitors(cx: &mut gpui::TestAppContext) {
+    let (view, cx) = cx.add_window_view(fixture_window);
+    view.update(cx, |view, _| {
+        view.active = true;
+        assert_eq!(view.watched_hosts().len(), 1);
+        view.active = false;
+        assert!(view.watched_hosts().is_empty());
+    });
+}
+
+#[gpui::test]
 fn window_title_follows_the_focused_space_of_that_window(cx: &mut gpui::TestAppContext) {
     let (view, cx) = cx.add_window_view(fixture_window);
     cx.update(|window, cx| {
