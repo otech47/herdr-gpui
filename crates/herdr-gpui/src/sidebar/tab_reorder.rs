@@ -82,7 +82,14 @@ impl HerdrWindow {
     /// device by device. Under the attention sort they are the rows of its
     /// rank, of its device alone where the view groups by device.
     pub(super) fn drag_rows(&self, listed: &[ListedTab<'_>], position: usize) -> Range<usize> {
-        if self.sidebar_tabs_sort == TabsSort::Attention {
+        let (_, members) = self.tabs_and_switches();
+        let grouped =
+            |row: &ListedTab<'_>| members.contains_key(&(row.endpoint, row.tab.tab_id.as_str()));
+        if grouped(&listed[position]) {
+            return position..position + 1;
+        }
+        let free = run(&listed.iter().map(grouped).collect::<Vec<_>>(), position);
+        let sortable = if self.sidebar_tabs_sort == TabsSort::Attention {
             let grouped = self.sidebar_tabs_view == TabsView::ByDevice;
             let groups: Vec<(Option<usize>, u8)> = listed
                 .iter()
@@ -92,7 +99,8 @@ impl HerdrWindow {
         } else {
             let endpoints: Vec<usize> = listed.iter().map(|row| row.endpoint).collect();
             run(&endpoints, position)
-        }
+        };
+        free.start.max(sortable.start)..free.end.min(sortable.end)
     }
 
     /// Arms a reorder for a left press on the row of `tab` on `endpoint`.
@@ -233,11 +241,19 @@ impl HerdrWindow {
             return None;
         }
         let rows = self.drag_rows(&listed, dragged);
+        if rows.len() < 2 || !(rows.start..=rows.end).contains(&slot) {
+            return None;
+        }
         if self.sidebar_tabs_sort != TabsSort::Attention {
+            let insert = if slot == rows.end {
+                daemon_index(&listed[slot - 1])? + 1
+            } else {
+                daemon_index(&listed[slot])?
+            };
             return Some(TabMove {
                 endpoint: row.endpoint,
                 tab: row.tab.tab_id.clone(),
-                insert: Some(slot.saturating_sub(rows.start)),
+                insert: Some(insert),
                 hold: Hold::Daemon(keys[rows].to_vec()),
             });
         }

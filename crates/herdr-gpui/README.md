@@ -153,6 +153,10 @@ Discovery requires Python 3.9 or later on each POSIX host. Continuation also req
 
 The helper tests run with `just test-agent-sessions` on macOS or Linux. The isolated daemon continuation test requires `HERDR_TEST_BINARY` and `HERDR_TEST_PYTHON`, and runs with `cargo test -p herdr-gpui --features integration-test --test live_gui saved_session_opens_once -- --ignored`.
 
+### Switching agents
+
+With agent-switch installed, type `switch claude`, `switch kimi`, or `switch codex` in an agent session. The sidebar groups the open sessions for the task under one title. Select a provider to read its output. The destination shows **Preparing** while it reads the conversation and **Ready** after preparation succeeds. Close any previous tab when you finish reviewing it. The last tab returns to its usual title.
+
 ### Devices and daemon sessions
 
 The fixed bottom-left device picker offers **All Devices**, **Local**, saved SSH

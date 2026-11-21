@@ -18,6 +18,7 @@ use std::{ops::Range, time::Instant};
 
 pub(super) mod attention;
 mod elsewhere;
+pub(in crate::sidebar) mod switches;
 mod views;
 pub(super) use herdr_board::tab_title;
 pub(crate) use views::ListedTab;
@@ -45,7 +46,7 @@ impl HerdrWindow {
         content_x: f32,
         cx: &mut Context<Self>,
     ) -> TabRows {
-        let listed = self.listed_tabs();
+        let (listed, members) = self.tabs_and_switches();
         let names: Vec<String> = listed
             .iter()
             .map(|row| tab_title(row.tab, row.snapshot))
@@ -115,7 +116,7 @@ impl HerdrWindow {
         let mut sliding = false;
         let mut drop = Vec::new();
         let trailing = Trailing::new(row_cx);
-        let tab_cx = trailing.context(row_cx);
+        let base_cx = trailing.context(row_cx);
         elements.reserve(listed.len());
         let mut group = None;
         for (position, (row, name)) in listed.iter().zip(&names).enumerate() {
@@ -175,9 +176,43 @@ impl HerdrWindow {
                 &session,
                 cx,
             );
-            let mut lines = tab_lines(name, position + 1, device);
+            let member = members
+                .get(&(row.endpoint, row.tab.tab_id.as_str()))
+                .copied();
+            let indent = if member.is_some() { content_x + 1. } else { 0. };
+            let tab_cx = RowContext {
+                width: base_cx.width - indent,
+                ..base_cx
+            };
+            let stacked =
+                member.is_some() && (row_cx.width < 270. || pages > 0 || device.is_some());
+            let mut lines = tab_lines(
+                member.map_or(name.as_str(), |m| m.provider),
+                position + 1,
+                if stacked { None } else { device },
+            );
+            if let Some(member) = member {
+                if stacked {
+                    let mut detail = vec![ResolvedToken {
+                        kind: TokenKind::Text(member.state.into(), TextRole::Muted),
+                        style: TokenStyle::default(),
+                    }];
+                    if let Some(device) = device {
+                        detail.push(ResolvedToken {
+                            kind: TokenKind::Tag(device.to_owned().into(), TextRole::Muted),
+                            style: TokenStyle::default(),
+                        });
+                    }
+                    lines.push(detail);
+                } else {
+                    lines[0].push(ResolvedToken {
+                        kind: TokenKind::Tag(member.state.into(), TextRole::Secondary),
+                        style: TokenStyle::default(),
+                    });
+                }
+            }
             if pages > 0
-                && let Some(line) = lines.first_mut()
+                && let Some(line) = lines.last_mut()
             {
                 line.push(ResolvedToken {
                     kind: TokenKind::Tag(
@@ -254,6 +289,35 @@ impl HerdrWindow {
             .when(carried, |row| row.cursor_grabbing())
             .when(shift != px(0.), |row| row.top(shift))
             .into_any_element();
+            let element = if let Some(member) = member {
+                div()
+                    .flex_none()
+                    .flex()
+                    .flex_col()
+                    .min_w_0()
+                    .when(member.first, |section| {
+                        section.child(
+                            div()
+                                .px(px(content_x))
+                                .pt(px(4.))
+                                .text_ellipsis()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_color(rgb(row_cx.theme.foreground))
+                                .child(label_text(name)),
+                        )
+                    })
+                    .child(
+                        div()
+                            .ml(px(content_x))
+                            .border_l_1()
+                            .border_color(rgb(row_cx.theme.muted))
+                            .child(element),
+                    )
+                    .into_any_element()
+            } else {
+                element
+            };
             if carried {
                 // Painted last so it floats over the rows it passes, while
                 // its layout slot keeps the others' positions stable.

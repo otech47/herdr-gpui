@@ -79,6 +79,32 @@ fn populate(this: &mut HerdrWindow, view: TabsView) -> Result<()> {
             ("worktree cleanup", Some("kimi"), "done"),
         ],
     )?;
+    if std::env::var_os("HERDR_TEST_SWITCH").is_some() {
+        if std::env::var_os("HERDR_TEST_NARROW").is_some() {
+            this.sidebar_width = Some(218.);
+        }
+        for tab in &mut local.tabs {
+            tab.tab_id = format!("w0:{}", tab.tab_id);
+        }
+        for agent in &mut local.agents {
+            agent.tab_id = format!("w0:{}", agent.tab_id);
+        }
+        local.focused_tab_id = Some("w0:t2".into());
+        for tab in &mut local.tabs {
+            tab.focused = tab.tab_id == "w0:t2";
+        }
+        local.workspaces[0].tokens = [
+            ("switch_t0", "claude previous"),
+            ("switch_t2", "codex ready"),
+        ]
+        .map(|(key, value)| {
+            (
+                key.into(),
+                format!("3a4f8957-03e1-4514-8351-f9061d484eb4 {value}"),
+            )
+        })
+        .into();
+    }
     this.live.status = ConnectionStatus::Connected;
     this.live.snapshot = Some(Arc::new(local));
     this.endpoints[0].live = this.live.clone();

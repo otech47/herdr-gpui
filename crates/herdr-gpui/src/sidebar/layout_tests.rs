@@ -69,6 +69,8 @@ mod tabs_options;
 #[cfg(test)]
 mod tabs_sort;
 #[cfg(test)]
+mod tabs_switch;
+#[cfg(test)]
 mod tabs_views;
 #[cfg(test)]
 mod tabs_views_reorder;

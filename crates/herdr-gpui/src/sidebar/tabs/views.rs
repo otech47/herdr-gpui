@@ -28,6 +28,12 @@ impl HerdrWindow {
     /// order breaking ties, and keeps each device's rows together when the
     /// view groups them.
     pub(crate) fn listed_tabs(&self) -> Vec<ListedTab<'_>> {
+        self.tabs_and_switches().0
+    }
+
+    pub(in crate::sidebar) fn tabs_and_switches(
+        &self,
+    ) -> (Vec<ListedTab<'_>>, super::switches::Members<'_>) {
         let sources = self.sources();
         let across = self.config.show_sidebar_tabs && self.sidebar_tabs_view != TabsView::Device;
         let mut listed = herdr_board::listed_tabs(&sources, self.selected_endpoint, across);
@@ -47,7 +53,8 @@ impl HerdrWindow {
             let order = self.device_order();
             listed.sort_by_key(|row| order.iter().position(|&index| index == row.endpoint));
         }
-        listed
+        let members = super::switches::group(&mut listed);
+        (listed, members)
     }
 
     /// Every device as the tab lists see it, in the window's endpoint order.
@@ -80,7 +87,8 @@ impl HerdrWindow {
     pub(crate) fn numbers_listed_tabs(&self) -> bool {
         self.config.show_sidebar_tabs
             && (self.sidebar_tabs_view != TabsView::Device
-                || self.sidebar_tabs_sort == TabsSort::Attention)
+                || self.sidebar_tabs_sort == TabsSort::Attention
+                || !self.tabs_and_switches().1.is_empty())
     }
 
     /// The device and tab that cmd-`number` reaches while the list numbers
