@@ -11,7 +11,7 @@ pub(in crate::sidebar) struct Member {
 type RowKey<'a> = (usize, &'a str);
 pub(in crate::sidebar) type Members<'a> = HashMap<RowKey<'a>, Member>;
 
-fn membership(row: &ListedTab<'_>) -> Option<(uuid::Uuid, u64, Member)> {
+fn membership(row: &ListedTab<'_>) -> Option<(uuid::Uuid, usize, Member)> {
     let (workspace, tab) = row.tab.tab_id.split_once(':')?;
     if workspace != row.tab.workspace_id {
         return None;
@@ -41,10 +41,9 @@ fn membership(row: &ListedTab<'_>) -> Option<(uuid::Uuid, u64, Member)> {
         "failed" => "Switch failed",
         _ => return None,
     };
-    let ordinal = tab.strip_prefix('t')?.parse().ok()?;
     parts.next().is_none().then_some((
         task,
-        ordinal,
+        row.tab.number,
         Member {
             provider,
             state,
