@@ -143,7 +143,7 @@ disable remain available through `herdr machine`.
 
 ### Agent conversations
 
-Choose **sessions** beside **new tab**, or **open agent session** from the sidebar menu. Search by task, project, agent, source or device. Tasks from the Jarvis mobile app and the Roboz Slack bot appear first, followed by recent Claude Code, Codex, Kimi Code and Cursor conversations. The picker keeps its search and cached results while refreshing enabled devices.
+Choose **sessions** beside **new tab**, or **open agent session** from the sidebar menu. Search by task, project, agent, source or device. Tasks appear first when they came from Jarvis, a mobile app that sends tasks to agents, or from Roboz, a Slack bot that runs them. They are followed by recent Claude Code, Codex, Kimi Code and Cursor conversations. The picker keeps its search and cached results while refreshing enabled devices.
 
 Select an available conversation to open its original agent, session and working directory. Running sessions open as read-only tabs in the Tabs list. You can switch away, reopen them and keep working elsewhere. Typing, paste and interrupt shortcuts cannot reach the worker, including an agent already running in another Herdr tab.
 
@@ -155,7 +155,7 @@ The helper tests run with `just test-agent-sessions` on macOS or Linux. The isol
 
 ### Switching agents
 
-With agent-switch installed, type `switch claude`, `switch kimi`, or `switch codex` in an agent session. The sidebar groups the open sessions for the task under one title. Select a provider to read its output. The destination shows **Preparing** while it reads the conversation and **Ready** after preparation succeeds. Close any previous tab when you finish reviewing it. The last tab returns to its usual title.
+With agent-switch installed, a command line tool that hands a conversation from one agent CLI to another, type `switch claude`, `switch kimi`, or `switch codex` in an agent session. The sidebar groups the open sessions for the task under one title. Select a provider to read its output. The destination shows **Preparing** while it reads the conversation and **Ready** after preparation succeeds. Close any previous tab when you finish reviewing it. The last tab returns to its usual title.
 
 ### Devices and daemon sessions
 
