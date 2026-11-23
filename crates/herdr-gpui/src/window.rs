@@ -517,6 +517,7 @@ impl HerdrWindow {
         if self.agent_models.poll(models) {
             cx.notify();
         }
+        self.view_session_reports(cx);
         if self.live.missing_installation && !self.install_warning_shown {
             self.install_warning_shown = true;
             self.show_install_modal(window, cx);

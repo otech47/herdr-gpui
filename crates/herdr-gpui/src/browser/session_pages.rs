@@ -191,21 +191,14 @@ impl HerdrWindow {
         let background = self.theme.surface;
         let primary = self.theme.primary();
         let mut row = div()
-            .id(SharedString::from(slot.selector("session-pages")))
-            .debug_selector(move || slot.selector("session-pages"))
+            .id(SharedString::from(slot.selector("session-page-tabs")))
             .flex()
-            .flex_none()
+            .flex_1()
             .items_center()
-            .h(px(34.))
-            .w_full()
+            .h_full()
             .min_w_0()
             .overflow_x_scroll()
             .track_scroll(&scroll)
-            .bg(rgb(background))
-            .border_b_1()
-            .border_color(rgb(active))
-            .text_size(px(self.config.ui.size))
-            .text_color(rgb(foreground))
             .child(
                 div()
                     .id(SharedString::from(slot.selector("session-terminal")))
@@ -278,6 +271,23 @@ impl HerdrWindow {
                     })),
             );
         }
-        Some(row.into_any_element())
+        Some(
+            div()
+                .debug_selector(move || slot.selector("session-pages"))
+                .flex()
+                .flex_none()
+                .items_center()
+                .h(px(34.))
+                .w_full()
+                .min_w_0()
+                .bg(rgb(background))
+                .border_b_1()
+                .border_color(rgb(active))
+                .text_size(px(self.config.ui.size))
+                .text_color(rgb(foreground))
+                .child(row)
+                .children(self.render_reports_button(slot, &session, cx))
+                .into_any_element(),
+        )
     }
 }

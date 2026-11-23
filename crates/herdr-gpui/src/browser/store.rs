@@ -101,7 +101,7 @@ impl Global for Store {}
 
 /// Page titles are untrusted: one line, bounded, and free of control and
 /// bidirectional formatting characters that could disguise a tab.
-fn clean_title(title: &str) -> String {
+pub(super) fn clean_title(title: &str) -> String {
     crate::notifications::safe_text(title, MAX_TITLE_CHARS * 4)
         .chars()
         .take(MAX_TITLE_CHARS)

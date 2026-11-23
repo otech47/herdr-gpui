@@ -23,8 +23,10 @@ mod native;
 mod preview;
 mod reports;
 mod session_pages;
+mod session_reports;
 
 pub(crate) use reports::{PageSource, report_urls};
+pub(crate) use session_reports::{ReportsMenu, WIDTH as REPORTS_WIDTH};
 #[cfg(target_os = "macos")]
 mod snapshot;
 mod store;

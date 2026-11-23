@@ -12,7 +12,7 @@ Inside a Herdr pane (`HERDR_ENV=1`), "open a browser tab" means a tab in Herdr
 GPUI, beside the user's terminals: use the commands below, not `open`, a
 system browser, or another tool's browser skill.
 
-Each session keeps its terminal and report pages together. Switching sessions restores the last selected page. The user can annotate a page and send notes back to its source pane. Use pages for:
+Each session keeps its terminal and report pages together. Switching sessions restores the last selected page. The user can annotate a page and send notes back to its source pane. A report link you write in a reply or a question is listed under the Reports button of your session's strip, open or not. Use pages for:
 
 - a page, mockup, or report you generated as an HTML file, for review
 - a local dev server or preview you just started (`http://localhost:3000`)

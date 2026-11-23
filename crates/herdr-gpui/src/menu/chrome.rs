@@ -268,6 +268,7 @@ impl HerdrWindow {
                 | Page::Tab
                 | Page::RenameTab
                 | Page::Group
+                | Page::Reports
                 | Page::Pane
                 | Page::RenamePane
                 | Page::PaneProcesses
@@ -379,6 +380,7 @@ impl HerdrWindow {
                         | Page::TabsOptions
                         | Page::RenameTab
                         | Page::Group
+                        | Page::Reports
                         | Page::Pane
                         | Page::RenamePane
                         | Page::PaneProcesses
@@ -401,6 +403,8 @@ impl HerdrWindow {
                                 560.
                             } else if page == Page::Group {
                                 240.
+                            } else if page == Page::Reports {
+                                crate::browser::REPORTS_WIDTH
                             } else {
                                 360.
                             },
@@ -597,6 +601,8 @@ impl HerdrWindow {
             panel = panel.child(self.render_tab_menu(cx));
         } else if page == Page::Group {
             panel = panel.child(self.render_group_menu(cx));
+        } else if page == Page::Reports {
+            panel = panel.child(self.render_reports_menu(cx));
         } else if matches!(
             page,
             Page::Pane | Page::RenamePane | Page::PaneProcesses | Page::KillProcesses
@@ -754,9 +760,11 @@ impl HerdrWindow {
                     } else {
                         self.menu.anchor
                     })
-                    // The "…" button sits at a strip's right end, so its menu
-                    // hangs leftward from it, as an editor's does.
-                    .when(page == Page::Group, |menu| menu.anchor(Anchor::TopRight))
+                    // The "…" and "Reports" buttons sit at a strip's right end,
+                    // so their menus hang leftward, as an editor's does.
+                    .when(matches!(page, Page::Group | Page::Reports), |menu| {
+                        menu.anchor(Anchor::TopRight)
+                    })
                     .snap_to_window_with_margin(Edges::all(px(12.)))
                     .child(panel)
                     .into_any_element()

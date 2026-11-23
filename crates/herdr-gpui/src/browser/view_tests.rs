@@ -38,6 +38,7 @@ mod embedded;
 /// created, and a split alone needs no page at all.
 mod groups;
 mod session_pages;
+mod session_reports;
 
 /// Links that leave a page, which only builds that show pages report.
 #[cfg(any(target_os = "macos", windows))]

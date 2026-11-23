@@ -31,8 +31,11 @@ fn tabs_with_models<'a>(
         );
         let snapshot = Arc::make_mut(view.live.snapshot.as_mut().unwrap());
         snapshot.focused_workspace_id = Some("w0".into());
-        view.agent_models
-            .seed(Source::of(&ConnectTarget::Local).unwrap(), panes);
+        view.agent_models.seed(
+            Source::of(&ConnectTarget::Local).unwrap(),
+            panes,
+            HashMap::new(),
+        );
         view
     });
     cx.simulate_resize(size(px(800.), px(600.)));

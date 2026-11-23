@@ -144,6 +144,10 @@ impl HerdrWindow {
             self.group_menu_key(event, window, cx);
             return;
         }
+        if self.menu.page == Some(Page::Reports) {
+            self.reports_menu_key(event, window, cx);
+            return;
+        }
         if matches!(
             self.menu.page,
             Some(Page::Pane | Page::RenamePane | Page::PaneProcesses | Page::KillProcesses)

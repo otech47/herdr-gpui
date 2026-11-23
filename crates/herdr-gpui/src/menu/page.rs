@@ -36,6 +36,8 @@ pub(crate) enum Page {
     RenameTab,
     /// A group's "…" menu: closing tabs and splitting.
     Group,
+    /// The pages a session's agent linked, from its strip's button.
+    Reports,
     Pane,
     RenamePane,
     /// The processes under the pane menu's pane.

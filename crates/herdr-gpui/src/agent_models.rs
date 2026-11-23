@@ -1,6 +1,8 @@
 //! The model and reasoning effort each agent runs on, for the sidebar's hover
-//! cards. One worker thread per daemon runs `scripts/agent_models.py` on the
-//! agents' host through a long-lived `sh`, as the port scanners do.
+//! cards, and the report pages the agents on screen linked, for their
+//! sessions' report lists. One worker thread per daemon runs
+//! `scripts/agent_models.py` on the agents' host through a long-lived `sh`,
+//! as the port scanners do.
 
 mod render;
 
@@ -18,7 +20,7 @@ pub(crate) use render::tooltip;
 use serde::Deserialize;
 use std::{
     collections::HashMap,
-    sync::{Arc, mpsc},
+    sync::{Arc, Mutex, PoisonError, mpsc},
     thread,
     time::{Duration, Instant},
 };
@@ -28,6 +30,11 @@ const HELPER: &str = include_str!("../../../scripts/agent_models.py");
 /// the helper one `stat`.
 const INTERVAL: Duration = Duration::from_secs(10);
 const RETRY: Duration = Duration::from_secs(30);
+/// How soon a worker notices that other agents are on screen.
+const GLANCE: Duration = Duration::from_millis(500);
+/// Panes whose reports stay known after they leave the screen, so going
+/// back to one shows its list at once.
+const REPORT_PANES: usize = 64;
 const STEP_TIMEOUT: Duration = Duration::from_secs(20);
 pub(crate) const SHOW_DELAY: Duration = Duration::ZERO;
 /// Daemons are few; an unbounded endpoint list still cannot start more workers.
@@ -85,17 +92,47 @@ pub(crate) struct Model {
     pub(crate) effort: String,
 }
 
+/// A page an agent linked in what it wrote to its user.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub(crate) struct Report {
+    pub(crate) url: String,
+    /// The page's own title; empty when its file is not on the agent's host.
+    #[serde(default)]
+    pub(crate) title: String,
+    /// When the agent last linked it, in Unix seconds; 0 when unknown.
+    #[serde(default)]
+    pub(crate) at: u64,
+}
+
 type Panes = HashMap<String, Model>;
+type Reports = HashMap<String, Vec<Report>>;
+/// The panes on screen, whose agents' reports a worker reads.
+type Viewed = Arc<Mutex<Vec<String>>>;
 
 #[derive(Deserialize)]
 struct Answer {
     panes: Panes,
+    /// Newest first, for the panes asked about that hold an agent.
+    #[serde(default)]
+    reports: Reports,
     /// What the helper learned about each transcript, handed back next time.
     known: serde_json::Value,
 }
 
-fn ask(shell: &mut MonitorShell, source: &Source, known: &serde_json::Value) -> Result<Answer> {
-    let request = serde_json::json!({ "herdr": source.cli(), "known": known });
+/// One answer, with the panes whose reports it was asked for.
+struct Pass {
+    panes: Panes,
+    asked: Vec<String>,
+    reports: Reports,
+}
+
+fn ask(
+    shell: &mut MonitorShell,
+    source: &Source,
+    known: &serde_json::Value,
+    reports: &[String],
+) -> Result<Answer> {
+    let request = serde_json::json!({ "herdr": source.cli(), "known": known, "reports": reports });
     let step = format!(
         "python3 -c {} {}",
         shell_quote(HELPER),
@@ -116,7 +153,7 @@ fn failed(error: Error) -> Error {
 
 struct Worker {
     stop: Arc<Stop>,
-    results: mpsc::Receiver<Result<Panes>>,
+    results: mpsc::Receiver<Result<Pass>>,
 }
 
 impl Drop for Worker {
@@ -126,13 +163,13 @@ impl Drop for Worker {
     }
 }
 
-fn spawn(source: Source) -> Option<Worker> {
+fn spawn(source: Source, viewed: Viewed) -> Option<Worker> {
     let stop = Arc::new(Stop::default());
     let (sender, results) = mpsc::sync_channel(2);
     let shared = stop.clone();
     let spawned = thread::Builder::new()
         .name("herdr-agent-models".into())
-        .spawn(move || run(&source, &shared, &sender));
+        .spawn(move || run(&source, &shared, &viewed, &sender));
     match spawned {
         Ok(_) => Some(Worker { stop, results }),
         Err(error) => {
@@ -142,10 +179,22 @@ fn spawn(source: Source) -> Option<Worker> {
     }
 }
 
-fn run(source: &Source, stop: &Stop, results: &mpsc::SyncSender<Result<Panes>>) {
+fn run(
+    source: &Source,
+    stop: &Stop,
+    viewed: &Mutex<Vec<String>>,
+    results: &mpsc::SyncSender<Result<Pass>>,
+) {
+    let on_screen = || {
+        viewed
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    };
     let mut shell: Option<MonitorShell> = None;
     let mut known = serde_json::Value::Null;
     loop {
+        let asked = on_screen();
         let opened = match shell.take() {
             Some(shell) => Ok(shell),
             None => {
@@ -153,7 +202,7 @@ fn run(source: &Source, stop: &Stop, results: &mpsc::SyncSender<Result<Panes>>) 
             }
         };
         let result = opened.and_then(|mut opened| {
-            let answer = ask(&mut opened, source, &known);
+            let answer = ask(&mut opened, source, &known, &asked);
             // A failed step leaves the shell unusable; a refusal does not.
             if !matches!(answer, Err(Error::AgentModels(_))) {
                 shell = Some(opened);
@@ -162,7 +211,11 @@ fn run(source: &Source, stop: &Stop, results: &mpsc::SyncSender<Result<Panes>>) 
         });
         let result = result.map(|answer| {
             known = answer.known;
-            answer.panes
+            Pass {
+                panes: answer.panes,
+                asked: asked.clone(),
+                reports: answer.reports,
+            }
         });
         let due = Instant::now() + if result.is_ok() { INTERVAL } else { RETRY };
         match results.try_send(result) {
@@ -170,8 +223,15 @@ fn run(source: &Source, stop: &Stop, results: &mpsc::SyncSender<Result<Panes>>) 
             Ok(()) | Err(mpsc::TrySendError::Full(_)) => {}
             Err(mpsc::TrySendError::Disconnected(_)) => return,
         }
-        if !stop.wait(due) {
-            return;
+        // A tab that just came on screen is read without waiting out the interval.
+        loop {
+            let now = Instant::now();
+            if !stop.wait(due.min(now + GLANCE)) {
+                return;
+            }
+            if Instant::now() >= due || on_screen().iter().any(|pane| !asked.contains(pane)) {
+                break;
+            }
         }
     }
 }
@@ -179,6 +239,7 @@ fn run(source: &Source, stop: &Stop, results: &mpsc::SyncSender<Result<Panes>>) 
 #[derive(Default)]
 struct Reading {
     panes: Panes,
+    reports: Reports,
     /// Why the latest pass failed, as last logged; the last good answer
     /// stays shown.
     error: Option<String>,
@@ -186,15 +247,26 @@ struct Reading {
 
 impl Reading {
     /// Whether anything shown changed.
-    fn apply(&mut self, result: Result<Panes>) -> bool {
+    fn apply(&mut self, result: Result<Pass>) -> bool {
         match result {
-            Ok(panes) => {
+            Ok(mut pass) => {
                 self.error = None;
-                if panes == self.panes {
-                    return false;
+                let mut changed = pass.panes != self.panes;
+                self.panes = pass.panes;
+                for pane in &pass.asked {
+                    let found = pass.reports.remove(pane).filter(|found| !found.is_empty());
+                    if self.reports.get(pane) != found.as_ref() {
+                        changed = true;
+                        match found {
+                            Some(found) => self.reports.insert(pane.clone(), found),
+                            None => self.reports.remove(pane),
+                        };
+                    }
                 }
-                self.panes = panes;
-                true
+                if self.reports.len() > REPORT_PANES {
+                    self.reports.retain(|pane, _| pass.asked.contains(pane));
+                }
+                changed
             }
             Err(error) => {
                 let mut text = error.to_string();
@@ -218,6 +290,7 @@ impl Reading {
 struct Monitor {
     /// None once its thread could not start or has ended.
     worker: Option<Worker>,
+    viewed: Viewed,
     reading: Reading,
 }
 
@@ -232,6 +305,34 @@ impl AgentModels {
     pub fn get(&self, target: &ConnectTarget, pane: &str) -> Option<&Model> {
         let source = Source::of(target)?;
         self.monitors.get(&source)?.reading.panes.get(pane)
+    }
+
+    /// The pages the agent in `pane` of the daemon behind `target` linked,
+    /// newest first; empty until the pane has been on screen.
+    pub fn reports(&self, target: &ConnectTarget, pane: &str) -> &[Report] {
+        Source::of(target)
+            .and_then(|source| self.monitors.get(&source)?.reading.reports.get(pane))
+            .map_or(&[], Vec::as_slice)
+    }
+
+    /// Has the reports of the agents in `panes` of the daemon behind
+    /// `target` read, and those of no other daemon.
+    pub fn view(&mut self, target: &ConnectTarget, panes: &[String]) {
+        let viewed = Source::of(target);
+        for (source, monitor) in &self.monitors {
+            let panes = if viewed.as_ref() == Some(source) {
+                panes
+            } else {
+                &[]
+            };
+            let mut current = monitor
+                .viewed
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            if current.as_slice() != panes {
+                *current = panes.to_vec();
+            }
+        }
     }
 
     /// Reads exactly `sources` (at most [`SOURCE_LIMIT`]): starts workers for
@@ -250,16 +351,19 @@ impl AgentModels {
         let mut changed = false;
         self.monitors.retain(|source, monitor| {
             let keep = wanted.contains(source);
-            changed |= !keep && !monitor.reading.panes.is_empty();
+            let shown = !monitor.reading.panes.is_empty() || !monitor.reading.reports.is_empty();
+            changed |= shown && !keep;
             keep
         });
         for source in wanted {
-            self.monitors
-                .entry(source)
-                .or_insert_with_key(|source| Monitor {
-                    worker: spawn(source.clone()),
+            self.monitors.entry(source).or_insert_with_key(|source| {
+                let viewed = Viewed::default();
+                Monitor {
+                    worker: spawn(source.clone(), viewed.clone()),
+                    viewed,
                     reading: Reading::default(),
-                });
+                }
+            });
         }
         for monitor in self.monitors.values_mut() {
             while let Some(worker) = &monitor.worker {
@@ -274,14 +378,27 @@ impl AgentModels {
     }
 
     #[cfg(test)]
-    pub(crate) fn seed(&mut self, source: Source, panes: Panes) {
-        let reading = Reading { panes, error: None };
+    pub(crate) fn seed(&mut self, source: Source, panes: Panes, reports: Reports) {
+        let reading = Reading {
+            panes,
+            reports,
+            error: None,
+        };
         self.monitors.insert(
             source,
             Monitor {
                 worker: None,
+                viewed: Viewed::default(),
                 reading,
             },
         );
+    }
+
+    /// The panes whose reports are read on the daemon behind `target`.
+    #[cfg(test)]
+    pub(crate) fn viewed(&self, target: &ConnectTarget) -> Option<Vec<String>> {
+        let monitor = self.monitors.get(&Source::of(target)?)?;
+        let viewed = monitor.viewed.lock().ok()?;
+        Some(viewed.clone())
     }
 }
