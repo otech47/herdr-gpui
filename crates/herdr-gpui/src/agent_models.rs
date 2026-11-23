@@ -1,6 +1,5 @@
-//! The model and reasoning effort each agent runs on, for the sidebar's hover
-//! cards, and the report pages the agents on screen linked, for their
-//! sessions' report lists. One worker thread per daemon runs
+//! The model and reasoning effort each agent runs on, and the report pages
+//! the agents on screen linked. One worker thread per daemon runs
 //! `scripts/agent_models.py` on the agents' host through a long-lived `sh`,
 //! as the port scanners do.
 

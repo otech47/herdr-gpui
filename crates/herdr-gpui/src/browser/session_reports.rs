@@ -1,6 +1,4 @@
-//! The pages a session's agent linked, behind the "Reports" button at the
-//! end of the session's strip. The list holds every one, open as a page of
-//! the session or not, and picking one shows it as such a page.
+//! The pages a session's agent linked, behind the Reports button of its strip.
 use super::{GroupId, Location, PageSource, Pick, Scope, Slot, Store, WebUrl, view::store};
 use crate::{HerdrWindow, menu::Page};
 use gpui::{prelude::*, *};
