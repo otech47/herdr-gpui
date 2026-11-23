@@ -2,7 +2,7 @@
 //! connected device. Every window lists them above its own tabs while they
 //! wait, and a press brings forward the window that shows their space.
 
-use super::{ListedTab, tab_lines, tab_title, views::workspace_label_by_id};
+use super::{ListedTab, tab_line, tab_title, views::workspace_label_by_id};
 use crate::{
     HerdrWindow,
     sidebar::{
@@ -82,7 +82,7 @@ impl HerdrWindow {
                         status: Mark::Status(AgentStatus::Blocked),
                         place: None,
                         status_text: None,
-                        lines: tab_lines(&name, "", Some(&place)),
+                        lines: vec![tab_line(&name, "", Some(&place))],
                         icon_line: Some(0),
                     }),
                     row_cx,

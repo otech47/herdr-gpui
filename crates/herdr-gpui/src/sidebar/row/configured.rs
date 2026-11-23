@@ -85,6 +85,34 @@ fn fixed_glyphs(kind: &TokenKind, glyph: f32, status_width: f32) -> usize {
     }
 }
 
+/// Checks the text space after the status and provider icons on a tab's first line.
+pub(in crate::sidebar) fn first_agent_line_fits(
+    line: &[ResolvedToken],
+    cx: &RowContext<'_>,
+) -> bool {
+    let glyph = glyph_width(cx.font);
+    let status = cx.indicators.width(cx.font);
+    let tokens = line_tokens(0, line);
+    let text: usize = tokens
+        .iter()
+        .map(|token| {
+            token.kind.text().map_or_else(
+                || fixed_glyphs(&token.kind, glyph, status),
+                |label| label.width(),
+            )
+        })
+        .sum();
+    let gaps: usize = tokens
+        .windows(2)
+        .map(|pair| separator(&pair[0], &pair[1]).chars().count())
+        .sum();
+    let available = cx.look.content_width(cx.width)
+        - status
+        - cx.look.density.gap()
+        - agent_icon_size(cx.font).1;
+    (text + gaps) as f32 * glyph <= available
+}
+
 /// Fixed token widths preserve GPUI's text truncation during layout. The
 /// line answers to `selector`, and a tag on it to `selector` plus `-tag`.
 fn token_line(

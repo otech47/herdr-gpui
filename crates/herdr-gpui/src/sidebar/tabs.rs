@@ -6,6 +6,8 @@
 use super::{
     cell::{AgentRow, Cell, RowContext, RowData, RowLayout},
     label_text,
+    layout::{Compact, SidebarLook},
+    row::first_agent_line_fits,
     tab_reorder::row_key,
     tokens::{ResolvedToken, TextRole, TokenKind},
     trailing::Trailing,
@@ -115,8 +117,6 @@ impl HerdrWindow {
         let now = Instant::now();
         let mut sliding = false;
         let mut drop = Vec::new();
-        let trailing = Trailing::new(row_cx);
-        let base_cx = trailing.context(row_cx);
         elements.reserve(listed.len());
         let mut group = None;
         for (position, (row, name)) in listed.iter().zip(&names).enumerate() {
@@ -179,52 +179,49 @@ impl HerdrWindow {
             let member = members
                 .get(&(row.endpoint, row.tab.tab_id.as_str()))
                 .copied();
-            let indent = if member.is_some() { content_x + 1. } else { 0. };
-            let tab_cx = RowContext {
-                width: base_cx.width - indent,
-                ..base_cx
+            let gutter = row_cx.look.density.gap();
+            let context = RowContext {
+                width: row_cx.width - member.map_or(0., |_| gutter + 1.),
+                look: member.map_or(row_cx.look, |_| SidebarLook {
+                    density: &Compact,
+                    ..row_cx.look
+                }),
+                ..*row_cx
             };
-            let stacked =
-                member.is_some() && (row_cx.width < 270. || pages > 0 || device.is_some());
-            let mut lines = tab_lines(
+            let trailing = Trailing::new(&context);
+            let tab_cx = trailing.context(&context);
+            let mut line = tab_line(
                 member.map_or(name.as_str(), |m| m.provider),
                 position + 1,
-                if stacked { None } else { device },
+                device.filter(|_| member.is_none()),
             );
+            let detail_start = line.len();
             if let Some(member) = member {
-                if stacked {
-                    let mut detail = vec![ResolvedToken {
-                        kind: TokenKind::Text(member.state.into(), TextRole::Muted),
-                        style: TokenStyle::default(),
-                    }];
-                    if let Some(device) = device {
-                        detail.push(ResolvedToken {
-                            kind: TokenKind::Tag(device.to_owned().into(), TextRole::Muted),
-                            style: TokenStyle::default(),
-                        });
-                    }
-                    lines.push(detail);
-                } else {
-                    lines[0].push(ResolvedToken {
-                        kind: TokenKind::Tag(member.state.into(), TextRole::Secondary),
-                        style: TokenStyle::default(),
-                    });
-                }
+                line.push(ResolvedToken {
+                    kind: TokenKind::Tag(member.state.into(), TextRole::Secondary),
+                    style: TokenStyle::default(),
+                });
             }
-            if pages > 0
-                && let Some(line) = lines.last_mut()
-            {
+            if pages > 0 {
                 line.push(ResolvedToken {
                     kind: TokenKind::Tag(
-                        SharedString::from(format!(
-                            "{pages} {}",
-                            if pages == 1 { "page" } else { "pages" }
-                        )),
+                        format!("{pages} {}", if pages == 1 { "page" } else { "pages" }).into(),
                         TextRole::Secondary,
                     ),
                     style: TokenStyle::default(),
                 });
             }
+            let lines = if let Some(member) = member
+                && !first_agent_line_fits(&line, &tab_cx)
+            {
+                let mut detail = line.split_off(detail_start);
+                if let Some(status) = detail.first_mut() {
+                    status.kind = TokenKind::Text(member.state.into(), TextRole::Secondary);
+                }
+                vec![line, detail]
+            } else {
+                vec![line]
+            };
             let selected = own
                 && self
                     .active_page_session(cx)
@@ -299,17 +296,25 @@ impl HerdrWindow {
                         section.child(
                             div()
                                 .px(px(content_x))
-                                .pt(px(4.))
-                                .text_ellipsis()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
+                                .flex()
+                                .items_center()
+                                .gap(px(tab_cx.look.density.gap()))
                                 .text_color(rgb(row_cx.theme.foreground))
-                                .child(label_text(name)),
+                                .child(div().flex_1().min_w_0().truncate().child(label_text(name)))
+                                .when_some(device, |header, device| {
+                                    header.child(
+                                        div()
+                                            .max_w(relative(0.45))
+                                            .truncate()
+                                            .text_color(rgb(row_cx.theme.muted))
+                                            .child(label_text(device)),
+                                    )
+                                }),
                         )
                     })
                     .child(
                         div()
-                            .ml(px(content_x))
+                            .ml(px(gutter))
                             .border_l_1()
                             .border_color(rgb(row_cx.theme.muted))
                             .child(element),
@@ -458,11 +463,11 @@ fn tab_group_line(
 /// role beside the agent's icon, then the title in the name color without an
 /// agent row's bold. Listing every device's tabs together, the device's name
 /// takes the number's place, small at the line's end so the titles line up.
-pub(super) fn tab_lines(
+pub(super) fn tab_line(
     title: &str,
     number: impl ToString,
     device: Option<&str>,
-) -> Vec<Vec<ResolvedToken>> {
+) -> Vec<ResolvedToken> {
     let plain = |kind| ResolvedToken {
         kind,
         style: TokenStyle::default(),
@@ -474,7 +479,7 @@ pub(super) fn tab_lines(
             ..TokenStyle::default()
         },
     };
-    let line = match device {
+    match device {
         Some(device) => vec![
             plain(TokenKind::StateIcon),
             title,
@@ -491,6 +496,5 @@ pub(super) fn tab_lines(
             )),
             title,
         ],
-    };
-    vec![line]
+    }
 }

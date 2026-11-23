@@ -8,7 +8,11 @@ fn switched_sessions_share_a_title_until_one_tab_remains(cx: &mut gpui::TestAppC
     let (view, cx) = five_tabs(cx);
     view.update(cx, |view, _| {
         view.sidebar_tabs_view = TabsView::Device;
-        view.sidebar_width = Some(314.);
+        view.sidebar_width = Some(218.);
+        view.config.layout.mode = crate::config::LayoutMode::new(
+            crate::config::Density::Comfortable,
+            crate::config::Style::Rounded,
+        );
         view.sidebar_tabs_sort = TabsSort::Manual;
         let snap = Arc::make_mut(view.live.snapshot.as_mut().unwrap());
         for (tab, (id, number)) in
@@ -36,6 +40,9 @@ fn switched_sessions_share_a_title_until_one_tab_remains(cx: &mut gpui::TestAppC
     let source = cx.debug_bounds("row-tab-w0:t16").unwrap();
     let target = cx.debug_bounds("row-tab-w0:t1M").unwrap();
     let other = cx.debug_bounds("row-tab-w0:t1").unwrap();
+    assert!(source.size.height < other.size.height);
+    assert!(cx.debug_bounds("detail-tab-w0:t16").is_none());
+    assert!(cx.debug_bounds("detail-tab-w0:t1M").is_none());
     assert!(source.bottom() <= target.top() && target.bottom() <= other.top());
     assert!(cx.debug_bounds("tab-close-w0:t16").is_some());
     let close = cx.debug_bounds("tab-close-w0:t1M").unwrap();
@@ -55,6 +62,14 @@ fn switched_sessions_share_a_title_until_one_tab_remains(cx: &mut gpui::TestAppC
             view.pending_navigation,
             Some(crate::NavigationTarget::Tab("w0:t1M".into()))
         );
+        view.sidebar_width = Some(160.);
+    });
+    draw(cx);
+    let source_detail = cx.debug_bounds("detail-tab-w0:t16").unwrap();
+    let source_close = cx.debug_bounds("tab-close-w0:t16").unwrap();
+    assert!(source_detail.top() >= source_close.bottom());
+    cx.update(|_, cx| assert!(cx.global::<TextProbes>().0.contains_key("Previous")));
+    view.update(cx, |view, _| {
         let snap = Arc::make_mut(view.live.snapshot.as_mut().unwrap());
         snap.tabs.retain(|tab| tab.tab_id != "w0:t16");
         assert!(!view.numbers_listed_tabs());

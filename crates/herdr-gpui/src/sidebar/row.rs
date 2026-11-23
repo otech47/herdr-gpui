@@ -24,7 +24,8 @@ pub(crate) use badge::compact;
 pub(super) use badge::{PrBadge, RowBadge, Upstream};
 use configured::configured_lines;
 pub(super) use configured::{
-    TokenLook, configured_status, configured_status_style, leading_status, token_column,
+    TokenLook, configured_status, configured_status_style, first_agent_line_fits, leading_status,
+    token_column,
 };
 
 /// What a row shows in its leading icon slot: a repository owner's avatar when
