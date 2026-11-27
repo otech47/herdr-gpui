@@ -105,13 +105,21 @@ class SessionsTest(unittest.TestCase):
         self.write(self.path, rows)
         self.assertEqual(sessions.catalog(self.home)[0]["title"], "Fix navigation")
 
-    def test_all_three_native_harnesses_are_discovered(self):
+    def test_all_native_harnesses_are_discovered(self):
         self.write(self.home / f".claude/projects/project/{SID}.jsonl", [
             {"type": "user", "cwd": "/project", "message": {"content": "Review the change"}}])
         kimi = self.home / f".kimi-code/sessions/wd_project/session_{SID}"
         self.write(kimi / "agents/main/wire.jsonl", [{"message": {"role": "user", "content": "Check tests"}}])
         (kimi / "state.json").write_text(json.dumps({"cwd": "/project"}))
+        neon = self.home / ".gemini/antigravity-cli/brain" / SID
+        self.write(neon / ".system_generated/logs/transcript.jsonl", [
+            {"source": "USER_EXPLICIT", "type": "USER_INPUT", "content": "<USER_REQUEST>\nCheck Neon\n</USER_REQUEST>"},
+            {"source": "MODEL", "type": "PLANNER_RESPONSE", "content": "Checked"}])
+        (neon / "otech-session.json").write_text(json.dumps({"session_id": SID, "cwd": str(self.home)}))
         self.assertEqual({r["agent"] for r in sessions.catalog(self.home)}, sessions.KINDS)
+        row = next(r for r in sessions.catalog(self.home) if r["agent"] == "agy")
+        self.assertEqual(row["title"], "Check Neon")
+        self.assertIn("agy --conversation " + SID, sessions.resume_command(row))
 
     def test_watch_never_mutates_herdr_or_signals_worker(self):
         self.job()

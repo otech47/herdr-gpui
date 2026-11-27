@@ -61,6 +61,7 @@ fn default_agents() -> Vec<NewTabAgent> {
         ('w', "Claude", "claude"),
         ('e', "Codex", "codex"),
         ('r', "Kimi", "kimi"),
+        ('t', "Neon", "agy --model gemini-4-neon-medium"),
     ]
     .into_iter()
     .map(|(key, label, command)| NewTabAgent {

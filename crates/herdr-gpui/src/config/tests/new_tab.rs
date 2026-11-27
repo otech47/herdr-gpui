@@ -14,7 +14,7 @@ fn new_tab_lists_spaces_and_defaults_its_agents() -> anyhow::Result<()> {
     assert_eq!(new_tab.spaces.len(), 2);
     assert_eq!(new_tab.spaces[1].wrap, "nix develop -c");
     let keys: String = new_tab.agents.iter().map(|agent| agent.key).collect();
-    assert_eq!(keys, "qwer");
+    assert_eq!(keys, "qwert");
     assert_eq!(new_tab.agents[0].command, "");
     let custom = Config::parse(
         "[new_tab]\ncommand = 'go'\n[[new_tab.agents]]\nkey = 'a'\n\

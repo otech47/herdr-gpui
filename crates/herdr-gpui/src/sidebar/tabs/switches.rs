@@ -31,6 +31,7 @@ fn membership(row: &ListedTab<'_>) -> Option<(uuid::Uuid, usize, Member)> {
         "claude" => "Claude",
         "codex" => "Codex",
         "kimi" => "Kimi",
+        "agy" => "Neon",
         _ => return None,
     };
     let state = match parts.next()? {

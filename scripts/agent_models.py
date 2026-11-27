@@ -18,7 +18,7 @@ TAIL = 256 * 1024
 WIDE = 4 * 1024 * 1024
 AGENT_LIMIT = 128
 SESSION = re.compile(r"[A-Za-z0-9_-]{8,80}")
-AGENTS = ("claude", "codex", "kimi")
+AGENTS = ("claude", "codex", "kimi", "agy")
 REPORT_LIMIT = 32
 LINK_LIMIT = 400
 TITLE_LIMIT = 120
@@ -37,6 +37,9 @@ def transcript(agent, session, home, env):
     elif agent == "codex":
         base = env.get("CODEX_HOME") or os.path.join(home, ".codex")
         parts = ("sessions", "*", "*", "*", "rollout-*-" + session + ".jsonl")
+    elif agent == "agy":
+        base = os.path.join(home, ".gemini", "antigravity-cli", "brain")
+        parts = (session, ".system_generated", "logs", "transcript.jsonl")
     else:
         base = os.path.join(home, ".kimi-code")
         parts = ("sessions", "*", session, "agents", "main", "wire.jsonl")
@@ -53,6 +56,14 @@ def named(agent, row):
     elif agent == "codex" and row.get("type") == "turn_context":
         payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
         model, effort = payload.get("model"), payload.get("effort")
+    elif agent == "agy" and row.get("type") == "PLANNER_RESPONSE" and row.get("source") == "MODEL":
+        model = row.get("model")
+        if not isinstance(model, str):
+            return None
+        match = re.fullmatch(r"(.+)-(low|medium|high|xhigh|max)", model)
+        if match:
+            return match.groups()
+        effort = row.get("effort")
     elif agent == "kimi" and row.get("type") == "llm.request":
         model = row.get("modelAlias") or row.get("model")
         effort = row.get("thinkingEffort")
@@ -101,6 +112,10 @@ def read(agent, path, known):
 
 def said(agent, row):
     """The text the agent wrote to its user in one transcript record."""
+    if agent == "agy":
+        if row.get("type") == "PLANNER_RESPONSE" and row.get("source") == "MODEL":
+            return text if isinstance(text := row.get("content"), str) else ""
+        return ""
     if agent == "claude":
         message = row.get("message") if row.get("type") == "assistant" and not row.get("isSidechain") else None
         parts = message.get("content") if isinstance(message, dict) else None
@@ -130,7 +145,7 @@ def said(agent, row):
 
 def moment(row):
     """When a transcript record was written, in Unix seconds; 0 when it does not say."""
-    stamp = row.get("timestamp")
+    stamp = row.get("timestamp") or row.get("created_at")
     if isinstance(stamp, str):
         try:
             return int(datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp())
@@ -205,6 +220,8 @@ def display(model):
     """`claude-opus-5-5` is Opus 5.5, `gpt-6-astra` GPT-6 Astra and
     `kimi-code/k3` Kimi K3. An unknown shape stays as it is."""
     model = model.rsplit("/", 1)[-1]
+    if model.startswith("gemini-"):
+        return model.replace("-", " ").title()
     match = re.fullmatch(r"claude-(opus|sonnet|haiku|fable)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?(\[1m\])?", model)
     if match:
         version = match[2] + ("." + match[3] if match[3] else "")

@@ -202,7 +202,15 @@ pub fn tab_title(tab: &ClientShellTab, snapshot: &ClientShellSnapshot) -> String
 
 /// Agents set a default title such as "Claude Code" until a session is named,
 /// and a tab name says more than that.
-const DEFAULT_TITLES: [&str; 4] = ["claude code", "codex", "kimi code", "kimi"];
+const DEFAULT_TITLES: [&str; 7] = [
+    "claude code",
+    "codex",
+    "kimi code",
+    "kimi",
+    "agy",
+    "neon",
+    "antigravity cli",
+];
 
 fn agent_title(agent: &ClientShellAgent) -> Option<String> {
     let title = agent.terminal_title_stripped.as_deref()?.trim();

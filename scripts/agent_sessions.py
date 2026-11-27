@@ -17,7 +17,7 @@ import time
 
 LIMIT = 200
 READ_LIMIT = 256 * 1024
-KINDS = {"claude", "codex", "kimi"}
+KINDS = {"claude", "codex", "kimi", "agy"}
 SID = re.compile(r"[a-zA-Z0-9_-]{8,100}\Z")
 
 
@@ -73,6 +73,11 @@ def task_title(value):
 
 
 def native(path, agent):
+    if agent == "agy":
+        folder = path.parents[2]
+        meta = document(folder / "otech-session.json")
+        if meta.get("session_id") != folder.name or not os.path.isabs(meta.get("cwd") or ""):
+            return None
     rows = list(lines(path))
     if not rows:
         return None
@@ -84,6 +89,10 @@ def native(path, agent):
         if isinstance(meta.get("source"), dict):
             return None
         sid, cwd = meta.get("id", ""), meta.get("cwd", "")
+    elif agent == "agy":
+        sid = folder.name
+        cwd = meta["cwd"]
+        title = clean(document(folder / "otech-title.json").get("title"))
     elif agent == "kimi":
         directory = path.parents[2]
         sid = directory.name.removeprefix("session_")
@@ -104,6 +113,9 @@ def native(path, agent):
             payload = row.get("payload", {})
             if row.get("type") == "event_msg" and payload.get("type") == "user_message" and not title:
                 title = task_title(payload.get("message"))
+        elif agent == "agy" and row.get("type") == "USER_INPUT" and row.get("source") == "USER_EXPLICIT" and not title:
+            value = str(row.get("content") or "")
+            title = task_title(value.removeprefix("<USER_REQUEST>\n").rsplit("\n</USER_REQUEST>", 1)[0])
         elif agent == "kimi":
             message = row.get("message", {})
             if message.get("role") == "user" and not title:
@@ -144,7 +156,8 @@ def jobs(home):
 def catalog(home):
     patterns = {"codex": ".codex/sessions/*/*/*/rollout-*.jsonl",
                 "claude": ".claude/projects/*/*.jsonl",
-                "kimi": ".kimi-code/sessions/wd_*/session_*/agents/main/wire.jsonl"}
+                "kimi": ".kimi-code/sessions/wd_*/session_*/agents/main/wire.jsonl",
+                "agy": ".gemini/antigravity-cli/brain/*/.system_generated/logs/transcript.jsonl"}
     enrichment = dict(jobs(home))
     result = []
     for agent, pattern in patterns.items():
@@ -264,13 +277,13 @@ def activity(entry):
             continue
         names = {Path(arg).name for arg in argv[:2]}
         binaries = {"codex": {"codex", "codex.js"}, "claude": {"claude", "claude.js"},
-                    "kimi": {"kimi"}}[entry["agent"]]
+                    "kimi": {"kimi"}, "agy": {"agy", "antigravity"}}[entry["agent"]]
         if names & binaries:
             if entry["session"] in argv:
                 return "watch"
             if any(flag in argv and argv.index(flag) + 1 < len(argv)
                    and SID.fullmatch(argv[argv.index(flag) + 1])
-                   for flag in ("resume", "--resume", "--session")):
+                   for flag in ("resume", "--resume", "--session", "--conversation")):
                 continue
             ambiguous.append(pid)
     if ambiguous:
@@ -318,6 +331,8 @@ def output(entry):
                 messages.append("Working: " + clean(payload.get("name")))
         elif entry["agent"] == "claude" and kind == "assistant":
             messages.append(text(row.get("message", {}).get("content")))
+        elif entry["agent"] == "agy" and kind == "PLANNER_RESPONSE" and row.get("source") == "MODEL":
+            messages.append(text(row.get("content")))
         elif entry["agent"] == "kimi":
             message = row.get("message", {})
             if message.get("role") == "assistant":
@@ -336,7 +351,8 @@ def resolve(home, key):
         raise ValueError("That session identity is invalid.")
     pattern = {"codex": f".codex/sessions/*/*/*/rollout-*{sid}.jsonl",
                "claude": f".claude/projects/*/{sid}.jsonl",
-               "kimi": f".kimi-code/sessions/wd_*/session_{sid}/agents/main/wire.jsonl"}[agent]
+               "kimi": f".kimi-code/sessions/wd_*/session_{sid}/agents/main/wire.jsonl",
+               "agy": f".gemini/antigravity-cli/brain/{sid}/.system_generated/logs/transcript.jsonl"}[agent]
     entry = next((value for path in home.glob(pattern)
                   if (value := native(path, agent)) and value["session"] == sid), None)
     if not entry:
@@ -360,7 +376,7 @@ def workspace(snapshot, cwd):
 
 def resume_command(entry):
     binary = entry["agent"]
-    flag = {"codex": "resume", "kimi": "--session"}.get(entry["agent"], "--resume")
+    flag = {"codex": "resume", "kimi": "--session", "agy": "--conversation"}.get(entry["agent"], "--resume")
     argv = [binary, flag, entry["session"]]
     cwd = Path(entry["cwd"])
     if not cwd.is_dir():
